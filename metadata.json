@@ -1,0 +1,6 @@
+{
+  "name": "AR 로봇 테이블 하키 (AR Robot Table Hockey)",
+  "description": "카메라 캘리브레이션과 마젠타 블록 2개를 인식하여 즐기는 테이블 프로젝션 AR 에어하키 게임 (청/적 골대, 중앙 타이머, 플레이어 전용 점수판)",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
