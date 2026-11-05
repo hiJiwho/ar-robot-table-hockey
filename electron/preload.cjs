@@ -13,8 +13,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('airhockey:sync-state', listener);
     };
   },
+  sendAction: (action) => {
+    ipcRenderer.send('airhockey:send-action', action);
+  },
+  onAction: (callback) => {
+    const listener = (_event, action) => callback(action);
+    ipcRenderer.on('airhockey:action', listener);
+    return () => {
+      ipcRenderer.removeListener('airhockey:action', listener);
+    };
+  },
   openOrFocusSubWindow: () => {
     ipcRenderer.send('airhockey:open-sub-window');
+  },
+  openOrFocusConsoleWindow: () => {
+    ipcRenderer.send('airhockey:open-console-window');
   },
   arrangeSideBySide: () => {
     ipcRenderer.send('airhockey:arrange-windows');

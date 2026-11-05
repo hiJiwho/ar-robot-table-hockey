@@ -5,6 +5,7 @@ const fs = require('fs');
 
 let mainWindow = null;
 let subWindow = null;
+let consoleWindow = null;
 let latestSyncState = null;
 let localServerUrl = null;
 
@@ -39,7 +40,7 @@ function startLocalStaticServer() {
       try {
         const parsedUrl = new URL(req.url || '/', 'http://127.0.0.1');
         let pathname = decodeURIComponent(parsedUrl.pathname);
-        if (pathname === '/' || pathname === '/scoreboard') {
+        if (pathname === '/' || pathname === '/scoreboard' || pathname === '/console') {
           pathname = '/index.html';
         }
 
@@ -84,27 +85,35 @@ function getWindowBounds() {
   const primaryDisplay = screen.getPrimaryDisplay();
   const workArea = primaryDisplay.workArea;
 
-  // Separate windows clearly with padding so both windows look like distinct desktop windows
-  const margin = 24;
-  const gap = 20;
-  const usableWidth = workArea.width - margin * 2 - gap;
-  const mainWidth = Math.max(640, Math.floor(usableWidth * 0.56));
-  const subWidth = Math.max(500, usableWidth - mainWidth);
-  const winHeight = Math.max(540, Math.min(workArea.height - margin * 2, 860));
-  const topY = workArea.y + Math.max(margin, Math.floor((workArea.height - winHeight) / 2));
+  const margin = 16;
+  const gap = 12;
+
+  // Layout for 3 windows:
+  // Left 55%: Main Window (Projector View)
+  // Right 45%: Sub Window (Top 50%) + Console Window (Bottom 50%)
+  const leftWidth = Math.max(600, Math.floor((workArea.width - margin * 2 - gap) * 0.54));
+  const rightWidth = Math.max(480, workArea.width - margin * 2 - gap - leftWidth);
+  const totalHeight = workArea.height - margin * 2;
+  const rightHalfHeight = Math.floor((totalHeight - gap) / 2);
 
   return {
     main: {
       x: workArea.x + margin,
-      y: topY,
-      width: mainWidth,
-      height: winHeight,
+      y: workArea.y + margin,
+      width: leftWidth,
+      height: totalHeight,
     },
     sub: {
-      x: workArea.x + margin + mainWidth + gap,
-      y: topY,
-      width: subWidth,
-      height: winHeight,
+      x: workArea.x + margin + leftWidth + gap,
+      y: workArea.y + margin,
+      width: rightWidth,
+      height: rightHalfHeight,
+    },
+    console: {
+      x: workArea.x + margin + leftWidth + gap,
+      y: workArea.y + margin + rightHalfHeight + gap,
+      width: rightWidth,
+      height: rightHalfHeight,
     },
   };
 }
@@ -121,7 +130,6 @@ function attachWindowFullscreenEvents(win) {
     }
   });
 
-  // Support F11 to toggle fullscreen and Escape to exit fullscreen
   win.webContents.on('before-input-event', (event, input) => {
     if (input.type === 'keyDown') {
       if (input.key === 'F11') {
@@ -134,16 +142,21 @@ function attachWindowFullscreenEvents(win) {
   });
 }
 
-function loadAppUrl(win, isScoreboard = false) {
+function loadAppUrl(win, screenType = 'main') {
   if (localServerUrl) {
-    const targetUrl = isScoreboard
-      ? `${localServerUrl}/?screen=scoreboard`
-      : `${localServerUrl}/`;
+    const targetUrl =
+      screenType === 'scoreboard'
+        ? `${localServerUrl}/?screen=scoreboard`
+        : screenType === 'console'
+        ? `${localServerUrl}/?screen=console`
+        : `${localServerUrl}/`;
     win.loadURL(targetUrl);
   } else {
     const indexPath = path.join(__dirname, '..', 'dist', 'index.html');
-    if (isScoreboard) {
+    if (screenType === 'scoreboard') {
       win.loadFile(indexPath, { query: { screen: 'scoreboard' } });
+    } else if (screenType === 'console') {
+      win.loadFile(indexPath, { query: { screen: 'console' } });
     } else {
       win.loadFile(indexPath);
     }
@@ -170,12 +183,12 @@ function createSubWindow(bounds) {
     y: targetBounds.y,
     width: targetBounds.width,
     height: targetBounds.height,
-    minWidth: 460,
-    minHeight: 400,
+    minWidth: 420,
+    minHeight: 300,
     show: true,
     frame: true,
     fullscreenable: true,
-    title: '[서브 창] AR 에어하키 전광판 (Sub Scoreboard)',
+    title: '[서브 전광판] AR Robot air hotkey',
     backgroundColor: '#020617',
     autoHideMenuBar: true,
     webPreferences: {
@@ -186,11 +199,11 @@ function createSubWindow(bounds) {
   });
 
   attachWindowFullscreenEvents(subWindow);
-  loadAppUrl(subWindow, true);
+  loadAppUrl(subWindow, 'scoreboard');
 
   subWindow.webContents.on('did-finish-load', () => {
     if (subWindow && !subWindow.isDestroyed()) {
-      subWindow.setTitle('[서브 창] AR 에어하키 전광판 (Sub Scoreboard)');
+      subWindow.setTitle('[서브 전광판] AR Robot air hotkey');
       if (latestSyncState) {
         subWindow.webContents.send('airhockey:sync-state', latestSyncState);
       }
@@ -204,6 +217,60 @@ function createSubWindow(bounds) {
   return subWindow;
 }
 
+function createConsoleWindow(bounds) {
+  if (consoleWindow && !consoleWindow.isDestroyed()) {
+    if (bounds) {
+      if (consoleWindow.isFullScreen()) consoleWindow.setFullScreen(false);
+      if (consoleWindow.isMaximized()) consoleWindow.unmaximize();
+      consoleWindow.setBounds(bounds);
+    }
+    if (consoleWindow.isMinimized()) consoleWindow.restore();
+    consoleWindow.show();
+    consoleWindow.focus();
+    return consoleWindow;
+  }
+
+  const targetBounds = bounds || getWindowBounds().console;
+
+  consoleWindow = new BrowserWindow({
+    x: targetBounds.x,
+    y: targetBounds.y,
+    width: targetBounds.width,
+    height: targetBounds.height,
+    minWidth: 460,
+    minHeight: 340,
+    show: true,
+    frame: true,
+    fullscreenable: true,
+    title: '[관리 콘솔] AR Robot air hotkey',
+    backgroundColor: '#090d16',
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  attachWindowFullscreenEvents(consoleWindow);
+  loadAppUrl(consoleWindow, 'console');
+
+  consoleWindow.webContents.on('did-finish-load', () => {
+    if (consoleWindow && !consoleWindow.isDestroyed()) {
+      consoleWindow.setTitle('[관리 콘솔] AR Robot air hotkey');
+      if (latestSyncState) {
+        consoleWindow.webContents.send('airhockey:sync-state', latestSyncState);
+      }
+    }
+  });
+
+  consoleWindow.on('closed', () => {
+    consoleWindow = null;
+  });
+
+  return consoleWindow;
+}
+
 function createWindows() {
   const bounds = getWindowBounds();
 
@@ -213,13 +280,13 @@ function createWindows() {
     y: bounds.main.y,
     width: bounds.main.width,
     height: bounds.main.height,
-    minWidth: 600,
-    minHeight: 460,
+    minWidth: 540,
+    minHeight: 400,
     show: true,
     frame: true,
     fullscreenable: true,
-    title: '[메인 창] AR 로봇 테이블 하키 경기장 (Main Arena)',
-    backgroundColor: '#020617',
+    title: '[메인 경기장] AR Robot air hotkey',
+    backgroundColor: '#000000',
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -229,31 +296,43 @@ function createWindows() {
   });
 
   attachWindowFullscreenEvents(mainWindow);
-  loadAppUrl(mainWindow, false);
+  loadAppUrl(mainWindow, 'main');
 
   mainWindow.webContents.on('did-finish-load', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.setTitle('[메인 창] AR 로봇 테이블 하키 경기장 (Main Arena)');
+      mainWindow.setTitle('[메인 경기장] AR Robot air hotkey');
     }
   });
 
-  // Intercept window.open for scoreboard so it focuses/reopens the separate Sub window
+  // Intercept window.open
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.includes('screen=scoreboard') || url.includes('/scoreboard')) {
       createSubWindow();
       return { action: 'deny' };
     }
+    if (url.includes('screen=console') || url.includes('/console')) {
+      createConsoleWindow();
+      return { action: 'deny' };
+    }
     return { action: 'allow' };
   });
 
-  // 2. Create Independent Sub Window (Scoreboard Screen) simultaneously
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+    if (subWindow && !subWindow.isDestroyed()) subWindow.close();
+    if (consoleWindow && !consoleWindow.isDestroyed()) consoleWindow.close();
+  });
+
+  // 2. Create Sub Window (Scoreboard)
   createSubWindow(bounds.sub);
 
-  // Show both independent windows clearly
+  // 3. Create Admin Console Window
+  createConsoleWindow(bounds.console);
+
+  // Show all windows
   mainWindow.show();
-  if (subWindow && !subWindow.isDestroyed()) {
-    subWindow.show();
-  }
+  if (subWindow && !subWindow.isDestroyed()) subWindow.show();
+  if (consoleWindow && !consoleWindow.isDestroyed()) consoleWindow.show();
   mainWindow.focus();
 
   if (process.env.ELECTRON_SELF_TEST === '1') {
@@ -265,8 +344,11 @@ function createWindows() {
         const subHtml = await subWindow.webContents.executeJavaScript(
           'document.getElementById("root")?.innerHTML?.length || 0'
         );
-        console.log(`SELF_TEST_RESULT: mainRootLen=${mainHtml}, subRootLen=${subHtml}, url=${localServerUrl}`);
-        app.exit(mainHtml > 100 && subHtml > 100 ? 0 : 1);
+        const consoleHtml = await consoleWindow.webContents.executeJavaScript(
+          'document.getElementById("root")?.innerHTML?.length || 0'
+        );
+        console.log(`SELF_TEST_RESULT: mainLen=${mainHtml}, subLen=${subHtml}, consoleLen=${consoleHtml}, url=${localServerUrl}`);
+        app.exit(mainHtml > 100 && subHtml > 100 && consoleHtml > 100 ? 0 : 1);
       } catch (e) {
         console.error('SELF_TEST_ERROR:', e);
         app.exit(1);
@@ -282,7 +364,6 @@ app.whenReady().then(async () => {
     console.error('Failed to start local static server, falling back to file://', err);
   }
 
-  // Automatically allow camera/media permissions for AR vision tracking
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
     if (permission === 'media' || permission === 'fullscreen') {
       callback(true);
@@ -293,7 +374,7 @@ app.whenReady().then(async () => {
 
   session.defaultSession.setPermissionCheckHandler(() => true);
 
-  // IPC: Toggle fullscreen for whichever window clicked the button
+  // IPC: Toggle fullscreen
   ipcMain.handle('airhockey:toggle-fullscreen', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win || win.isDestroyed()) return false;
@@ -308,27 +389,38 @@ app.whenReady().then(async () => {
     return win.isFullScreen();
   });
 
-  // IPC: Receive state from Main window and forward to Sub window
+  // IPC: Forward sync-state to Sub Window and Console Window
   ipcMain.on('airhockey:sync-state', (_event, payload) => {
     latestSyncState = payload;
     if (subWindow && !subWindow.isDestroyed()) {
       subWindow.webContents.send('airhockey:sync-state', payload);
     }
+    if (consoleWindow && !consoleWindow.isDestroyed()) {
+      consoleWindow.webContents.send('airhockey:sync-state', payload);
+    }
   });
 
-  // IPC: Sub window requests initial state when ready
+  // IPC: Forward action from Console/Sub to Main window
+  ipcMain.on('airhockey:send-action', (_event, action) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('airhockey:action', action);
+    }
+  });
+
   ipcMain.on('airhockey:request-initial-state', (event) => {
     if (latestSyncState && !event.sender.isDestroyed()) {
       event.sender.send('airhockey:sync-state', latestSyncState);
     }
   });
 
-  // IPC: Reopen or focus Sub window from Main window UI
   ipcMain.on('airhockey:open-sub-window', () => {
     createSubWindow();
   });
 
-  // IPC: Arrange both windows side-by-side
+  ipcMain.on('airhockey:open-console-window', () => {
+    createConsoleWindow();
+  });
+
   ipcMain.on('airhockey:arrange-windows', () => {
     const bounds = getWindowBounds();
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -338,6 +430,7 @@ app.whenReady().then(async () => {
       mainWindow.show();
     }
     createSubWindow(bounds.sub);
+    createConsoleWindow(bounds.console);
   });
 
   createWindows();

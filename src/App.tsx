@@ -43,6 +43,8 @@ import {
   Columns2,
   Maximize,
   Minimize,
+  Sliders,
+  Tv,
 } from 'lucide-react';
 
 export default function App() {
@@ -231,6 +233,8 @@ export default function App() {
   // Keep references to frequently read configuration values to prevent useEffect rebuilds
   const gamePhaseRef = useRef(gamePhase);
   gamePhaseRef.current = gamePhase;
+  const matchModeRef = useRef(matchMode);
+  matchModeRef.current = matchMode;
   const isVirtualModeRef = useRef(isVirtualMode);
   isVirtualModeRef.current = isVirtualMode;
   const colorSettingsRef = useRef(colorSettings);
@@ -246,7 +250,7 @@ export default function App() {
   const isColorTunerOpenRef = useRef(isColorTunerOpen);
   isColorTunerOpenRef.current = isColorTunerOpen;
 
-  // Broadcast state to secondary scoreboard screen (for Electron export / dual-window)
+  // Broadcast state to secondary scoreboard & admin console screens
   const broadcastRef = useRef<BroadcastChannel | null>(null);
 
   useEffect(() => {
@@ -258,7 +262,8 @@ export default function App() {
     };
   }, []);
 
-  useEffect(() => {
+  const sendFullSyncState = useCallback(() => {
+    const live = liveStateRef.current;
     const payload = {
       type: 'SYNC_STATE' as const,
       score,
@@ -267,6 +272,9 @@ export default function App() {
       matchMode,
       stats,
       goalAnnouncement,
+      puck: { x: live.puck.x, y: live.puck.y, vx: live.puck.vx, vy: live.puck.vy },
+      blueRobot: { tableX: live.blueRobot.tableX, tableY: live.blueRobot.tableY, detected: live.blueRobot.detected, confidence: live.blueRobot.confidence },
+      redRobot: { tableX: live.redRobot.tableX, tableY: live.redRobot.tableY, detected: live.redRobot.detected, confidence: live.redRobot.confidence },
     };
     try {
       window.electronAPI?.sendSyncState(payload);
@@ -274,6 +282,10 @@ export default function App() {
       localStorage.setItem('airhockey_sync', JSON.stringify(payload));
     } catch {}
   }, [score, timeLeft, gamePhase, matchMode, stats, goalAnnouncement]);
+
+  useEffect(() => {
+    sendFullSyncState();
+  }, [sendFullSyncState]);
 
   // Handle Mute
   const handleToggleMute = () => {
@@ -375,27 +387,11 @@ export default function App() {
   }, [gamePhase]);
 
   // ----------------------------------------------------
-  // Spawn Spark & Confetti Particles
+  // Spawn Spark & Confetti Particles ([REQ] 공 주변 효과 지우기 -> 파티클 완전 비활성화)
   // ----------------------------------------------------
-  const spawnParticles = (screenX: number, screenY: number, color: string, count = 16) => {
-    const newParticles: Particle[] = [];
-    for (let i = 0; i < count; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const speed = Math.random() * 260 + 60;
-      newParticles.push({
-        x: screenX,
-        y: screenY,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        color,
-        size: Math.random() * 4 + 2.5,
-        alpha: 1.0,
-        life: 0,
-        maxLife: Math.random() * 0.35 + 0.25,
-      });
-    }
-    const combined = [...liveStateRef.current.particles, ...newParticles].slice(-60);
-    liveStateRef.current.particles = combined;
+  const spawnParticles = (_screenX: number, _screenY: number, _color: string, _count = 16) => {
+    // Zero extra particles for clean, non-distracting projector view
+    liveStateRef.current.particles = [];
   };
 
   // ----------------------------------------------------
@@ -460,6 +456,70 @@ export default function App() {
     setGoalAnnouncement(null);
     resetPuckServe();
   };
+
+  // Listen for actions from Admin Console / Scoreboard
+  useEffect(() => {
+    const handleAction = (msg: any) => {
+      if (!msg || msg.type !== 'GAME_ACTION') return;
+      if (msg.action === 'START') {
+        handleStartGame();
+      } else if (msg.action === 'PAUSE') {
+        handlePauseGame();
+      } else if (msg.action === 'RESET' || msg.action === 'PREPARE') {
+        // [REQ] 콘솔에서 게임 종료 누르면: 콘솔은 게임 시작 버튼, 서브는 게임 플레이 가능, 메인은 골대 없는 경기장으로
+        const currentMode = matchModeRef.current || '1MIN';
+        setTimeLeft(MATCH_MODES[currentMode].duration);
+        setScore({ blue: 0, red: 0 });
+        setStats({
+          blueHits: 0,
+          redHits: 0,
+          maxPuckSpeed: 0,
+          lastScoredTeam: null,
+        });
+        setGamePhase('READY');
+        setGoalAnnouncement(null);
+        resetPuckServe();
+      } else if (msg.action === 'ADD_TIME') {
+        setTimeLeft((prev) => Math.max(1, prev + (msg.seconds || 30)));
+      } else if (msg.action === 'SET_SCORE') {
+        if (msg.score) setScore(msg.score);
+      } else if (msg.action === 'CHANGE_MODE') {
+        const modeKey = msg.mode as MatchMode;
+        if (modeKey && MATCH_MODES[modeKey]) {
+          setMatchMode(modeKey);
+          setTimeLeft(MATCH_MODES[modeKey].duration);
+          setScore({ blue: 0, red: 0 });
+          setGamePhase('READY');
+          resetPuckServe();
+        }
+      }
+    };
+
+    let unsubElectron: (() => void) | undefined;
+    if (window.electronAPI?.onAction) {
+      unsubElectron = window.electronAPI.onAction(handleAction);
+    }
+
+    const channel = new BroadcastChannel('airhockey_channel');
+    channel.onmessage = (event) => {
+      handleAction(event.data);
+    };
+
+    const handleStorageAction = (e: StorageEvent) => {
+      if (e.key === 'airhockey_action' && e.newValue) {
+        try {
+          handleAction(JSON.parse(e.newValue));
+        } catch {}
+      }
+    };
+    window.addEventListener('storage', handleStorageAction);
+
+    return () => {
+      if (unsubElectron) unsubElectron();
+      channel.close();
+      window.removeEventListener('storage', handleStorageAction);
+    };
+  }, [resetPuckServe]);
 
   // Keyboard Shortcut: Space key to start / pause / restart match
   useEffect(() => {
@@ -803,11 +863,23 @@ export default function App() {
             liveStateRef.current.redRobot = updateTrackedRobot(liveStateRef.current.redRobot, redBlob);
           }
 
-          // Throttled sync to React state (~15fps) for UI indicators (Settings / PIP monitor)
+          // Throttled sync to React state (~15fps) for UI indicators (Settings / PIP monitor / Console mirror)
           if (currentTime - lastStateSyncTimeRef.current >= 66) {
             lastStateSyncTimeRef.current = currentTime;
             setBlueRobot({ ...liveStateRef.current.blueRobot });
             setRedRobot({ ...liveStateRef.current.redRobot });
+
+            try {
+              const live = liveStateRef.current;
+              const livePosPayload = {
+                type: 'UPDATE',
+                puck: { x: live.puck.x, y: live.puck.y, vx: live.puck.vx, vy: live.puck.vy },
+                blueRobot: { tableX: live.blueRobot.tableX, tableY: live.blueRobot.tableY, detected: live.blueRobot.detected, confidence: live.blueRobot.confidence },
+                redRobot: { tableX: live.redRobot.tableX, tableY: live.redRobot.tableY, detected: live.redRobot.detected, confidence: live.redRobot.confidence },
+              };
+              broadcastRef.current?.postMessage(livePosPayload);
+              window.electronAPI?.sendSyncState(livePosPayload as any);
+            } catch {}
           }
         }
       }
@@ -920,7 +992,7 @@ export default function App() {
       {/* Main Viewport Container */}
       <div
         ref={containerRef}
-        className="relative flex-1 w-full h-full overflow-hidden flex items-center justify-center bg-white"
+        className="relative flex-1 w-full h-full overflow-hidden flex items-center justify-center bg-black"
       >
         {/* Camera Permission / Error Alert (Top Left) */}
         {cameraError && !cameraActive && (
@@ -1059,7 +1131,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Floating Utilities (Bottom Right): Fullscreen, Sub Window controls, Camera PIP, Mirror toggle & Camera facing */}
+        {/* Floating Utilities (Bottom Right): Fullscreen, Sub Window & Console Window controls, Camera PIP */}
         <div className="absolute bottom-4 right-4 z-30 flex items-center gap-2">
           <button
             onClick={handleToggleFullscreen}
@@ -1078,43 +1150,76 @@ export default function App() {
             <>
               <button
                 onClick={() => window.electronAPI?.openOrFocusSubWindow()}
-                title="서브 전광판 창을 별도 창으로 열거나 앞으로 가져오기"
+                title="서브 전광판 창 열기 / 앞으로 가져오기"
                 className="px-2.5 py-1.5 rounded-lg bg-indigo-950/90 hover:bg-indigo-900 text-indigo-200 hover:text-white border border-indigo-600/60 text-xs backdrop-blur-md shadow-md flex items-center gap-1.5"
               >
                 <Monitor className="w-3.5 h-3.5 text-indigo-400" />
-                <span className="hidden sm:inline">서브창 띄우기</span>
+                <span className="hidden sm:inline">서브 전광판</span>
+              </button>
+              <button
+                onClick={() => window.electronAPI?.openOrFocusConsoleWindow()}
+                title="관리 콘솔 창 열기 / 앞으로 가져오기"
+                className="px-2.5 py-1.5 rounded-lg bg-emerald-950/90 hover:bg-emerald-900 text-emerald-200 hover:text-white border border-emerald-600/60 text-xs backdrop-blur-md shadow-md flex items-center gap-1.5"
+              >
+                <Tv className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="hidden sm:inline">관리 콘솔</span>
               </button>
               <button
                 onClick={() => window.electronAPI?.arrangeSideBySide()}
-                title="메인 경기창과 서브 전광판 창을 나란히 정렬"
+                title="메인, 서브, 콘솔 창 3개 나란히 자동 정렬"
                 className="px-2.5 py-1.5 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-700 text-xs backdrop-blur-md shadow-md flex items-center gap-1.5"
               >
                 <Columns2 className="w-3.5 h-3.5 text-sky-400" />
-                <span className="hidden sm:inline">2개 창 정렬</span>
+                <span className="hidden sm:inline">3개 창 정렬</span>
               </button>
             </>
           ) : (
-            <button
-              onClick={() => {
-                window.open(
-                  window.location.origin + window.location.pathname + '?screen=scoreboard',
-                  '_blank',
-                  'width=1280,height=720'
-                );
-              }}
-              title="서브 전광판 창을 별도 창으로 열기"
-              className="px-2.5 py-1.5 rounded-lg bg-indigo-950/90 hover:bg-indigo-900 text-indigo-200 hover:text-white border border-indigo-600/60 text-xs backdrop-blur-md shadow-md flex items-center gap-1.5"
-            >
-              <Monitor className="w-3.5 h-3.5 text-indigo-400" />
-              <span className="hidden sm:inline">서브창 열기</span>
-            </button>
+            <>
+              <button
+                onClick={() => {
+                  window.open(
+                    window.location.origin + window.location.pathname + '?screen=scoreboard',
+                    '_blank',
+                    'width=1280,height=720'
+                  );
+                }}
+                title="서브 전광판 창 열기"
+                className="px-2.5 py-1.5 rounded-lg bg-indigo-950/90 hover:bg-indigo-900 text-indigo-200 hover:text-white border border-indigo-600/60 text-xs backdrop-blur-md shadow-md flex items-center gap-1.5"
+              >
+                <Monitor className="w-3.5 h-3.5 text-indigo-400" />
+                <span className="hidden sm:inline">서브 전광판</span>
+              </button>
+              <button
+                onClick={() => {
+                  window.open(
+                    window.location.origin + window.location.pathname + '?screen=console',
+                    '_blank',
+                    'width=1200,height=800'
+                  );
+                }}
+                title="관리 콘솔 창 열기"
+                className="px-2.5 py-1.5 rounded-lg bg-emerald-950/90 hover:bg-emerald-900 text-emerald-200 hover:text-white border border-emerald-600/60 text-xs backdrop-blur-md shadow-md flex items-center gap-1.5"
+              >
+                <Tv className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="hidden sm:inline">관리 콘솔</span>
+              </button>
+            </>
           )}
+
+          <button
+            onClick={() => setIsSettingsOpen(true)}
+            title="게임 상세 설정"
+            className="p-1.5 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 backdrop-blur-md shadow-md"
+          >
+            <Sliders className="w-4 h-4" />
+          </button>
+
           {cameraActive && (
             <>
               <button
                 onClick={() => setIsCameraMirrored((m) => !m)}
                 title={isCameraMirrored ? '카메라 좌우반전 해제' : '카메라 좌우반전 켜기'}
-                className={`p-2 rounded-lg border backdrop-blur-md shadow-md transition-colors ${
+                className={`p-1.5 rounded-lg border backdrop-blur-md shadow-md transition-colors ${
                   isCameraMirrored
                     ? 'bg-amber-600/90 text-white border-amber-500'
                     : 'bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border-slate-700'
@@ -1126,16 +1231,15 @@ export default function App() {
               <button
                 onClick={() => setShowCameraPip((p) => !p)}
                 title={showCameraPip ? '카메라 모니터 닫기' : '카메라 모니터 열기'}
-                className="px-2.5 py-1.5 rounded-lg bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-xs backdrop-blur-md shadow-md flex items-center gap-1.5"
+                className="px-2 py-1.5 rounded-lg bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-xs backdrop-blur-md shadow-md flex items-center gap-1.5"
               >
                 {showCameraPip ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                <span className="hidden sm:inline">카메라 뷰</span>
               </button>
 
               <button
                 onClick={handleToggleCameraFacing}
                 title="전면/후면 카메라 전환"
-                className="p-2 rounded-lg bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 backdrop-blur-md shadow-md"
+                className="p-1.5 rounded-lg bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 backdrop-blur-md shadow-md"
               >
                 <SwitchCamera className="w-4 h-4" />
               </button>
@@ -1143,12 +1247,13 @@ export default function App() {
           )}
         </div>
 
-        {/* Main Clean White Game Canvas */}
+        {/* Main Clean Dark Game Canvas for Projector */}
         <div className="absolute inset-0 z-20">
           <GameCanvas
             normalizedCorners={screenCorners}
             gamePhase={gamePhase}
             score={score}
+            timeLeft={timeLeft}
             blueRobot={blueRobot}
             redRobot={redRobot}
             puck={puck}

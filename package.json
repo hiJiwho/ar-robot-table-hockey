@@ -1,5 +1,6 @@
 {
-  "name": "ar-robot-table-hockey",
+  "name": "ar-robot-air-hotkey",
+  "productName": "AR Robot air hotkey",
   "private": true,
   "version": "1.0.0",
   "type": "module",

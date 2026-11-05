@@ -88,6 +88,14 @@ export interface MatchStats {
   lastScoredTeam: 'blue' | 'red' | null;
 }
 
+export interface GameActionMessage {
+  type: 'GAME_ACTION';
+  action: 'START' | 'PAUSE' | 'RESET' | 'PREPARE' | 'ADD_TIME' | 'SET_SCORE' | 'CHANGE_MODE';
+  seconds?: number;
+  score?: MatchScore;
+  mode?: MatchMode;
+}
+
 export const DEFAULT_NORMALIZED_CORNERS: FourCorners = [
   { x: 0.22, y: 0.24 }, // Top-Left
   { x: 0.72, y: 0.24 }, // Top-Right
@@ -129,13 +137,19 @@ export interface SyncStatePayload {
   matchMode: MatchMode;
   stats: MatchStats;
   goalAnnouncement?: { team: 'blue' | 'red'; countdown: number } | null;
+  puck?: { x: number; y: number; vx: number; vy: number };
+  blueRobot?: { tableX: number; tableY: number; detected: boolean; confidence: number };
+  redRobot?: { tableX: number; tableY: number; detected: boolean; confidence: number };
 }
 
 export interface ElectronAPI {
   isElectron: boolean;
   sendSyncState: (payload: SyncStatePayload) => void;
   onSyncState: (callback: (data: SyncStatePayload) => void) => () => void;
+  sendAction: (action: GameActionMessage) => void;
+  onAction: (callback: (action: GameActionMessage) => void) => () => void;
   openOrFocusSubWindow: () => void;
+  openOrFocusConsoleWindow: () => void;
   arrangeSideBySide: () => void;
   toggleFullscreen: () => Promise<boolean>;
   getFullscreenState: () => Promise<boolean>;

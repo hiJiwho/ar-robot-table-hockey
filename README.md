@@ -1,20 +1,17 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# AR Robot air hotkey
 
-# Run and deploy your AI Studio app
+빔프로젝터 투사형 AR 로봇 에어하키 시스템 (Electron 3개 창 분리 지원)
 
-This contains everything you need to run your app locally.
+## 주요 화면 구성 (3-Window System)
+1. **[메인 경기장 창]**: 빔프로젝터 투사용 순수 블랙 배경, 선명한 화이트 라인, 중앙 부근 대형 그레이 점수 및 시계 (네모 박스 없음, 퍽 주변 효과 제거, 대기 상태 시 골대 미표시, 게임 종료 시 회색 비활성화).
+2. **[서브 전광판 창]**: 관중/플레이어용 대형 스코어보드. 게임 중에는 점수와 타이머가 크게 표시되며, 종료 후 콘솔 확인 시 "게임 플레이 가능" 대기 안내 표시.
+3. **[관리 콘솔 창]**: 관리자 제어 화면. 실시간 메인 경기장 미러링 및 마커 인식 좌표, 실시간 시간 추가 (+30초, +1분, +2분, -30초), 점수 수동 조정, 게임 시작/일시정지/종료 제어.
 
-View your app in AI Studio: https://ai.studio/apps/7920ae7c-f167-4b6d-a915-801f960fd85f
+## 조작 및 플레이
+- 마커가 좌우로만 움직여도 골대 앞을 방어하고 공을 힘차게 상대 진영으로 쳐낼 수 있도록 추진력 보정 적용.
+- 각 창 독립 전체화면 지원 (`F11` 또는 상단/하단 전체화면 버튼, 해제 시 `Esc`).
 
-## Run Locally
-
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## 실행 방법
+- **Windows 데스크톱 앱 실행**: `AR-Robot-air-hotkey-실행.bat` 더블클릭
+- **Electron 빌드**: `npm run build:win`
+- **웹 개발 서버**: `npm run dev`

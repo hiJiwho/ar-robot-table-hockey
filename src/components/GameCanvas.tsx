@@ -17,6 +17,7 @@ interface GameCanvasProps {
   normalizedCorners: FourCorners;
   gamePhase: GamePhase;
   score: MatchScore;
+  timeLeft?: number;
   blueRobot: RobotState;
   redRobot: RobotState;
   puck: PuckState;
@@ -40,7 +41,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
     containerHeight,
     isPickingColor,
     isVirtualMode,
-    onOpenSettings,
     onCanvasClickForColorPick,
     onUpdateVirtualRobot,
   } = props;
@@ -74,17 +74,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
       return;
     }
 
-    // Clicking either end's large score badge opens settings
-    const leftScoreScreen = transformerRef.current.tableToScreen(95, TABLE_HEIGHT / 2);
-    const distLeftScore = Math.hypot(clientX - leftScoreScreen.x, clientY - leftScoreScreen.y);
-    const rightScoreScreen = transformerRef.current.tableToScreen(TABLE_WIDTH - 95, TABLE_HEIGHT / 2);
-    const distRightScore = Math.hypot(clientX - rightScoreScreen.x, clientY - rightScoreScreen.y);
-
-    if ((distLeftScore <= 65 || distRightScore <= 65) && onOpenSettings) {
-      onOpenSettings();
-      return;
-    }
-
     if (isVirtualMode) {
       const tablePt = transformerRef.current.screenToTable(clientX, clientY);
       if (tablePt.x < TABLE_WIDTH / 2) {
@@ -111,7 +100,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
     }
   };
 
-  // High-performance continuous render loop (Decoupled from React lifecycle for 60-144 FPS)
+  // High-performance continuous render loop (60-144 FPS)
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -126,32 +115,41 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
       const blueRobot = live ? live.blueRobot : currentProps.blueRobot;
       const redRobot = live ? live.redRobot : currentProps.redRobot;
       const puck = live ? live.puck : currentProps.puck;
-      const particles = live ? live.particles : currentProps.particles;
-      const { score, goalAnnouncement, goalSize = 240 } = currentProps;
+      const { score, goalAnnouncement, goalSize = 240, gamePhase, timeLeft = 0 } = currentProps;
 
       const width = canvas.width;
       const height = canvas.height;
       const tf = transformerRef.current;
 
-      // 1. Pure Crisp White Screen Background
-      ctx.fillStyle = '#ffffff';
+      const isGameOver = gamePhase === 'TIME_UP';
+      const isReadyPhase = gamePhase === 'READY' || gamePhase === 'CALIBRATION';
+      const showGoals = !isReadyPhase; // [REQ] 대기 중에는 골대 없음 (경기장 모습만)
+
+      // 1. [REQ] Pure Deep Black Projector Background
+      ctx.fillStyle = '#000000';
       ctx.fillRect(0, 0, width, height);
 
       const c = pixelCorners;
       ctx.save();
 
-      // 2. Table Playing Surface
+      // [REQ] 게임 종료시 메인은 회색 비활성화 된 느낌으로 (색을 전부 빼)
+      if (isGameOver) {
+        ctx.filter = 'grayscale(100%) brightness(0.65)';
+      }
+
+      // 2. Table Playing Surface (Dark Charcoal/Black for Projector)
       ctx.beginPath();
       ctx.moveTo(c[0].x, c[0].y);
       ctx.lineTo(c[1].x, c[1].y);
       ctx.lineTo(c[2].x, c[2].y);
       ctx.lineTo(c[3].x, c[3].y);
       ctx.closePath();
-      ctx.fillStyle = '#f8fafc';
+      ctx.fillStyle = '#05070a';
       ctx.fill();
 
-      // 3. Desk Perimeter Rails (Clean dark slate borders)
-      ctx.strokeStyle = '#334155';
+      // 3. [REQ] Field Boundary Lines in Crisp WHITE
+      const lineColor = isGameOver ? '#52525b' : '#ffffff';
+      ctx.strokeStyle = lineColor;
       ctx.lineWidth = 4;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
@@ -168,80 +166,73 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
       ctx.lineTo(c[2].x, c[2].y);
       ctx.stroke();
 
-      // Goal Opening Geometry
       const goalHalf = goalSize / 2;
-
-      // Left End Wall & Posts (청팀 - Blue Goal):
       const leftTop = tf.tableToScreen(0, 0);
-      const leftGoalPostTop = tf.tableToScreen(0, TABLE_HEIGHT / 2 - goalHalf);
-      ctx.strokeStyle = '#334155';
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.moveTo(leftTop.x, leftTop.y);
-      ctx.lineTo(leftGoalPostTop.x, leftGoalPostTop.y);
-      ctx.stroke();
-
-      const leftGoalPostBot = tf.tableToScreen(0, TABLE_HEIGHT / 2 + goalHalf);
       const leftBot = tf.tableToScreen(0, TABLE_HEIGHT);
-      ctx.beginPath();
-      ctx.moveTo(leftGoalPostBot.x, leftGoalPostBot.y);
-      ctx.lineTo(leftBot.x, leftBot.y);
-      ctx.stroke();
-
-      // Right End Wall & Posts (적팀 - Red Goal):
       const rightTop = tf.tableToScreen(TABLE_WIDTH, 0);
-      const rightGoalPostTop = tf.tableToScreen(TABLE_WIDTH, TABLE_HEIGHT / 2 - goalHalf);
-      ctx.beginPath();
-      ctx.moveTo(rightTop.x, rightTop.y);
-      ctx.lineTo(rightGoalPostTop.x, rightGoalPostTop.y);
-      ctx.stroke();
-
-      const rightGoalPostBot = tf.tableToScreen(TABLE_WIDTH, TABLE_HEIGHT / 2 + goalHalf);
       const rightBot = tf.tableToScreen(TABLE_WIDTH, TABLE_HEIGHT);
-      ctx.beginPath();
-      ctx.moveTo(rightGoalPostBot.x, rightGoalPostBot.y);
-      ctx.lineTo(rightBot.x, rightBot.y);
-      ctx.stroke();
 
-      // 4. Goal Arches & Nets in BLUE (청) and RED (적)
-      // Left Goal Net (청골대 - Blue):
-      ctx.strokeStyle = '#2563eb';
-      ctx.lineWidth = 6;
-      ctx.beginPath();
-      const leftNetBack = tf.tableToScreen(-40, TABLE_HEIGHT / 2);
-      ctx.moveTo(leftGoalPostTop.x, leftGoalPostTop.y);
-      ctx.quadraticCurveTo(leftNetBack.x, leftNetBack.y, leftGoalPostBot.x, leftGoalPostBot.y);
-      ctx.stroke();
-      ctx.fillStyle = 'rgba(37, 99, 235, 0.10)';
-      ctx.fill();
+      if (!showGoals) {
+        // [REQ] 대기 상태: 골대 없이 양쪽 벽면이 닫힌 완전한 경기장 라인만 표시
+        ctx.beginPath();
+        ctx.moveTo(leftTop.x, leftTop.y);
+        ctx.lineTo(leftBot.x, leftBot.y);
+        ctx.stroke();
 
-      // Goal post highlights (Blue caps)
-      ctx.fillStyle = '#1d4ed8';
-      ctx.beginPath();
-      ctx.arc(leftGoalPostTop.x, leftGoalPostTop.y, 6, 0, Math.PI * 2);
-      ctx.arc(leftGoalPostBot.x, leftGoalPostBot.y, 6, 0, Math.PI * 2);
-      ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(rightTop.x, rightTop.y);
+        ctx.lineTo(rightBot.x, rightBot.y);
+        ctx.stroke();
+      } else {
+        // 경기 진행/득점 중: 골대 입구 및 골포스트 렌더링
+        const leftGoalPostTop = tf.tableToScreen(0, TABLE_HEIGHT / 2 - goalHalf);
+        const leftGoalPostBot = tf.tableToScreen(0, TABLE_HEIGHT / 2 + goalHalf);
+        const rightGoalPostTop = tf.tableToScreen(TABLE_WIDTH, TABLE_HEIGHT / 2 - goalHalf);
+        const rightGoalPostBot = tf.tableToScreen(TABLE_WIDTH, TABLE_HEIGHT / 2 + goalHalf);
 
-      // Right Goal Net (적골대 - Red):
-      ctx.strokeStyle = '#dc2626';
-      ctx.lineWidth = 6;
-      ctx.beginPath();
-      const rightNetBack = tf.tableToScreen(TABLE_WIDTH + 40, TABLE_HEIGHT / 2);
-      ctx.moveTo(rightGoalPostTop.x, rightGoalPostTop.y);
-      ctx.quadraticCurveTo(rightNetBack.x, rightNetBack.y, rightGoalPostBot.x, rightGoalPostBot.y);
-      ctx.stroke();
-      ctx.fillStyle = 'rgba(220, 38, 38, 0.10)';
-      ctx.fill();
+        // Left End Wall (Blue Goal Side)
+        ctx.beginPath();
+        ctx.moveTo(leftTop.x, leftTop.y);
+        ctx.lineTo(leftGoalPostTop.x, leftGoalPostTop.y);
+        ctx.stroke();
 
-      // Goal post highlights (Red caps)
-      ctx.fillStyle = '#b91c1c';
-      ctx.beginPath();
-      ctx.arc(rightGoalPostTop.x, rightGoalPostTop.y, 6, 0, Math.PI * 2);
-      ctx.arc(rightGoalPostBot.x, rightGoalPostBot.y, 6, 0, Math.PI * 2);
-      ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(leftGoalPostBot.x, leftGoalPostBot.y);
+        ctx.lineTo(leftBot.x, leftBot.y);
+        ctx.stroke();
 
-      // 5. Center Line & Face-off Circle (Clean Field without any center clock)
-      ctx.strokeStyle = '#94a3b8';
+        // Right End Wall (Red Goal Side)
+        ctx.beginPath();
+        ctx.moveTo(rightTop.x, rightTop.y);
+        ctx.lineTo(rightGoalPostTop.x, rightGoalPostTop.y);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(rightGoalPostBot.x, rightGoalPostBot.y);
+        ctx.lineTo(rightBot.x, rightBot.y);
+        ctx.stroke();
+
+        // Left Goal Net Outline
+        ctx.strokeStyle = isGameOver ? '#71717a' : '#38bdf8';
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        const leftNetBack = tf.tableToScreen(-35, TABLE_HEIGHT / 2);
+        ctx.moveTo(leftGoalPostTop.x, leftGoalPostTop.y);
+        ctx.quadraticCurveTo(leftNetBack.x, leftNetBack.y, leftGoalPostBot.x, leftGoalPostBot.y);
+        ctx.stroke();
+
+        // Right Goal Net Outline
+        ctx.strokeStyle = isGameOver ? '#71717a' : '#f87171';
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        const rightNetBack = tf.tableToScreen(TABLE_WIDTH + 35, TABLE_HEIGHT / 2);
+        ctx.moveTo(rightGoalPostTop.x, rightGoalPostTop.y);
+        ctx.quadraticCurveTo(rightNetBack.x, rightNetBack.y, rightGoalPostBot.x, rightGoalPostBot.y);
+        ctx.stroke();
+      }
+
+      // 4. [REQ] Center Line & Face-off Circle in Crisp WHITE
+      ctx.strokeStyle = isGameOver ? '#3f3f46' : 'rgba(255, 255, 255, 0.75)';
       ctx.lineWidth = 2.5;
       ctx.setLineDash([8, 6]);
 
@@ -254,11 +245,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
       ctx.setLineDash([]);
 
       // Center Circle Outline
-      ctx.strokeStyle = '#cbd5e1';
+      ctx.strokeStyle = isGameOver ? '#3f3f46' : 'rgba(255, 255, 255, 0.65)';
       ctx.lineWidth = 2.5;
       ctx.beginPath();
-      const circleRadius = 90;
-      const circleSegments = 32;
+      const circleRadius = 110;
+      const circleSegments = 36;
       for (let i = 0; i <= circleSegments; i++) {
         const theta = (i / circleSegments) * Math.PI * 2;
         const pt = tf.tableToScreen(
@@ -270,53 +261,62 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
       }
       ctx.stroke();
 
-      // Center Face-Off Spot Dot
-      const centerPt = tf.tableToScreen(TABLE_WIDTH / 2, TABLE_HEIGHT / 2);
-      ctx.fillStyle = '#94a3b8';
-      ctx.beginPath();
-      ctx.arc(centerPt.x, centerPt.y, 6, 0, Math.PI * 2);
-      ctx.fill();
+      // 5. [REQ] 시계도 중앙에 크게 회색으로 (Big Gray Center Clock)
+      const centerPt = tf.tableToScreen(TABLE_WIDTH / 2, TABLE_HEIGHT / 2 - 24);
+      const mins = Math.floor(timeLeft / 60);
+      const secs = timeLeft % 60;
+      const formattedTime = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 
-      // 6. [REQ] GIANT END SCORES: ONLY MY SCORE (상대 골에 넣은 점수) VERY LARGE AT EACH END
-      const isBlueGoal = goalAnnouncement?.team === 'blue';
-      const isRedGoal = goalAnnouncement?.team === 'red';
-
-      // 6-A. Left End (Blue Player End): ONLY Blue's own score ("매우 크게", rotated 90deg facing Left Player)
-      const leftScorePt = tf.tableToScreen(95, TABLE_HEIGHT / 2);
       ctx.save();
-      ctx.translate(leftScorePt.x, leftScorePt.y);
-      ctx.rotate(Math.PI / 2);
-      renderLargeEndScore(ctx, 'blue', score.blue, isBlueGoal);
-      ctx.restore();
+      ctx.translate(centerPt.x, centerPt.y);
+      ctx.font = '900 52px monospace, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = isGameOver ? '#52525b' : 'rgba(156, 163, 175, 0.55)'; // 큰 회색
+      ctx.fillText(formattedTime, 0, 0);
 
-      // 6-B. Right End (Red Player End): ONLY Red's own score ("매우 크게", rotated -90deg facing Right Player)
-      const rightScorePt = tf.tableToScreen(TABLE_WIDTH - 95, TABLE_HEIGHT / 2);
-      ctx.save();
-      ctx.translate(rightScorePt.x, rightScorePt.y);
-      ctx.rotate(-Math.PI / 2);
-      renderLargeEndScore(ctx, 'red', score.red, isRedGoal);
-      ctx.restore();
-
-      // 7. [REQ] ROBOT POSITION: CLEAN TRACKING DOTS ONLY ("검정 마커 빼고 점으로만 표시")
-      renderCleanTrackingDot(ctx, tf, blueRobot);
-      renderCleanTrackingDot(ctx, tf, redRobot);
-
-      // 8. Render Virtual Puck & Trail
-      renderCleanPuck(ctx, tf, puck);
-
-      // 9. Render Spark Particles
-      for (const p of particles) {
-        ctx.fillStyle = p.color;
-        ctx.globalAlpha = p.alpha;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fill();
+      if (isGameOver) {
+        ctx.font = '800 22px system-ui, sans-serif';
+        ctx.fillStyle = '#71717a';
+        ctx.fillText('GAME OVER', 0, 48);
       }
-      ctx.globalAlpha = 1.0;
+      ctx.restore();
 
-      // 10. [REQ] DUAL-FACING CENTER GOAL BANNER: Visible & upright from BOTH player ends
-      if (goalAnnouncement) {
-        renderDualGoalBanner(ctx, tf, goalAnnouncement);
+      // 6. [REQ] 점수는 크게 회색으로 (네모 박스 ㄴㄴ, 중앙 근처에)
+      // Blue Score (왼쪽, 중앙선 근처)
+      const blueScorePt = tf.tableToScreen(TABLE_WIDTH / 2 - 130, TABLE_HEIGHT / 2 + 10);
+      ctx.save();
+      ctx.translate(blueScorePt.x, blueScorePt.y);
+      ctx.font = '900 96px monospace, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = isGameOver ? '#3f3f46' : 'rgba(156, 163, 175, 0.45)'; // 네모 박스 없는 거대 회색
+      ctx.fillText(String(score.blue), 0, 0);
+      ctx.restore();
+
+      // Red Score (오른쪽, 중앙선 근처)
+      const redScorePt = tf.tableToScreen(TABLE_WIDTH / 2 + 130, TABLE_HEIGHT / 2 + 10);
+      ctx.save();
+      ctx.translate(redScorePt.x, redScorePt.y);
+      ctx.font = '900 96px monospace, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = isGameOver ? '#3f3f46' : 'rgba(156, 163, 175, 0.45)'; // 네모 박스 없는 거대 회색
+      ctx.fillText(String(score.red), 0, 0);
+      ctx.restore();
+
+      // 7. [REQ] Robot Paddle Position (Clean simple rings/dots)
+      renderPaddle(ctx, tf, blueRobot, '#38bdf8', isGameOver);
+      renderPaddle(ctx, tf, redRobot, '#f87171', isGameOver);
+
+      // 8. [REQ] Virtual Puck (공 주변 효과 완전히 지우고 깔끔한 심플 원반만 렌더링)
+      if (!isGameOver || gamePhase === 'TIME_UP') {
+        renderCleanPuckNoEffects(ctx, tf, puck, isGameOver);
+      }
+
+      // 9. Goal Announcement Overlay (Clean banner if scored)
+      if (goalAnnouncement && !isGameOver) {
+        renderGoalOverlay(ctx, tf, goalAnnouncement);
       }
 
       ctx.restore();
@@ -329,7 +329,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
   }, [containerWidth, containerHeight, isPickingColor, isVirtualMode]);
 
   return (
-    <div className="relative w-full h-full overflow-hidden select-none touch-none bg-white">
+    <div className="relative w-full h-full overflow-hidden select-none touch-none bg-black">
       <canvas
         ref={canvasRef}
         width={containerWidth}
@@ -344,70 +344,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
   );
 };
 
-// Helper: Render Giant Player Score at each end (Only that player's own score, VERY LARGE)
-function renderLargeEndScore(
-  ctx: CanvasRenderingContext2D,
-  team: 'blue' | 'red',
-  playerScore: number,
-  isScoredNow: boolean
-) {
-  const isBlue = team === 'blue';
-  const color = isBlue ? '#2563eb' : '#dc2626';
-  const textColor = isBlue ? '#1e3a8a' : '#7f1d1d';
-  const labelText = isBlue ? '청 (BLUE)' : '적 (RED)';
-
-  ctx.save();
-
-  // Clean, high-impact scoreboard plate
-  ctx.shadowColor = isScoredNow
-    ? isBlue
-      ? 'rgba(37, 99, 235, 0.45)'
-      : 'rgba(220, 38, 38, 0.45)'
-    : 'rgba(0, 0, 0, 0.08)';
-  ctx.shadowBlur = isScoredNow ? 24 : 10;
-  ctx.shadowOffsetY = 2;
-
-  ctx.fillStyle = isScoredNow
-    ? isBlue
-      ? 'rgba(37, 99, 235, 0.12)'
-      : 'rgba(220, 38, 38, 0.12)'
-    : 'rgba(255, 255, 255, 0.94)';
-  ctx.strokeStyle = isScoredNow ? color : '#cbd5e1';
-  ctx.lineWidth = isScoredNow ? 3.5 : 2;
-  ctx.beginPath();
-  ctx.roundRect(-56, -64, 112, 128, 20);
-  ctx.fill();
-  ctx.stroke();
-
-  ctx.shadowColor = 'transparent';
-
-  // Team tag at top
-  ctx.font = '800 11px system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = color;
-  ctx.fillText(labelText, 0, -44);
-
-  // Very Large Score Number ("매우 크게")
-  ctx.font = '900 82px monospace, sans-serif';
-  ctx.fillStyle = textColor;
-  ctx.fillText(String(playerScore), 0, 10);
-
-  // Goal celebration indicator badge
-  if (isScoredNow) {
-    ctx.font = '900 12px system-ui, sans-serif';
-    ctx.fillStyle = color;
-    ctx.fillText('+1 GOAL!', 0, 50);
-  }
-
-  ctx.restore();
-}
-
-// Helper: Render Clean Minimal Tracking Dot ("검정 마커 빼고 점으로만 표시")
-function renderCleanTrackingDot(
+// Helper: Clean Paddle Indicator
+function renderPaddle(
   ctx: CanvasRenderingContext2D,
   tf: PerspectiveTransformer,
-  robot: RobotState
+  robot: RobotState,
+  color: string,
+  isGameOver: boolean
 ) {
   if (!robot.detected && Date.now() - robot.lastSeenTime > 500) return;
   const screenPos = tf.tableToScreen(robot.tableX, robot.tableY);
@@ -415,156 +358,89 @@ function renderCleanTrackingDot(
   ctx.save();
   ctx.translate(screenPos.x, screenPos.y);
 
-  // Soft drop shadow
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+  // Outer ring
+  ctx.strokeStyle = isGameOver ? '#71717a' : color;
+  ctx.lineWidth = 3.5;
   ctx.beginPath();
-  ctx.arc(1.5, 2, 8, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.arc(0, 0, 24, 0, Math.PI * 2);
+  ctx.stroke();
 
-  // Solid black tracking dot
-  ctx.fillStyle = '#000000';
+  // Core dot
+  ctx.fillStyle = isGameOver ? '#52525b' : color;
   ctx.beginPath();
-  ctx.arc(0, 0, 7.5, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Subtle platinum center pinpoint for clean precision tracking
-  ctx.fillStyle = '#ffffff';
-  ctx.beginPath();
-  ctx.arc(0, 0, 2.2, 0, Math.PI * 2);
+  ctx.arc(0, 0, 8, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.restore();
 }
 
-// Helper: Render Virtual Puck on White Background
-function renderCleanPuck(
+// Helper: Render Virtual Puck WITH ZERO EXTRA EFFECTS (공 주변 효과 지우기)
+function renderCleanPuckNoEffects(
   ctx: CanvasRenderingContext2D,
   tf: PerspectiveTransformer,
-  puck: PuckState
+  puck: PuckState,
+  isGameOver: boolean
 ) {
-  // Trail (Only render when moving to avoid tremor)
-  const puckSpeed = Math.hypot(puck.vx, puck.vy);
-  if (puckSpeed > 35 && puck.trail && puck.trail.length > 1) {
-    for (let i = 0; i < puck.trail.length; i++) {
-      const pt = puck.trail[i];
-      if (Math.hypot(pt.x - puck.x, pt.y - puck.y) < 4) continue;
-      const screenPt = tf.tableToScreen(pt.x, pt.y);
-      const alpha = pt.alpha * (i / puck.trail.length) * 0.30;
-
-      ctx.fillStyle = `rgba(15, 23, 42, ${alpha})`;
-      ctx.beginPath();
-      ctx.arc(screenPt.x, screenPt.y, 5 * (i / puck.trail.length) + 4, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-
-  // Puck Main Body
   const screenPos = tf.tableToScreen(puck.x, puck.y);
   const offsetPos = tf.tableToScreen(puck.x + puck.radius, puck.y);
-  const screenRadius = Math.max(10, Math.hypot(offsetPos.x - screenPos.x, offsetPos.y - screenPos.y));
+  const screenRadius = Math.max(12, Math.hypot(offsetPos.x - screenPos.x, offsetPos.y - screenPos.y));
 
   ctx.save();
   ctx.translate(screenPos.x, screenPos.y);
 
-  // Drop shadow
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.30)';
-  ctx.beginPath();
-  ctx.ellipse(3, 5, screenRadius * 1.1, screenRadius * 0.65, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Charcoal Black Sports Puck
-  ctx.fillStyle = '#0f172a';
+  // Main Puck Solid Body
+  ctx.fillStyle = isGameOver ? '#404040' : '#f8fafc';
   ctx.beginPath();
   ctx.arc(0, 0, screenRadius, 0, Math.PI * 2);
   ctx.fill();
 
-  // Silver Rim
-  ctx.strokeStyle = '#475569';
+  // Clean boundary rim
+  ctx.strokeStyle = isGameOver ? '#262626' : '#94a3b8';
   ctx.lineWidth = 2.5;
   ctx.stroke();
 
-  // Inner Core
-  ctx.fillStyle = '#1e293b';
+  // Inner center ring
+  ctx.strokeStyle = isGameOver ? '#52525b' : '#cbd5e1';
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.arc(0, 0, screenRadius * 0.55, 0, Math.PI * 2);
-  ctx.fill();
-
-  // White gleam reflection
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
-  ctx.beginPath();
-  ctx.arc(-screenRadius * 0.3, -screenRadius * 0.3, screenRadius * 0.22, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.arc(0, 0, screenRadius * 0.5, 0, Math.PI * 2);
+  ctx.stroke();
 
   ctx.restore();
 }
 
-// Helper: Render Dual-Facing Goal Banner in the center of the field so BOTH players can read it upright
-function renderDualGoalBanner(
+// Helper: Clean Goal Overlay (Dual Facing for Table)
+function renderGoalOverlay(
   ctx: CanvasRenderingContext2D,
   tf: PerspectiveTransformer,
   announcement: { team: 'blue' | 'red'; countdown: number }
 ) {
   const isBlue = announcement.team === 'blue';
-  const color = isBlue ? '#2563eb' : '#dc2626';
-  const teamText = isBlue ? '청팀 득점 (GOAL)!!' : '적팀 득점 (GOAL)!!';
-  const nextServeText = `다음 서브까지 ${announcement.countdown.toFixed(1)}초`;
+  const color = isBlue ? '#38bdf8' : '#f87171';
+  const teamText = isBlue ? '청팀 득점 (GOAL)!' : '적팀 득점 (GOAL)!';
 
-  const bannerW = 210;
-  const bannerH = 76;
-  const halfW = bannerW / 2;
-  const halfH = bannerH / 2;
+  const centerPt = tf.tableToScreen(TABLE_WIDTH / 2, TABLE_HEIGHT / 2 + 55);
 
-  // Single card drawer
-  const drawCard = () => {
-    ctx.save();
-    ctx.shadowColor = isBlue ? 'rgba(37, 99, 235, 0.5)' : 'rgba(220, 38, 38, 0.5)';
-    ctx.shadowBlur = 18;
-    ctx.shadowOffsetY = 2;
-
-    // Card background
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.roundRect(-halfW, -halfH, bannerW, bannerH, 16);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.shadowColor = 'transparent';
-
-    // Title GOAL!
-    ctx.font = '900 26px system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText('GOAL!', 0, -18);
-
-    // Team name
-    ctx.font = '800 15px system-ui, sans-serif';
-    ctx.fillStyle = isBlue ? '#93c5fd' : '#fca5a5';
-    ctx.fillText(teamText, 0, 8);
-
-    // Next serve countdown
-    ctx.font = '600 11px system-ui, sans-serif';
-    ctx.fillStyle = '#94a3b8';
-    ctx.fillText(nextServeText, 0, 26);
-
-    ctx.restore();
-  };
-
-  // 1. Facing Left Player (Placed left of center circle, rotated 90deg)
-  const leftBannerPt = tf.tableToScreen(TABLE_WIDTH / 2 - 95, TABLE_HEIGHT / 2);
   ctx.save();
-  ctx.translate(leftBannerPt.x, leftBannerPt.y);
-  ctx.rotate(Math.PI / 2);
-  drawCard();
-  ctx.restore();
+  ctx.translate(centerPt.x, centerPt.y);
 
-  // 2. Facing Right Player (Placed right of center circle, rotated -90deg)
-  const rightBannerPt = tf.tableToScreen(TABLE_WIDTH / 2 + 95, TABLE_HEIGHT / 2);
-  ctx.save();
-  ctx.translate(rightBannerPt.x, rightBannerPt.y);
-  ctx.rotate(-Math.PI / 2);
-  drawCard();
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.roundRect(-130, -38, 260, 76, 16);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.font = '900 28px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText('GOAL!!', 0, -10);
+
+  ctx.font = '700 14px system-ui, sans-serif';
+  ctx.fillStyle = color;
+  ctx.fillText(teamText, 0, 18);
+
   ctx.restore();
 }

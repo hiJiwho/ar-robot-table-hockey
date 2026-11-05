@@ -7,10 +7,11 @@ const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
 
 const electronDistDir = path.join(rootDir, 'node_modules', 'electron', 'dist');
-const releaseDir = path.join(rootDir, 'release', 'AR-Robot-Table-Hockey-win32-x64');
+const releaseDir = path.join(rootDir, 'release', 'AR-Robot-air-hotkey-win32-x64');
 const resourcesAppDir = path.join(releaseDir, 'resources', 'app');
-const targetExe = path.join(releaseDir, 'AR-Robot-Table-Hockey.exe');
+const targetExe = path.join(releaseDir, 'AR-Robot-air-hotkey.exe');
 
+// Also keep backward compatible folder/exe if needed
 if (!fs.existsSync(targetExe)) {
   console.log('1. Copying Electron Windows runtime binaries...');
   fs.mkdirSync(releaseDir, { recursive: true });
@@ -38,8 +39,8 @@ fs.cpSync(path.join(rootDir, 'dist'), path.join(resourcesAppDir, 'dist'), { recu
 fs.cpSync(path.join(rootDir, 'electron'), path.join(resourcesAppDir, 'electron'), { recursive: true });
 
 const appPackageJson = {
-  name: 'ar-robot-table-hockey',
-  productName: 'AR Robot Table Hockey',
+  name: 'ar-robot-air-hotkey',
+  productName: 'AR Robot air hotkey',
   version: '1.0.0',
   main: 'electron/main.cjs',
 };
@@ -49,8 +50,9 @@ fs.writeFileSync(
   'utf-8'
 );
 
-// Create a convenient 1-click launcher .bat in the project root
-const batContent = `@echo off\r\nstart "" "%~dp0release\\AR-Robot-Table-Hockey-win32-x64\\AR-Robot-Table-Hockey.exe"\r\n`;
+// Create convenient 1-click launcher .bat in the project root
+const batContent = `@echo off\r\nstart "" "%~dp0release\\AR-Robot-air-hotkey-win32-x64\\AR-Robot-air-hotkey.exe"\r\n`;
+fs.writeFileSync(path.join(rootDir, 'AR-Robot-air-hotkey-실행.bat'), batContent, 'utf-8');
 fs.writeFileSync(path.join(rootDir, 'AR-Robot-Table-Hockey-실행.bat'), batContent, 'utf-8');
 
 console.log('✅ Windows App successfully built at:');

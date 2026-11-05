@@ -165,17 +165,24 @@ export function stepPuckPhysics(
           pvx += impulse * nx + robot.vx * 0.65;
           pvy += impulse * ny + robot.vy * 0.65;
 
+          // [REQ] 마커가 좌우로만 움직여도 공이 상대 골대 방향으로 시원하게 날아가도록 전방 추진력 보정
+          if (team === 'blue') {
+            if (pvx < 320) pvx = Math.max(360, Math.abs(pvx) + 260);
+          } else {
+            if (pvx > -320) pvx = -Math.max(360, Math.abs(pvx) + 260);
+          }
+
           // Off-center vertical deflection for crisp bank shots off rails
           const offsetRatio = Math.max(-1, Math.min(1, dy / minDist));
-          pvy += offsetRatio * 180;
+          pvy += offsetRatio * 200;
 
-          // Ensure minimum lively hit speed (380 px/s) so even light touches produce a crisp shot
+          // Ensure minimum lively hit speed (420 px/s) so even light touches produce a crisp shot
           let curSpeed = Math.hypot(pvx, pvy);
-          if (curSpeed < 380) {
-            const boost = 380 / (curSpeed || 1);
+          if (curSpeed < 420) {
+            const boost = 420 / (curSpeed || 1);
             pvx *= boost;
             pvy *= boost;
-            curSpeed = 380;
+            curSpeed = 420;
           }
 
           lastHitTeam = team;
@@ -211,19 +218,11 @@ export function stepPuckPhysics(
     speed = 0;
   }
 
-  // High-speed motion trail
-  let newTrail = currPuck.trail;
-  if (speed > 50) {
-    newTrail = [
-      { x: px, y: py, alpha: 1.0 },
-      ...currPuck.trail.slice(0, 5),
-    ];
-  } else if (newTrail.length > 0) {
-    newTrail = [];
-  }
+  // [REQ] 공 주변 효과 지우기: 트레일 완전 제거
+  const newTrail: Array<{ x: number; y: number; alpha: number }> = [];
 
   // If completely at rest, avoid floating-point state thrashing
-  if (pvx === 0 && pvy === 0 && currPuck.vx === 0 && currPuck.vy === 0 && newTrail.length === 0) {
+  if (pvx === 0 && pvy === 0 && currPuck.vx === 0 && currPuck.vy === 0) {
     return {
       puck: currPuck,
       events,
