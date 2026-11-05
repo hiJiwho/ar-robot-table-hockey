@@ -10,7 +10,6 @@ import {
   GameActionMessage,
 } from '../types/hockey';
 import {
-  Trophy,
   Clock,
   Play,
   Pause,
@@ -23,6 +22,8 @@ import {
   Tv,
   CheckCircle2,
   AlertTriangle,
+  Sun,
+  Moon,
 } from 'lucide-react';
 
 export const ConsoleScreen: React.FC = () => {
@@ -30,6 +31,7 @@ export const ConsoleScreen: React.FC = () => {
   const [timeLeft, setTimeLeft] = useState<number>(60);
   const [gamePhase, setGamePhase] = useState<GamePhase>('READY');
   const [matchMode, setMatchMode] = useState<MatchMode>('1MIN');
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [stats, setStats] = useState<MatchStats>({
     blueHits: 0,
     redHits: 0,
@@ -64,6 +66,7 @@ export const ConsoleScreen: React.FC = () => {
       if (typeof data.timeLeft === 'number') setTimeLeft(data.timeLeft);
       if (data.gamePhase) setGamePhase(data.gamePhase);
       if (data.matchMode) setMatchMode(data.matchMode);
+      if (data.theme) setTheme(data.theme);
       if (data.stats) setStats(data.stats);
       if (data.puck) setPuck(data.puck);
       if (data.blueRobot) setBlueRobot(data.blueRobot);
@@ -130,7 +133,6 @@ export const ConsoleScreen: React.FC = () => {
     sendAction({ type: 'GAME_ACTION', action: 'PAUSE' });
   };
 
-  // [REQ] 게임 종료시 콘솔에 게임 종료 나오고 누르면 콘솔은 게임 시작 버튼, 서브는 게임 플레이 가능, 메인은 골대 없는 경기장으로
   const handleAcknowledgeGameOver = () => {
     sendAction({ type: 'GAME_ACTION', action: 'PREPARE' });
   };
@@ -149,6 +151,12 @@ export const ConsoleScreen: React.FC = () => {
 
   const handleChangeMode = (mode: MatchMode) => {
     sendAction({ type: 'GAME_ACTION', action: 'CHANGE_MODE', mode });
+  };
+
+  const handleToggleTheme = () => {
+    const nextTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(nextTheme);
+    sendAction({ type: 'GAME_ACTION', action: 'SET_THEME', theme: nextTheme });
   };
 
   const handleToggleFullscreen = async () => {
@@ -174,24 +182,34 @@ export const ConsoleScreen: React.FC = () => {
 
   return (
     <div className="w-screen h-screen bg-slate-950 text-slate-100 flex flex-col p-4 select-none font-sans overflow-hidden">
-      {/* Header */}
+      {/* Top Header */}
       <header className="flex items-center justify-between pb-3 border-b border-slate-800">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400">
-            <Tv className="w-4 h-4" />
+          <div className="w-9 h-9 rounded-xl bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400">
+            <Tv className="w-5 h-5" />
           </div>
           <div>
             <h1 className="text-sm font-black tracking-wide uppercase text-white flex items-center gap-2">
               AR Robot air hotkey
-              <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-950 text-indigo-300 border border-indigo-800">
-                관리 콘솔
+              <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                메인 관리 콘솔
               </span>
             </h1>
-            <p className="text-[11px] text-slate-400">메인 뷰 실시간 모니터링 & 경기 컨트롤러</p>
+            <p className="text-[11px] text-slate-400">경기장 라이브 미러링 & 실시간 경기 컨트롤 타워</p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
+          {/* [REQ] 프로젝터 테마 원클릭 변경 (다크 검정 / 라이트 흰색) */}
+          <button
+            onClick={handleToggleTheme}
+            className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-semibold text-slate-200 flex items-center gap-1.5 transition-colors shadow-sm"
+            title="메인 경기장 배경을 검은색(프로젝터 다크) 또는 흰색(라이트)으로 즉시 변경합니다"
+          >
+            {theme === 'dark' ? <Moon className="w-3.5 h-3.5 text-indigo-400" /> : <Sun className="w-3.5 h-3.5 text-amber-400" />}
+            <span>경기장: {theme === 'dark' ? '다크(검정)' : '라이트(흰색)'}</span>
+          </button>
+
           {window.electronAPI && (
             <button
               onClick={() => window.electronAPI?.arrangeSideBySide()}
@@ -213,21 +231,21 @@ export const ConsoleScreen: React.FC = () => {
         </div>
       </header>
 
-      {/* Main Content: Split into Left (Live Field Mirror) and Right (Game Controls) */}
+      {/* Main Split Layout: Left (Live Field Mirror) & Right (Game Controls) */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-3 pt-3 overflow-hidden">
         {/* Left: Live Game Mirror & Vision Status (Col 6) */}
         <div className="lg:col-span-6 flex flex-col gap-2 bg-slate-900/70 border border-slate-800 rounded-2xl p-3 overflow-hidden">
           <div className="flex items-center justify-between text-xs">
             <span className="font-bold text-slate-200 flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              실시간 경기장 미러 (메인 창 카피)
+              실시간 경기장 미러링
             </span>
             <span className="text-[11px] font-mono text-slate-400">
               퍽 속도: {Math.round(stats.maxPuckSpeed)} px/s
             </span>
           </div>
 
-          {/* Mini Field Canvas Representation */}
+          {/* Mini Field SVG Representation */}
           <div className="relative flex-1 w-full bg-black rounded-xl border border-slate-800 overflow-hidden flex items-center justify-center">
             <svg
               viewBox={`0 0 ${TABLE_WIDTH} ${TABLE_HEIGHT}`}
@@ -236,23 +254,23 @@ export const ConsoleScreen: React.FC = () => {
             >
               {/* Outer Rail */}
               <rect
-                x="4"
-                y="4"
-                width={TABLE_WIDTH - 8}
-                height={TABLE_HEIGHT - 8}
-                fill="#05070a"
-                stroke="#ffffff"
-                strokeWidth="4"
-                rx="16"
+                x="6"
+                y="6"
+                width={TABLE_WIDTH - 12}
+                height={TABLE_HEIGHT - 12}
+                fill={theme === 'light' ? '#ffffff' : '#05070a'}
+                stroke={theme === 'light' ? '#0f172a' : '#ffffff'}
+                strokeWidth="5"
+                rx="20"
               />
 
               {/* Center Line & Circle */}
               <line
                 x1={TABLE_WIDTH / 2}
-                y1="4"
+                y1="6"
                 x2={TABLE_WIDTH / 2}
-                y2={TABLE_HEIGHT - 4}
-                stroke="#ffffff"
+                y2={TABLE_HEIGHT - 6}
+                stroke={theme === 'light' ? '#0f172a' : '#ffffff'}
                 strokeWidth="3"
                 strokeDasharray="10 8"
                 opacity="0.75"
@@ -262,102 +280,63 @@ export const ConsoleScreen: React.FC = () => {
                 cy={TABLE_HEIGHT / 2}
                 r="110"
                 fill="none"
-                stroke="#ffffff"
+                stroke={theme === 'light' ? '#0f172a' : '#ffffff'}
                 strokeWidth="3"
                 opacity="0.65"
               />
 
-              {/* Center Big Clock & Scores in Field Mirror */}
-              <text
-                x={TABLE_WIDTH / 2}
-                y={TABLE_HEIGHT / 2 - 20}
-                fill="#9ca3af"
-                fontSize="48"
-                fontWeight="900"
-                fontFamily="monospace"
-                textAnchor="middle"
-                opacity="0.6"
-              >
-                {timeFormatted}
-              </text>
-              <text
-                x={TABLE_WIDTH / 2 - 130}
-                y={TABLE_HEIGHT / 2 + 25}
-                fill="#9ca3af"
-                fontSize="90"
-                fontWeight="900"
-                fontFamily="monospace"
-                textAnchor="middle"
-                opacity="0.5"
-              >
-                {score.blue}
-              </text>
-              <text
-                x={TABLE_WIDTH / 2 + 130}
-                y={TABLE_HEIGHT / 2 + 25}
-                fill="#9ca3af"
-                fontSize="90"
-                fontWeight="900"
-                fontFamily="monospace"
-                textAnchor="middle"
-                opacity="0.5"
-              >
-                {score.red}
-              </text>
-
-              {/* Goal Mouths (Only when playing) */}
+              {/* Goal Openings (Only when playing) */}
               {!isReady && (
                 <>
-                  <rect x="0" y={TABLE_HEIGHT / 2 - 120} width="12" height="240" fill="#38bdf8" />
-                  <rect x={TABLE_WIDTH - 12} y={TABLE_HEIGHT / 2 - 120} width="12" height="240" fill="#f87171" />
+                  <rect x="0" y={TABLE_HEIGHT / 2 - 130} width="12" height="260" fill="#94a3b8" />
+                  <rect x={TABLE_WIDTH - 12} y={TABLE_HEIGHT / 2 - 130} width="12" height="260" fill="#94a3b8" />
                 </>
               )}
 
-              {/* Blue Paddle Marker */}
+              {/* [REQ] 빨, 파 색상 뺀 단정하고 세련된 패들 1, 패들 2 렌더링 */}
               <circle
                 cx={blueRobot.tableX}
                 cy={blueRobot.tableY}
-                r="32"
+                r="34"
                 fill="none"
-                stroke="#38bdf8"
-                strokeWidth="5"
+                stroke="#ffffff"
+                strokeWidth="4"
               />
-              <circle cx={blueRobot.tableX} cy={blueRobot.tableY} r="8" fill="#38bdf8" />
+              <circle cx={blueRobot.tableX} cy={blueRobot.tableY} r="12" fill="#ffffff" />
 
-              {/* Red Paddle Marker */}
               <circle
                 cx={redRobot.tableX}
                 cy={redRobot.tableY}
-                r="32"
+                r="34"
                 fill="none"
-                stroke="#f87171"
-                strokeWidth="5"
+                stroke="#ffffff"
+                strokeWidth="4"
               />
-              <circle cx={redRobot.tableX} cy={redRobot.tableY} r="8" fill="#f87171" />
+              <circle cx={redRobot.tableX} cy={redRobot.tableY} r="12" fill="#ffffff" />
 
               {/* Puck */}
-              <circle cx={puck.x} cy={puck.y} r="20" fill="#f8fafc" stroke="#94a3b8" strokeWidth="3" />
+              <circle cx={puck.x} cy={puck.y} r="20" fill={theme === 'light' ? '#e11d48' : '#ffffff'} stroke="#64748b" strokeWidth="3" />
             </svg>
           </div>
 
-          {/* Paddle Tracking Vision Indicators */}
+          {/* [REQ] 콘솔에 빨, 파 패들 이거 빼놔 -> 단정하고 중립적인 패들 1, 패들 2 상태창 */}
           <div className="grid grid-cols-2 gap-2 text-xs">
-            <div className="bg-slate-950/80 border border-slate-800 rounded-lg p-2 flex items-center justify-between">
-              <span className="text-blue-400 font-bold flex items-center gap-1.5">
-                <span className={`w-2 h-2 rounded-full ${blueRobot.detected ? 'bg-blue-400' : 'bg-slate-600'}`} />
-                청팀 패들
+            <div className="bg-slate-950/80 border border-slate-800 rounded-lg p-2.5 flex items-center justify-between">
+              <span className="font-bold text-slate-200 flex items-center gap-2">
+                <span className={`w-2.5 h-2.5 rounded-full ${blueRobot.detected ? 'bg-emerald-400' : 'bg-slate-600'}`} />
+                패들 1 (좌측)
               </span>
-              <span className="font-mono text-slate-300">
+              <span className="font-mono text-slate-400">
                 {blueRobot.detected ? `${Math.round(blueRobot.tableX)}, ${Math.round(blueRobot.tableY)}` : '미감지'}
               </span>
             </div>
 
-            <div className="bg-slate-950/80 border border-slate-800 rounded-lg p-2 flex items-center justify-between">
-              <span className="text-rose-400 font-bold flex items-center gap-1.5">
-                <span className={`w-2 h-2 rounded-full ${redRobot.detected ? 'bg-rose-400' : 'bg-slate-600'}`} />
-                적팀 패들
+            <div className="bg-slate-950/80 border border-slate-800 rounded-lg p-2.5 flex items-center justify-between">
+              <span className="font-bold text-slate-200 flex items-center gap-2">
+                <span className={`w-2.5 h-2.5 rounded-full ${redRobot.detected ? 'bg-emerald-400' : 'bg-slate-600'}`} />
+                패들 2 (우측)
               </span>
-              <span className="font-mono text-slate-300">
+              <span className="font-mono text-slate-400">
                 {redRobot.detected ? `${Math.round(redRobot.tableX)}, ${Math.round(redRobot.tableY)}` : '미감지'}
               </span>
             </div>
@@ -366,11 +345,11 @@ export const ConsoleScreen: React.FC = () => {
 
         {/* Right: Controller Section (Col 6) */}
         <div className="lg:col-span-6 flex flex-col gap-2.5 overflow-y-auto">
-          {/* Big Scoreboard Bar */}
+          {/* [REQ] 빨, 파 색상 뺀 깔끔한 스포츠 스코어보드 */}
           <div className="grid grid-cols-3 gap-2 bg-slate-900 border border-slate-800 rounded-2xl p-3 text-center">
-            {/* Blue Score */}
-            <div className="flex flex-col items-center justify-center p-2 rounded-xl bg-blue-950/40 border border-blue-900/50">
-              <span className="text-xs font-bold text-blue-400 mb-1">청팀 점수</span>
+            {/* Player 1 Score */}
+            <div className="flex flex-col items-center justify-center p-2 rounded-xl bg-slate-950/60 border border-slate-800">
+              <span className="text-xs font-bold text-slate-300 mb-1">좌측 점수 (1P)</span>
               <div className="text-4xl sm:text-5xl font-black font-mono text-white">{score.blue}</div>
               <div className="flex items-center gap-1 mt-2">
                 <button
@@ -381,7 +360,7 @@ export const ConsoleScreen: React.FC = () => {
                 </button>
                 <button
                   onClick={() => handleAdjustScore('blue', 1)}
-                  className="w-7 h-7 rounded bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center text-xs font-bold"
+                  className="w-7 h-7 rounded bg-slate-700 hover:bg-slate-600 text-white flex items-center justify-center text-xs font-bold"
                 >
                   <Plus className="w-3.5 h-3.5" />
                 </button>
@@ -389,10 +368,10 @@ export const ConsoleScreen: React.FC = () => {
             </div>
 
             {/* Center Clock */}
-            <div className="flex flex-col items-center justify-center p-2 rounded-xl bg-slate-950/70 border border-slate-800">
+            <div className="flex flex-col items-center justify-center p-2 rounded-xl bg-slate-950/80 border border-slate-800">
               <div className="flex items-center gap-1 text-[11px] text-slate-400 mb-1">
                 <Clock className="w-3.5 h-3.5 text-indigo-400" />
-                <span>잔여 시간</span>
+                <span>경기 잔여 시간</span>
               </div>
               <div
                 className={`text-3xl sm:text-4xl font-black font-mono tracking-tight ${
@@ -406,9 +385,9 @@ export const ConsoleScreen: React.FC = () => {
               </span>
             </div>
 
-            {/* Red Score */}
-            <div className="flex flex-col items-center justify-center p-2 rounded-xl bg-rose-950/40 border border-rose-900/50">
-              <span className="text-xs font-bold text-rose-400 mb-1">적팀 점수</span>
+            {/* Player 2 Score */}
+            <div className="flex flex-col items-center justify-center p-2 rounded-xl bg-slate-950/60 border border-slate-800">
+              <span className="text-xs font-bold text-slate-300 mb-1">우측 점수 (2P)</span>
               <div className="text-4xl sm:text-5xl font-black font-mono text-white">{score.red}</div>
               <div className="flex items-center gap-1 mt-2">
                 <button
@@ -419,7 +398,7 @@ export const ConsoleScreen: React.FC = () => {
                 </button>
                 <button
                   onClick={() => handleAdjustScore('red', 1)}
-                  className="w-7 h-7 rounded bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center text-xs font-bold"
+                  className="w-7 h-7 rounded bg-slate-700 hover:bg-slate-600 text-white flex items-center justify-center text-xs font-bold"
                 >
                   <Plus className="w-3.5 h-3.5" />
                 </button>
@@ -427,20 +406,19 @@ export const ConsoleScreen: React.FC = () => {
             </div>
           </div>
 
-          {/* [REQ] 게임 종료시 콘솔에 게임 종료 나오고 누르면 콘솔은 게임 시작 버튼, 서브는 게임 플레이 가능, 메인은 골대 없게 */}
+          {/* Game Phase Transition Buttons */}
           {isTimeUp ? (
-            <div className="p-4 rounded-2xl bg-gradient-to-r from-rose-950/90 via-slate-900 to-rose-950/90 border-2 border-rose-500/80 shadow-xl flex flex-col items-center text-center gap-3">
-              <div className="flex items-center gap-2 text-rose-400 font-bold text-sm">
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-2 border-slate-700 shadow-xl flex flex-col items-center text-center gap-3">
+              <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
                 <AlertTriangle className="w-5 h-5" />
                 <span>게임이 종료되었습니다!</span>
               </div>
               <div className="text-xs text-slate-300">
-                아래 <strong className="text-rose-300">[게임 종료 확인 / 다음 게임 준비]</strong>를 누르면 서브 전광판에{' '}
-                <strong>"게임 플레이 가능"</strong>이 뜨고, 메인은 <strong>골대 없는 대기 경기장</strong>으로 전환됩니다.
+                아래 버튼을 누르면 서브 전광판에 <strong>"게임 플레이 가능"</strong>이 뜨고, 메인은 <strong>골대 없는 대기 경기장</strong>으로 리셋됩니다.
               </div>
               <button
                 onClick={handleAcknowledgeGameOver}
-                className="w-full py-3.5 px-6 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-98 text-white font-black text-sm uppercase tracking-wider shadow-lg transition-all flex items-center justify-center gap-2"
+                className="w-full py-3.5 px-6 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-98 text-white font-black text-sm uppercase tracking-wider shadow-lg transition-all flex items-center justify-center gap-2"
               >
                 <CheckCircle2 className="w-5 h-5" />
                 게임 종료 확인 (다음 게임 대기 전환)
@@ -479,7 +457,7 @@ export const ConsoleScreen: React.FC = () => {
             </div>
           )}
 
-          {/* [REQ] 시간 추가 컨트롤 (+30초, +1분, +2분, -30초) */}
+          {/* Time Adjustment Controls */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3">
             <span className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
               경기 시간 추가 / 조절
@@ -487,19 +465,19 @@ export const ConsoleScreen: React.FC = () => {
             <div className="grid grid-cols-4 gap-2">
               <button
                 onClick={() => handleAddTime(30)}
-                className="py-2.5 px-2 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/50 text-indigo-300 hover:text-white text-xs font-bold transition-colors text-center"
+                className="py-2.5 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white text-xs font-bold transition-colors text-center"
               >
                 +30초
               </button>
               <button
                 onClick={() => handleAddTime(60)}
-                className="py-2.5 px-2 rounded-xl bg-indigo-600/30 hover:bg-indigo-600/40 border border-indigo-400/60 text-indigo-200 hover:text-white text-xs font-bold transition-colors text-center"
+                className="py-2.5 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white text-xs font-bold transition-colors text-center"
               >
                 +1분
               </button>
               <button
                 onClick={() => handleAddTime(120)}
-                className="py-2.5 px-2 rounded-xl bg-indigo-600/40 hover:bg-indigo-600/50 border border-indigo-400 text-white text-xs font-bold transition-colors text-center"
+                className="py-2.5 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white text-xs font-bold transition-colors text-center"
               >
                 +2분
               </button>

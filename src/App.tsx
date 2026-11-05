@@ -68,6 +68,7 @@ export default function App() {
     team: 'blue' | 'red';
     countdown: number;
   } | null>(null);
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
   // Viewport Container Size
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -270,6 +271,7 @@ export default function App() {
       timeLeft,
       gamePhase,
       matchMode,
+      theme,
       stats,
       goalAnnouncement,
       puck: { x: live.puck.x, y: live.puck.y, vx: live.puck.vx, vy: live.puck.vy },
@@ -281,7 +283,7 @@ export default function App() {
       broadcastRef.current?.postMessage(payload);
       localStorage.setItem('airhockey_sync', JSON.stringify(payload));
     } catch {}
-  }, [score, timeLeft, gamePhase, matchMode, stats, goalAnnouncement]);
+  }, [score, timeLeft, gamePhase, matchMode, theme, stats, goalAnnouncement]);
 
   useEffect(() => {
     sendFullSyncState();
@@ -491,6 +493,10 @@ export default function App() {
           setScore({ blue: 0, red: 0 });
           setGamePhase('READY');
           resetPuckServe();
+        }
+      } else if (msg.action === 'SET_THEME') {
+        if (msg.theme === 'dark' || msg.theme === 'light') {
+          setTheme(msg.theme);
         }
       }
     };
@@ -979,7 +985,7 @@ export default function App() {
   }, [cameraActive, handleGoalScored]);
 
   return (
-    <div className="relative w-screen h-screen bg-slate-950 text-slate-100 flex flex-col overflow-hidden select-none font-sans">
+    <div className={`relative w-screen h-screen overflow-hidden select-none font-sans ${theme === 'light' ? 'bg-white' : 'bg-black'}`}>
       {/* Hidden Live Video Element for Computer Vision */}
       <video
         ref={videoRef}
@@ -989,406 +995,24 @@ export default function App() {
         className="hidden"
       />
 
-      {/* Main Viewport Container */}
+      {/* [REQ] 매인 경기창에는 모든 UI 넣지 말고 경기장 라인, 골대, 말만 띄워 */}
       <div
         ref={containerRef}
-        className="relative flex-1 w-full h-full overflow-hidden flex items-center justify-center bg-black"
+        className="relative w-full h-full overflow-hidden flex items-center justify-center"
       >
-        {/* Camera Permission / Error Alert (Top Left) */}
-        {cameraError && !cameraActive && (
-          <div className="absolute top-4 left-4 z-30 max-w-sm bg-slate-900/95 border border-amber-600/50 rounded-xl p-3 text-xs text-amber-200 backdrop-blur-md flex items-start gap-2.5 shadow-xl">
-            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-            <div className="space-y-1.5">
-              <p>{cameraError}</p>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => startCamera(cameraFacing)}
-                  className="px-2 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded text-[11px] font-medium"
-                >
-                  카메라 재시도
-                </button>
-                <button
-                  onClick={() => setIsVirtualMode(true)}
-                  className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-[11px] font-medium"
-                >
-                  가상봇 ON
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Real-time Computer Vision Camera Monitor (Toggleable) */}
-        {showCameraPip && cameraActive && (
-          <div
-            onClick={handlePipClickForColorPick}
-            className={`absolute top-4 right-4 z-30 w-72 sm:w-80 aspect-video rounded-xl overflow-hidden border-2 border-slate-700 shadow-2xl bg-black select-none ${
-              isPickingColor ? 'cursor-crosshair ring-2 ring-pink-500' : ''
-            }`}
-          >
-            {/* Header info bar */}
-            <div className="absolute top-0 inset-x-0 bg-slate-950/85 px-2.5 py-1 z-20 flex items-center justify-between text-[11px] font-medium border-b border-slate-800">
-              <span className="text-white flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                비전 모니터 {isCameraMirrored ? '(좌우반전)' : ''}
-              </span>
-              <div className="flex items-center gap-2">
-                <span className={blueRobot.detected ? 'text-emerald-400 font-semibold' : 'text-slate-500'}>
-                  패들 A {blueRobot.detected ? '✓' : '...'}
-                </span>
-                <span className="text-slate-600">|</span>
-                <span className={redRobot.detected ? 'text-emerald-400 font-semibold' : 'text-slate-500'}>
-                  패들 B {redRobot.detected ? '✓' : '...'}
-                </span>
-              </div>
-            </div>
-
-            {/* Camera Video Feed (Mirrored if active) */}
-            <video
-              src=""
-              ref={(el) => {
-                if (el && videoRef.current?.srcObject && el.srcObject !== videoRef.current.srcObject) {
-                  el.srcObject = videoRef.current.srcObject;
-                  el.play().catch(() => {});
-                }
-              }}
-              autoPlay
-              playsInline
-              muted
-              style={{
-                transform: isCameraMirrored ? 'scaleX(-1)' : 'none',
-              }}
-              className="w-full h-full object-cover"
-            />
-
-            {/* OpenCV-style Visual Tracking Overlay in Camera Coordinates (NO NUMBERS, NO TEXT) */}
-            <svg
-              className="absolute inset-0 w-full h-full pointer-events-none z-10"
-              viewBox="0 0 100 100"
-              preserveAspectRatio="none"
-            >
-              {/* Camera Desk Quad Outline */}
-              <polygon
-                points={`${cameraCorners[0].x * 100},${cameraCorners[0].y * 100} ${cameraCorners[1].x * 100},${cameraCorners[1].y * 100} ${cameraCorners[2].x * 100},${cameraCorners[2].y * 100} ${cameraCorners[3].x * 100},${cameraCorners[3].y * 100}`}
-                fill="none"
-                stroke="#38bdf8"
-                strokeWidth="1.2"
-                strokeDasharray="2 2"
-              />
-
-              {/* Robot Paddle A (Rendered in high-contrast solid black, NO numbers) */}
-              {blueRobot.detected && (
-                <g>
-                  {(() => {
-                    const camPt = cameraTransformerRef.current.tableToScreen(blueRobot.tableX, blueRobot.tableY);
-                    const normX = (camPt.x / 640) * 100;
-                    const normY = (camPt.y / 360) * 100;
-                    return (
-                      <>
-                        <rect
-                          x={normX - 4}
-                          y={normY - 4}
-                          width="8"
-                          height="8"
-                          fill="rgba(0, 0, 0, 0.55)"
-                          stroke="#000000"
-                          strokeWidth="1.8"
-                          rx="1.5"
-                        />
-                        <circle cx={normX} cy={normY} r="1.5" fill="#f8fafc" />
-                      </>
-                    );
-                  })()}
-                </g>
-              )}
-
-              {/* Robot Paddle B (Rendered in high-contrast solid black, NO numbers) */}
-              {redRobot.detected && (
-                <g>
-                  {(() => {
-                    const camPt = cameraTransformerRef.current.tableToScreen(redRobot.tableX, redRobot.tableY);
-                    const normX = (camPt.x / 640) * 100;
-                    const normY = (camPt.y / 360) * 100;
-                    return (
-                      <>
-                        <rect
-                          x={normX - 4}
-                          y={normY - 4}
-                          width="8"
-                          height="8"
-                          fill="rgba(0, 0, 0, 0.55)"
-                          stroke="#000000"
-                          strokeWidth="1.8"
-                          rx="1.5"
-                        />
-                        <circle cx={normX} cy={normY} r="1.5" fill="#f8fafc" />
-                      </>
-                    );
-                  })()}
-                </g>
-              )}
-            </svg>
-          </div>
-        )}
-
-        {/* Floating Utilities (Bottom Right): Fullscreen, Sub Window & Console Window controls, Camera PIP */}
-        <div className="absolute bottom-4 right-4 z-30 flex items-center gap-2">
-          <button
-            onClick={handleToggleFullscreen}
-            title={isFullscreen ? '창모드로 전환 (F11 / Esc)' : '메인 경기장 전체화면 (F11)'}
-            className={`px-3 py-1.5 rounded-lg border text-xs font-semibold backdrop-blur-md shadow-md flex items-center gap-1.5 transition-colors ${
-              isFullscreen
-                ? 'bg-amber-600/90 hover:bg-amber-500 text-white border-amber-400'
-                : 'bg-slate-900/90 hover:bg-slate-800 text-white border-slate-600'
-            }`}
-          >
-            {isFullscreen ? <Minimize className="w-3.5 h-3.5" /> : <Maximize className="w-3.5 h-3.5" />}
-            <span>{isFullscreen ? '창모드' : '전체화면'}</span>
-          </button>
-
-          {window.electronAPI ? (
-            <>
-              <button
-                onClick={() => window.electronAPI?.openOrFocusSubWindow()}
-                title="서브 전광판 창 열기 / 앞으로 가져오기"
-                className="px-2.5 py-1.5 rounded-lg bg-indigo-950/90 hover:bg-indigo-900 text-indigo-200 hover:text-white border border-indigo-600/60 text-xs backdrop-blur-md shadow-md flex items-center gap-1.5"
-              >
-                <Monitor className="w-3.5 h-3.5 text-indigo-400" />
-                <span className="hidden sm:inline">서브 전광판</span>
-              </button>
-              <button
-                onClick={() => window.electronAPI?.openOrFocusConsoleWindow()}
-                title="관리 콘솔 창 열기 / 앞으로 가져오기"
-                className="px-2.5 py-1.5 rounded-lg bg-emerald-950/90 hover:bg-emerald-900 text-emerald-200 hover:text-white border border-emerald-600/60 text-xs backdrop-blur-md shadow-md flex items-center gap-1.5"
-              >
-                <Tv className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="hidden sm:inline">관리 콘솔</span>
-              </button>
-              <button
-                onClick={() => window.electronAPI?.arrangeSideBySide()}
-                title="메인, 서브, 콘솔 창 3개 나란히 자동 정렬"
-                className="px-2.5 py-1.5 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-700 text-xs backdrop-blur-md shadow-md flex items-center gap-1.5"
-              >
-                <Columns2 className="w-3.5 h-3.5 text-sky-400" />
-                <span className="hidden sm:inline">3개 창 정렬</span>
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                onClick={() => {
-                  window.open(
-                    window.location.origin + window.location.pathname + '?screen=scoreboard',
-                    '_blank',
-                    'width=1280,height=720'
-                  );
-                }}
-                title="서브 전광판 창 열기"
-                className="px-2.5 py-1.5 rounded-lg bg-indigo-950/90 hover:bg-indigo-900 text-indigo-200 hover:text-white border border-indigo-600/60 text-xs backdrop-blur-md shadow-md flex items-center gap-1.5"
-              >
-                <Monitor className="w-3.5 h-3.5 text-indigo-400" />
-                <span className="hidden sm:inline">서브 전광판</span>
-              </button>
-              <button
-                onClick={() => {
-                  window.open(
-                    window.location.origin + window.location.pathname + '?screen=console',
-                    '_blank',
-                    'width=1200,height=800'
-                  );
-                }}
-                title="관리 콘솔 창 열기"
-                className="px-2.5 py-1.5 rounded-lg bg-emerald-950/90 hover:bg-emerald-900 text-emerald-200 hover:text-white border border-emerald-600/60 text-xs backdrop-blur-md shadow-md flex items-center gap-1.5"
-              >
-                <Tv className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="hidden sm:inline">관리 콘솔</span>
-              </button>
-            </>
-          )}
-
-          <button
-            onClick={() => setIsSettingsOpen(true)}
-            title="게임 상세 설정"
-            className="p-1.5 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 backdrop-blur-md shadow-md"
-          >
-            <Sliders className="w-4 h-4" />
-          </button>
-
-          {cameraActive && (
-            <>
-              <button
-                onClick={() => setIsCameraMirrored((m) => !m)}
-                title={isCameraMirrored ? '카메라 좌우반전 해제' : '카메라 좌우반전 켜기'}
-                className={`p-1.5 rounded-lg border backdrop-blur-md shadow-md transition-colors ${
-                  isCameraMirrored
-                    ? 'bg-amber-600/90 text-white border-amber-500'
-                    : 'bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border-slate-700'
-                }`}
-              >
-                <FlipHorizontal className="w-4 h-4" />
-              </button>
-
-              <button
-                onClick={() => setShowCameraPip((p) => !p)}
-                title={showCameraPip ? '카메라 모니터 닫기' : '카메라 모니터 열기'}
-                className="px-2 py-1.5 rounded-lg bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-xs backdrop-blur-md shadow-md flex items-center gap-1.5"
-              >
-                {showCameraPip ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-              </button>
-
-              <button
-                onClick={handleToggleCameraFacing}
-                title="전면/후면 카메라 전환"
-                className="p-1.5 rounded-lg bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 backdrop-blur-md shadow-md"
-              >
-                <SwitchCamera className="w-4 h-4" />
-              </button>
-            </>
-          )}
-        </div>
-
-        {/* Main Clean Dark Game Canvas for Projector */}
-        <div className="absolute inset-0 z-20">
-          <GameCanvas
-            normalizedCorners={screenCorners}
-            gamePhase={gamePhase}
-            score={score}
-            timeLeft={timeLeft}
-            blueRobot={blueRobot}
-            redRobot={redRobot}
-            puck={puck}
-            particles={particles}
-            liveStateRef={liveStateRef}
-            goalAnnouncement={goalAnnouncement}
-            isVirtualMode={isVirtualMode}
-            onOpenSettings={() => setIsSettingsOpen(true)}
-            onUpdateVirtualRobot={handleUpdateVirtualRobot}
-            onCanvasClickForColorPick={handleCanvasClickForColorPick}
-            isPickingColor={isPickingColor}
-            containerWidth={containerSize.width}
-            containerHeight={containerSize.height}
-            goalSize={goalSize}
-          />
-        </div>
-
-        {/* 2-Step Court Calibration Overlay: Step 1 (Screen Court) -> Step 2 (Camera Match) */}
-        {isCalibrating && (
-          <CalibrationOverlay
-            screenCorners={screenCorners}
-            cameraCorners={cameraCorners}
-            goalSize={goalSize}
-            isCameraMirrored={isCameraMirrored}
-            videoRef={videoRef}
-            cameraActive={cameraActive}
-            onUpdateScreenCorners={setScreenCorners}
-            onUpdateCameraCorners={setCameraCorners}
-            onUpdateGoalSize={setGoalSize}
-            onToggleCameraMirror={() => setIsCameraMirrored((m) => !m)}
-            onConfirm={() => {
-              setIsCalibrating(false);
-              setGamePhase('READY');
-              soundManager.playCountdown(true);
-            }}
-          />
-        )}
-
-        {/* Quick Instructions Banner */}
-        {gamePhase === 'READY' && !isCalibrating && (
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 bg-slate-900/90 border border-slate-700 rounded-xl px-5 py-3 shadow-2xl backdrop-blur-md text-center max-w-lg w-[90%]">
-            <h2 className="text-sm font-semibold text-white mb-1">
-              테이블 에어하키 ({MATCH_MODES[matchMode].label} 모드)
-            </h2>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              • <strong>스페이스(Space)</strong>를 누르면 즉시 <strong>시작 / 일시정지</strong>됩니다.
-              <br />
-              • 양 끝 <strong>점수판</strong> 또는 하단 버튼을 클릭하면 <strong>게임 설정</strong>이 열립니다.
-              <br />
-              • 마젠타 블록 2개를 움직여 벽면 바운스와 함께 상대 골대에 득점을 노려보세요!
-            </p>
-            <div className="mt-3 flex items-center justify-center gap-2">
-              <button
-                onClick={handleStartGame}
-                className="px-5 py-2 font-semibold text-xs text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-md transition-all active:scale-95"
-              >
-                지금 시작 (Space)
-              </button>
-              <button
-                onClick={() => setIsSettingsOpen(true)}
-                className="px-4 py-2 font-medium text-xs text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg shadow transition-colors"
-              >
-                설정 열기 ⚙
-              </button>
-            </div>
-          </div>
-        )}
+        <GameCanvas
+          normalizedCorners={screenCorners}
+          gamePhase={gamePhase}
+          blueRobot={blueRobot}
+          redRobot={redRobot}
+          puck={puck}
+          liveStateRef={liveStateRef}
+          containerWidth={containerSize.width}
+          containerHeight={containerSize.height}
+          goalSize={goalSize}
+          theme={theme}
+        />
       </div>
-
-      {/* Settings Modal (Triggered by clicking the center clock) */}
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        gamePhase={gamePhase}
-        matchMode={matchMode}
-        timeLeft={timeLeft}
-        blueRobot={blueRobot}
-        redRobot={redRobot}
-        visionEngine={colorSettings.visionEngine}
-        isMuted={isMuted}
-        isVirtualMode={isVirtualMode}
-        isCameraMirrored={isCameraMirrored}
-        isFullscreen={isFullscreen}
-        showCameraPip={showCameraPip}
-        goalSize={goalSize}
-        cameraActive={cameraActive}
-        onChangeMatchMode={(newMode) => {
-          setMatchMode(newMode);
-          setTimeLeft(MATCH_MODES[newMode].duration);
-          setScore({ blue: 0, red: 0 });
-          setGamePhase('READY');
-          resetPuckServe();
-        }}
-        onStartGame={handleStartGame}
-        onPauseGame={handlePauseGame}
-        onResetGame={handleResetGame}
-        onToggleMute={handleToggleMute}
-        onToggleVirtualMode={() => setIsVirtualMode((v) => !v)}
-        onToggleCameraMirror={() => setIsCameraMirrored((m) => !m)}
-        onToggleFullscreen={handleToggleFullscreen}
-        onToggleCameraPip={() => setShowCameraPip((p) => !p)}
-        onToggleCameraFacing={handleToggleCameraFacing}
-        onOpenCalibration={() => {
-          setIsCalibrating(true);
-          setGamePhase('CALIBRATION');
-        }}
-        onOpenColorTuner={() => setIsColorTunerOpen(true)}
-        onUpdateGoalSize={setGoalSize}
-      />
-
-      {/* Color Sensitivity Tuner Modal for Magenta */}
-      <ColorTunerModal
-        settings={colorSettings}
-        isOpen={isColorTunerOpen}
-        isPickingColor={isPickingColor}
-        onClose={() => {
-          setIsColorTunerOpen(false);
-          setIsPickingColor(false);
-        }}
-        onUpdateSettings={setColorSettings}
-        onStartColorPick={() => setIsPickingColor(true)}
-        debugCanvasRef={debugCanvasRef}
-      />
-
-      {/* Game Over Victory Modal */}
-      <GameOverModal
-        isOpen={gamePhase === 'TIME_UP'}
-        score={score}
-        stats={stats}
-        onRestart={handleStartGame}
-        onRecalibrate={() => {
-          setIsCalibrating(true);
-          setGamePhase('CALIBRATION');
-        }}
-      />
     </div>
   );
 }

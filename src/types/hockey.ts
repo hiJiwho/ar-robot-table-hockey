@@ -90,35 +90,36 @@ export interface MatchStats {
 
 export interface GameActionMessage {
   type: 'GAME_ACTION';
-  action: 'START' | 'PAUSE' | 'RESET' | 'PREPARE' | 'ADD_TIME' | 'SET_SCORE' | 'CHANGE_MODE';
+  action: 'START' | 'PAUSE' | 'RESET' | 'PREPARE' | 'ADD_TIME' | 'SET_SCORE' | 'CHANGE_MODE' | 'SET_THEME';
   seconds?: number;
   score?: MatchScore;
   mode?: MatchMode;
+  theme?: 'dark' | 'light';
 }
 
 export const DEFAULT_NORMALIZED_CORNERS: FourCorners = [
-  { x: 0.22, y: 0.24 }, // Top-Left
-  { x: 0.72, y: 0.24 }, // Top-Right
-  { x: 0.72, y: 0.68 }, // Bottom-Right
-  { x: 0.22, y: 0.68 }, // Bottom-Left
+  { x: 0.04, y: 0.05 }, // Top-Left (화면에 꽉 찬 시원한 경기장)
+  { x: 0.96, y: 0.05 }, // Top-Right
+  { x: 0.96, y: 0.95 }, // Bottom-Right
+  { x: 0.04, y: 0.95 }, // Bottom-Left
 ];
 
 export const FULL_FRAME_NORMALIZED_CORNERS: FourCorners = [
-  { x: 0.05, y: 0.05 },
-  { x: 0.95, y: 0.05 },
-  { x: 0.95, y: 0.95 },
-  { x: 0.05, y: 0.95 },
+  { x: 0.03, y: 0.03 },
+  { x: 0.97, y: 0.03 },
+  { x: 0.97, y: 0.97 },
+  { x: 0.03, y: 0.97 },
 ];
 
 // Table logical dimensions (standard aspect ratio 1000 x 600)
 export const TABLE_WIDTH = 1000;
 export const TABLE_HEIGHT = 600;
-export const DEFAULT_GOAL_SIZE = 240; // Default height of the goal opening
+export const DEFAULT_GOAL_SIZE = 260; // Default height of the goal opening
 export const GOAL_SIZE = DEFAULT_GOAL_SIZE;
-export const MIN_GOAL_SIZE = 120;
+export const MIN_GOAL_SIZE = 140;
 export const MAX_GOAL_SIZE = 420;
-export const PUCK_RADIUS = 18;
-export const ROBOT_RADIUS = 36;
+export const PUCK_RADIUS = 20;
+export const ROBOT_RADIUS = 38;
 export type MatchMode = '1MIN' | '2MIN' | '3MIN' | 'TARGET_5';
 
 export const MATCH_DURATION_SECONDS = 60;
@@ -135,6 +136,7 @@ export interface SyncStatePayload {
   timeLeft: number;
   gamePhase: GamePhase;
   matchMode: MatchMode;
+  theme?: 'dark' | 'light';
   stats: MatchStats;
   goalAnnouncement?: { team: 'blue' | 'red'; countdown: number } | null;
   puck?: { x: number; y: number; vx: number; vy: number };
