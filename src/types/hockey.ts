@@ -74,11 +74,11 @@ export interface ColorSettings {
   customSample?: { r: number; g: number; b: number; hex: string } | null;
 }
 
-export type GamePhase = 'CALIBRATION' | 'READY' | 'PLAYING' | 'GOAL' | 'TIME_UP';
+export type GamePhase = 'READY' | 'PLAYING' | 'GOAL' | 'TIME_UP' | 'CALIBRATION_SCREEN' | 'CALIBRATION_CAMERA';
 
 export interface MatchScore {
-  blue: number; // 청팀
-  red: number;  // 적팀
+  blue: number; // 청팀 / 1P
+  red: number;  // 적팀 / 2P
 }
 
 export interface MatchStats {
@@ -88,14 +88,35 @@ export interface MatchStats {
   lastScoredTeam: 'blue' | 'red' | null;
 }
 
-export interface GameActionMessage {
+export type GameActionMessage = {
   type: 'GAME_ACTION';
-  action: 'START' | 'PAUSE' | 'RESET' | 'PREPARE' | 'ADD_TIME' | 'SET_SCORE' | 'CHANGE_MODE' | 'SET_THEME';
+  action:
+    | 'START'
+    | 'PAUSE'
+    | 'RESET'
+    | 'PREPARE'
+    | 'ADD_TIME'
+    | 'SET_SCORE'
+    | 'CHANGE_MODE'
+    | 'SET_THEME'
+    | 'START_CALIBRATE_SCREEN'
+    | 'START_CALIBRATE_CAMERA'
+    | 'UPDATE_SCREEN_CORNERS'
+    | 'UPDATE_CAMERA_CORNERS'
+    | 'CONFIRM_CALIBRATION'
+    | 'TOGGLE_MIRROR'
+    | 'UPDATE_GOAL_SIZE';
   seconds?: number;
   score?: MatchScore;
   mode?: MatchMode;
   theme?: 'dark' | 'light';
-}
+  customDuration?: number;
+  targetPoints?: number;
+  goalSize?: number;
+  screenCorners?: FourCorners;
+  cameraCorners?: FourCorners;
+  isCameraMirrored?: boolean;
+};
 
 export const DEFAULT_NORMALIZED_CORNERS: FourCorners = [
   { x: 0.04, y: 0.05 }, // Top-Left (화면에 꽉 찬 시원한 경기장)
@@ -120,14 +141,13 @@ export const MIN_GOAL_SIZE = 140;
 export const MAX_GOAL_SIZE = 420;
 export const PUCK_RADIUS = 20;
 export const ROBOT_RADIUS = 38;
-export type MatchMode = '1MIN' | '2MIN' | '3MIN' | 'TARGET_5';
+export type MatchMode = '1MIN' | 'CUSTOM_TIME' | 'TARGET_N';
 
 export const MATCH_DURATION_SECONDS = 60;
 export const MATCH_MODES: Record<MatchMode, { label: string; duration: number; targetScore?: number }> = {
   '1MIN': { label: '1분 매치', duration: 60 },
-  '2MIN': { label: '2분 매치', duration: 120 },
-  '3MIN': { label: '3분 매치', duration: 180 },
-  'TARGET_5': { label: '5점 선승제', duration: 300, targetScore: 5 },
+  'CUSTOM_TIME': { label: '입력 시간 매치', duration: 180 },
+  'TARGET_N': { label: 'n점 선승제', duration: 600, targetScore: 5 },
 };
 
 export interface SyncStatePayload {
@@ -136,9 +156,15 @@ export interface SyncStatePayload {
   timeLeft: number;
   gamePhase: GamePhase;
   matchMode: MatchMode;
+  customDuration?: number;
+  targetPoints?: number;
+  goalSize?: number;
   theme?: 'dark' | 'light';
   stats: MatchStats;
   goalAnnouncement?: { team: 'blue' | 'red'; countdown: number } | null;
+  screenCorners?: FourCorners;
+  cameraCorners?: FourCorners;
+  isCameraMirrored?: boolean;
   puck?: { x: number; y: number; vx: number; vy: number };
   blueRobot?: { tableX: number; tableY: number; detected: boolean; confidence: number };
   redRobot?: { tableX: number; tableY: number; detected: boolean; confidence: number };

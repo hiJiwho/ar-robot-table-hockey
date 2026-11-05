@@ -2,6 +2,7 @@ import React, { useRef, useEffect } from 'react';
 import {
   FourCorners,
   GamePhase,
+  MatchScore,
   PuckState,
   RobotState,
   TABLE_HEIGHT,
@@ -13,6 +14,8 @@ import { PerspectiveTransformer } from '../utils/perspective';
 interface GameCanvasProps {
   normalizedCorners: FourCorners;
   gamePhase: GamePhase;
+  score?: MatchScore;
+  timeLeft?: number;
   blueRobot: RobotState;
   redRobot: RobotState;
   puck: PuckState;
@@ -63,7 +66,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
       const blueRobot = live ? live.blueRobot : currentProps.blueRobot;
       const redRobot = live ? live.redRobot : currentProps.redRobot;
       const puck = live ? live.puck : currentProps.puck;
-      const { goalSize = 260, gamePhase, theme = 'dark' } = currentProps;
+      const {
+        goalSize = 260,
+        gamePhase,
+        theme = 'dark',
+        score = { blue: 0, red: 0 },
+        timeLeft = 60,
+      } = currentProps;
 
       const width = canvas.width;
       const height = canvas.height;
@@ -71,7 +80,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
 
       const isLight = theme === 'light';
       const isGameOver = gamePhase === 'TIME_UP';
-      const isReadyPhase = gamePhase === 'READY' || gamePhase === 'CALIBRATION';
+      const isReadyPhase = gamePhase === 'READY' || gamePhase === 'CALIBRATION_SCREEN' || gamePhase === 'CALIBRATION_CAMERA';
       const showGoals = !isReadyPhase; // 대기 중에는 골대 없음 (벽면만 닫힌 경기장 모습)
 
       // Theme color palette
@@ -165,8 +174,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
         ctx.lineTo(rightBot.x, rightBot.y);
         ctx.stroke();
 
-        // Left Goal Post Net Arc
-        ctx.strokeStyle = primaryLine;
+        // Left Goal Post Net Arc (청팀 Blue)
+        ctx.strokeStyle = isGameOver ? primaryLine : '#3b82f6';
         ctx.lineWidth = 4;
         ctx.beginPath();
         const leftNetBack = tf.tableToScreen(-45, TABLE_HEIGHT / 2);
@@ -174,19 +183,21 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
         ctx.quadraticCurveTo(leftNetBack.x, leftNetBack.y, leftGoalPostBot.x, leftGoalPostBot.y);
         ctx.stroke();
 
-        // Right Goal Post Net Arc
+        // Right Goal Post Net Arc (적팀 Red)
+        ctx.strokeStyle = isGameOver ? primaryLine : '#ef4444';
+        ctx.lineWidth = 4;
         ctx.beginPath();
         const rightNetBack = tf.tableToScreen(TABLE_WIDTH + 45, TABLE_HEIGHT / 2);
         ctx.moveTo(rightGoalPostTop.x, rightGoalPostTop.y);
         ctx.quadraticCurveTo(rightNetBack.x, rightNetBack.y, rightGoalPostBot.x, rightGoalPostBot.y);
         ctx.stroke();
 
-        // Goal Crease Semi-Circles (골대 앞 반원 수비 구역)
-        ctx.strokeStyle = secondaryLine;
+        // Goal Crease Semi-Circles (골대 앞 반원 수비 구역: 좌측 파랑, 우측 빨강)
         ctx.lineWidth = 2.5;
         ctx.setLineDash([6, 5]);
 
-        // Left Crease
+        // Left Crease (Blue)
+        ctx.strokeStyle = isGameOver ? secondaryLine : 'rgba(59, 130, 246, 0.75)';
         ctx.beginPath();
         const creaseRadius = goalHalf + 25;
         for (let i = -16; i <= 16; i++) {
@@ -200,7 +211,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
         }
         ctx.stroke();
 
-        // Right Crease
+        // Right Crease (Red)
+        ctx.strokeStyle = isGameOver ? secondaryLine : 'rgba(239, 68, 68, 0.75)';
         ctx.beginPath();
         for (let i = -16; i <= 16; i++) {
           const theta = (i / 16) * (Math.PI / 2);
@@ -244,25 +256,72 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
       }
       ctx.stroke();
 
+      // [REQ] 그래도 경기창에 숫자(점수), 시간 띄우고!
+      // Center Digital Clock in Face-off Circle
+      const mins = Math.floor(timeLeft / 60);
+      const secs = timeLeft % 60;
+      const timeStr = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+      const centerClockPt = tf.tableToScreen(TABLE_WIDTH / 2, TABLE_HEIGHT / 2 - 24);
+      ctx.save();
+      ctx.translate(centerClockPt.x, centerClockPt.y);
+      ctx.font = '900 46px monospace, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = isGameOver
+        ? (isLight ? '#94a3b8' : '#52525b')
+        : (isLight ? 'rgba(15, 23, 42, 0.45)' : 'rgba(255, 255, 255, 0.55)');
+      ctx.fillText(timeStr, 0, 0);
+      ctx.restore();
+
       // Center Spot Dot (중심점)
-      const centerPt = tf.tableToScreen(TABLE_WIDTH / 2, TABLE_HEIGHT / 2);
+      const centerPt = tf.tableToScreen(TABLE_WIDTH / 2, TABLE_HEIGHT / 2 + 18);
       ctx.fillStyle = primaryLine;
       ctx.beginPath();
-      ctx.arc(centerPt.x, centerPt.y, 7, 0, Math.PI * 2);
+      ctx.arc(centerPt.x, centerPt.y, 6, 0, Math.PI * 2);
       ctx.fill();
 
-      // 6. Face-off Dots (양 진영 페이스오프 스팟 마커)
+      // [REQ] Left (1P) Score Number - 중앙 기점으로 왼쪽 파란색 표시
+      const p1ScorePt = tf.tableToScreen(TABLE_WIDTH / 2 - 140, TABLE_HEIGHT / 2 + 10);
+      ctx.save();
+      ctx.translate(p1ScorePt.x, p1ScorePt.y);
+      ctx.font = '900 96px monospace, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = isGameOver
+        ? (isLight ? '#cbd5e1' : '#3f3f46')
+        : (isLight ? 'rgba(37, 99, 235, 0.65)' : 'rgba(56, 189, 248, 0.65)');
+      ctx.fillText(String(score.blue), 0, 0);
+      ctx.restore();
+
+      // [REQ] Right (2P) Score Number - 중앙 기점으로 오른쪽 빨간색 표시
+      const p2ScorePt = tf.tableToScreen(TABLE_WIDTH / 2 + 140, TABLE_HEIGHT / 2 + 10);
+      ctx.save();
+      ctx.translate(p2ScorePt.x, p2ScorePt.y);
+      ctx.font = '900 96px monospace, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = isGameOver
+        ? (isLight ? '#cbd5e1' : '#3f3f46')
+        : (isLight ? 'rgba(225, 29, 72, 0.65)' : 'rgba(244, 63, 94, 0.65)');
+      ctx.fillText(String(score.red), 0, 0);
+      ctx.restore();
+
+      // 6. Face-off Dots (양 진영 페이스오프 스팟: 좌측 파랑, 우측 빨강)
       const spotOffsetX = 220;
       const spotOffsetY = 160;
       const faceOffSpots = [
-        { x: TABLE_WIDTH / 2 - spotOffsetX, y: TABLE_HEIGHT / 2 - spotOffsetY },
-        { x: TABLE_WIDTH / 2 - spotOffsetX, y: TABLE_HEIGHT / 2 + spotOffsetY },
-        { x: TABLE_WIDTH / 2 + spotOffsetX, y: TABLE_HEIGHT / 2 - spotOffsetY },
-        { x: TABLE_WIDTH / 2 + spotOffsetX, y: TABLE_HEIGHT / 2 + spotOffsetY },
+        { x: TABLE_WIDTH / 2 - spotOffsetX, y: TABLE_HEIGHT / 2 - spotOffsetY, team: 'blue' },
+        { x: TABLE_WIDTH / 2 - spotOffsetX, y: TABLE_HEIGHT / 2 + spotOffsetY, team: 'blue' },
+        { x: TABLE_WIDTH / 2 + spotOffsetX, y: TABLE_HEIGHT / 2 - spotOffsetY, team: 'red' },
+        { x: TABLE_WIDTH / 2 + spotOffsetX, y: TABLE_HEIGHT / 2 + spotOffsetY, team: 'red' },
       ];
-      ctx.strokeStyle = secondaryLine;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 2.5;
       for (const spot of faceOffSpots) {
+        ctx.strokeStyle = isGameOver
+          ? secondaryLine
+          : spot.team === 'blue'
+          ? '#3b82f6'
+          : '#ef4444';
         const screenPt = tf.tableToScreen(spot.x, spot.y);
         ctx.beginPath();
         ctx.arc(screenPt.x, screenPt.y, 8, 0, Math.PI * 2);
@@ -275,6 +334,19 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
 
       // 8. [REQ] 공 (퍽) - 순수 원형 스포츠 퍽
       renderRealisticPuck(ctx, tf, puck, isLight, isGameOver);
+
+      // 9. GOAL Text Overlay (득점 시 심플한 투사)
+      if (gamePhase === 'GOAL') {
+        const goalBannerPt = tf.tableToScreen(TABLE_WIDTH / 2, TABLE_HEIGHT / 2 + 75);
+        ctx.save();
+        ctx.translate(goalBannerPt.x, goalBannerPt.y);
+        ctx.font = '900 36px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = isLight ? '#e11d48' : '#38bdf8';
+        ctx.fillText('GOAL!!', 0, 0);
+        ctx.restore();
+      }
 
       ctx.restore();
 
@@ -297,7 +369,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
   );
 };
 
-// [REQ] 실제 에어하키 "말 (Striker/Mal)" 디자인
+// [REQ] 실제 에어하키 "말 (Striker/Mal)" 디자인: 중앙 기준 좌측 파랑, 우측 빨강
 function renderRealisticMal(
   ctx: CanvasRenderingContext2D,
   tf: PerspectiveTransformer,
@@ -308,25 +380,35 @@ function renderRealisticMal(
   if (!robot.detected && Date.now() - robot.lastSeenTime > 500) return;
   const screenPos = tf.tableToScreen(robot.tableX, robot.tableY);
   const outerRadius = 32;
+  const isBlue = robot.team === 'blue';
 
   ctx.save();
   ctx.translate(screenPos.x, screenPos.y);
 
+  // [REQ] 경기장에서도 빨간색, 파란색 표시 (게임 종료 시에는 무채색 회색으로 비활성화)
   const primary = isGameOver
     ? '#52525b'
-    : isLight
-    ? '#0f172a'
-    : '#f8fafc';
+    : isBlue
+    ? '#38bdf8'
+    : '#fb7185';
+
   const rimFill = isGameOver
     ? 'rgba(82, 82, 91, 0.25)'
-    : isLight
-    ? 'rgba(15, 23, 42, 0.12)'
-    : 'rgba(255, 255, 255, 0.18)';
+    : isBlue
+    ? 'rgba(37, 99, 235, 0.28)'
+    : 'rgba(225, 29, 72, 0.28)';
+
   const knobFill = isGameOver
     ? '#3f3f46'
-    : isLight
-    ? '#1e293b'
-    : '#ffffff';
+    : isBlue
+    ? '#1d4ed8'
+    : '#be123c';
+
+  const innerRingColor = isGameOver
+    ? '#52525b'
+    : isBlue
+    ? '#60a5fa'
+    : '#f43f5e';
 
   // 1. Base Outer Flange (말 밑판)
   ctx.fillStyle = rimFill;
@@ -335,12 +417,12 @@ function renderRealisticMal(
   ctx.fill();
 
   ctx.strokeStyle = primary;
-  ctx.lineWidth = 3.5;
+  ctx.lineWidth = 4;
   ctx.stroke();
 
   // 2. Inner Ring
-  ctx.strokeStyle = primary;
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = innerRingColor;
+  ctx.lineWidth = 2.5;
   ctx.beginPath();
   ctx.arc(0, 0, outerRadius * 0.65, 0, Math.PI * 2);
   ctx.stroke();
@@ -348,10 +430,10 @@ function renderRealisticMal(
   // 3. Center Handle Knob (말 손잡이)
   ctx.fillStyle = knobFill;
   ctx.beginPath();
-  ctx.arc(0, 0, outerRadius * 0.38, 0, Math.PI * 2);
+  ctx.arc(0, 0, outerRadius * 0.40, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.strokeStyle = primary;
+  ctx.strokeStyle = '#ffffff';
   ctx.lineWidth = 2;
   ctx.stroke();
 
@@ -376,8 +458,8 @@ function renderRealisticPuck(
   const puckBody = isGameOver
     ? '#3f3f46'
     : isLight
-    ? '#e11d48' // 라이트 모드에서는 강렬한 레드 퍽
-    : '#ffffff'; // 다크(프로젝터) 모드에서는 선명한 화이트 퍽
+    ? '#e11d48'
+    : '#ffffff';
 
   const puckBorder = isGameOver
     ? '#27272a'

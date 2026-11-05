@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   MatchMode,
   MatchScore,
   GamePhase,
   MatchStats,
-  MATCH_MODES,
   TABLE_WIDTH,
   TABLE_HEIGHT,
+  DEFAULT_NORMALIZED_CORNERS,
+  DEFAULT_GOAL_SIZE,
+  FourCorners,
   GameActionMessage,
 } from '../types/hockey';
 import {
@@ -24,6 +26,12 @@ import {
   AlertTriangle,
   Sun,
   Moon,
+  Settings,
+  X,
+  Camera,
+  Monitor,
+  FlipHorizontal,
+  Target,
 } from 'lucide-react';
 
 export const ConsoleScreen: React.FC = () => {
@@ -58,6 +66,39 @@ export const ConsoleScreen: React.FC = () => {
   });
   const [isFullscreen, setIsFullscreen] = useState(false);
 
+  // Settings & Calibration Modal
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<'SCREEN' | 'CAMERA' | 'TABLE'>('SCREEN');
+
+  // Calibration Corners
+  const [screenCorners, setScreenCorners] = useState<FourCorners>(() => {
+    try {
+      const saved = localStorage.getItem('airhockey_screen_corners');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return DEFAULT_NORMALIZED_CORNERS;
+  });
+  const [cameraCorners, setCameraCorners] = useState<FourCorners>(() => {
+    try {
+      const saved = localStorage.getItem('airhockey_camera_corners');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return DEFAULT_NORMALIZED_CORNERS;
+  });
+  const [goalSize, setGoalSize] = useState<number>(DEFAULT_GOAL_SIZE);
+  const [isCameraMirrored, setIsCameraMirrored] = useState(false);
+
+  // Custom Match Input States
+  const [customMinutes, setCustomMinutes] = useState<number>(2);
+  const [customSeconds, setCustomSeconds] = useState<number>(0);
+  const [targetPointsInput, setTargetPointsInput] = useState<number>(5);
+
+  // Video Streaming in Console for Camera Calibration
+  const consoleVideoRef = useRef<HTMLVideoElement | null>(null);
+  const [isCameraStreaming, setIsCameraStreaming] = useState(false);
+  const [draggingCamIdx, setDraggingCamIdx] = useState<number | null>(null);
+  const camContainerRef = useRef<HTMLDivElement | null>(null);
+
   // Sync with Main App via Electron IPC, BroadcastChannel & LocalStorage
   useEffect(() => {
     const applyState = (data: any) => {
@@ -71,6 +112,15 @@ export const ConsoleScreen: React.FC = () => {
       if (data.puck) setPuck(data.puck);
       if (data.blueRobot) setBlueRobot(data.blueRobot);
       if (data.redRobot) setRedRobot(data.redRobot);
+      if (data.screenCorners) setScreenCorners(data.screenCorners);
+      if (data.cameraCorners) setCameraCorners(data.cameraCorners);
+      if (typeof data.goalSize === 'number') setGoalSize(data.goalSize);
+      if (typeof data.isCameraMirrored === 'boolean') setIsCameraMirrored(data.isCameraMirrored);
+      if (typeof data.targetPoints === 'number') setTargetPointsInput(data.targetPoints);
+      if (typeof data.customDuration === 'number') {
+        setCustomMinutes(Math.floor(data.customDuration / 60));
+        setCustomSeconds(data.customDuration % 60);
+      }
     };
 
     let unsubscribeElectron: (() => void) | undefined;
@@ -88,6 +138,12 @@ export const ConsoleScreen: React.FC = () => {
         if (!data) return;
         if (data.type === 'SYNC_STATE' || data.type === 'UPDATE') {
           applyState(data);
+        } else if (data.type === 'GAME_ACTION') {
+          if (data.action === 'UPDATE_SCREEN_CORNERS' && data.screenCorners) {
+            setScreenCorners(data.screenCorners);
+          } else if (data.action === 'UPDATE_CAMERA_CORNERS' && data.cameraCorners) {
+            setCameraCorners(data.cameraCorners);
+          }
         }
       };
     } catch {}
@@ -125,6 +181,38 @@ export const ConsoleScreen: React.FC = () => {
     } catch {}
   };
 
+  // Start webcam stream when Camera Calibration tab opens
+  useEffect(() => {
+    let stream: MediaStream | null = null;
+    if (isSettingsOpen && settingsTab === 'CAMERA') {
+      navigator.mediaDevices
+        ?.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false })
+        .then((s) => {
+          stream = s;
+          if (consoleVideoRef.current) {
+            consoleVideoRef.current.srcObject = s;
+            consoleVideoRef.current.play();
+            setIsCameraStreaming(true);
+          }
+        })
+        .catch(() => {
+          setIsCameraStreaming(false);
+        });
+    } else {
+      if (consoleVideoRef.current && consoleVideoRef.current.srcObject) {
+        (consoleVideoRef.current.srcObject as MediaStream).getTracks().forEach((t) => t.stop());
+        consoleVideoRef.current.srcObject = null;
+      }
+      setIsCameraStreaming(false);
+    }
+
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach((t) => t.stop());
+      }
+    };
+  }, [isSettingsOpen, settingsTab]);
+
   const handleStartGame = () => {
     sendAction({ type: 'GAME_ACTION', action: 'START' });
   };
@@ -137,6 +225,7 @@ export const ConsoleScreen: React.FC = () => {
     sendAction({ type: 'GAME_ACTION', action: 'PREPARE' });
   };
 
+  // [REQ] 콘설에서 시간을 30초 단위로 추가
   const handleAddTime = (seconds: number) => {
     sendAction({ type: 'GAME_ACTION', action: 'ADD_TIME', seconds });
   };
@@ -149,8 +238,29 @@ export const ConsoleScreen: React.FC = () => {
     sendAction({ type: 'GAME_ACTION', action: 'SET_SCORE', score: nextScore });
   };
 
-  const handleChangeMode = (mode: MatchMode) => {
-    sendAction({ type: 'GAME_ACTION', action: 'CHANGE_MODE', mode });
+  // [REQ] 3개 모드: 1분 매치, 입력한 시간으로 매치, n점 선승제
+  const handleSelectMode1Min = () => {
+    sendAction({ type: 'GAME_ACTION', action: 'CHANGE_MODE', mode: '1MIN' });
+  };
+
+  const handleApplyCustomTimeMode = () => {
+    const totalSecs = Math.max(10, customMinutes * 60 + customSeconds);
+    sendAction({
+      type: 'GAME_ACTION',
+      action: 'CHANGE_MODE',
+      mode: 'CUSTOM_TIME',
+      customDuration: totalSecs,
+    });
+  };
+
+  const handleApplyTargetPointsMode = () => {
+    const target = Math.max(1, targetPointsInput);
+    sendAction({
+      type: 'GAME_ACTION',
+      action: 'CHANGE_MODE',
+      mode: 'TARGET_N',
+      targetPoints: target,
+    });
   };
 
   const handleToggleTheme = () => {
@@ -172,13 +282,66 @@ export const ConsoleScreen: React.FC = () => {
     }
   };
 
+  // ----------------------------------------------------
+  // Camera Calibration Pointer Handlers
+  // ----------------------------------------------------
+  const handleCamPointerDown = (idx: number, e: React.PointerEvent) => {
+    e.stopPropagation();
+    setDraggingCamIdx(idx);
+  };
+
+  const handleCamContainerPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (draggingCamIdx === null || !camContainerRef.current) return;
+    const rect = camContainerRef.current.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+
+    const normX = Math.max(0.01, Math.min(0.99, (e.clientX - rect.left) / rect.width));
+    const normY = Math.max(0.01, Math.min(0.99, (e.clientY - rect.top) / rect.height));
+
+    const next = [...cameraCorners] as FourCorners;
+    next[draggingCamIdx] = { x: normX, y: normY };
+    setCameraCorners(next);
+
+    sendAction({
+      type: 'GAME_ACTION',
+      action: 'UPDATE_CAMERA_CORNERS',
+      cameraCorners: next,
+    });
+    try {
+      localStorage.setItem('airhockey_camera_corners', JSON.stringify(next));
+    } catch {}
+  };
+
+  const handleCamContainerPointerUp = () => {
+    setDraggingCamIdx(null);
+  };
+
+  const handleStartScreenCalibrate = () => {
+    sendAction({ type: 'GAME_ACTION', action: 'START_CALIBRATE_SCREEN' });
+  };
+
+  const handleConfirmScreenCalibrate = () => {
+    sendAction({ type: 'GAME_ACTION', action: 'CONFIRM_CALIBRATION' });
+  };
+
+  const handleToggleCameraMirror = () => {
+    const next = !isCameraMirrored;
+    setIsCameraMirrored(next);
+    sendAction({ type: 'GAME_ACTION', action: 'TOGGLE_MIRROR', isCameraMirrored: next });
+  };
+
+  const handleUpdateGoalSize = (size: number) => {
+    setGoalSize(size);
+    sendAction({ type: 'GAME_ACTION', action: 'UPDATE_GOAL_SIZE', goalSize: size });
+  };
+
   const mins = Math.floor(timeLeft / 60);
   const secs = timeLeft % 60;
   const timeFormatted = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 
   const isPlaying = gamePhase === 'PLAYING';
   const isTimeUp = gamePhase === 'TIME_UP';
-  const isReady = gamePhase === 'READY' || gamePhase === 'CALIBRATION';
+  const isReady = gamePhase === 'READY' || gamePhase === 'CALIBRATION_SCREEN' || gamePhase === 'CALIBRATION_CAMERA';
 
   return (
     <div className="w-screen h-screen bg-slate-950 text-slate-100 flex flex-col p-4 select-none font-sans overflow-hidden">
@@ -200,7 +363,17 @@ export const ConsoleScreen: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* [REQ] 프로젝터 테마 원클릭 변경 (다크 검정 / 라이트 흰색) */}
+          {/* [REQ] 8. 관리 콘솔에 설정 버튼 넣어야지 ㅋㅋ */}
+          <button
+            onClick={() => setIsSettingsOpen(true)}
+            className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-md active:scale-95"
+            title="화면 및 카메라 캘리브레이션, 경기장 상세 설정"
+          >
+            <Settings className="w-4 h-4" />
+            <span>설정 / 캘리브레이션</span>
+          </button>
+
+          {/* 프로젝터 테마 원클릭 변경 (다크 검정 / 라이트 흰색) */}
           <button
             onClick={handleToggleTheme}
             className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-semibold text-slate-200 flex items-center gap-1.5 transition-colors shadow-sm"
@@ -293,7 +466,7 @@ export const ConsoleScreen: React.FC = () => {
                 </>
               )}
 
-              {/* [REQ] 빨, 파 색상 뺀 단정하고 세련된 패들 1, 패들 2 렌더링 */}
+              {/* [REQ] 패들 1, 패들 2 단정하고 중립적인 화이트 링 디자인 */}
               <circle
                 cx={blueRobot.tableX}
                 cy={blueRobot.tableY}
@@ -319,7 +492,7 @@ export const ConsoleScreen: React.FC = () => {
             </svg>
           </div>
 
-          {/* [REQ] 콘솔에 빨, 파 패들 이거 빼놔 -> 단정하고 중립적인 패들 1, 패들 2 상태창 */}
+          {/* 패들 1, 패들 2 상태창 */}
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div className="bg-slate-950/80 border border-slate-800 rounded-lg p-2.5 flex items-center justify-between">
               <span className="font-bold text-slate-200 flex items-center gap-2">
@@ -345,7 +518,7 @@ export const ConsoleScreen: React.FC = () => {
 
         {/* Right: Controller Section (Col 6) */}
         <div className="lg:col-span-6 flex flex-col gap-2.5 overflow-y-auto">
-          {/* [REQ] 빨, 파 색상 뺀 깔끔한 스포츠 스코어보드 */}
+          {/* Sports Scoreboard */}
           <div className="grid grid-cols-3 gap-2 bg-slate-900 border border-slate-800 rounded-2xl p-3 text-center">
             {/* Player 1 Score */}
             <div className="flex flex-col items-center justify-center p-2 rounded-xl bg-slate-950/60 border border-slate-800">
@@ -381,7 +554,11 @@ export const ConsoleScreen: React.FC = () => {
                 {timeFormatted}
               </div>
               <span className="text-[11px] mt-2 px-2 py-0.5 rounded font-semibold bg-slate-800 text-slate-300">
-                {MATCH_MODES[matchMode]?.label}
+                {matchMode === '1MIN'
+                  ? '1분 매치'
+                  : matchMode === 'CUSTOM_TIME'
+                  ? `지정 시간 (${Math.floor(customMinutes)}분)`
+                  : `${targetPointsInput}점 선승제`}
               </span>
             </div>
 
@@ -457,63 +634,406 @@ export const ConsoleScreen: React.FC = () => {
             </div>
           )}
 
-          {/* Time Adjustment Controls */}
+          {/* [REQ] 10. 경기 시간 추가: 콘설에서 시간을 30초 단위로 추가 (+30초, -30초) */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3">
             <span className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
-              경기 시간 추가 / 조절
+              경기 시간 30초 단위 추가 / 차감
             </span>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={() => handleAddTime(30)}
-                className="py-2.5 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white text-xs font-bold transition-colors text-center"
+                className="py-3 px-4 rounded-xl bg-indigo-600/80 hover:bg-indigo-600 border border-indigo-500/60 text-white text-sm font-black transition-all flex items-center justify-center gap-2 shadow-sm active:scale-98"
               >
-                +30초
-              </button>
-              <button
-                onClick={() => handleAddTime(60)}
-                className="py-2.5 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white text-xs font-bold transition-colors text-center"
-              >
-                +1분
-              </button>
-              <button
-                onClick={() => handleAddTime(120)}
-                className="py-2.5 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white text-xs font-bold transition-colors text-center"
-              >
-                +2분
+                <Plus className="w-4 h-4" />
+                <span>+30초 추가</span>
               </button>
               <button
                 onClick={() => handleAddTime(-30)}
-                className="py-2.5 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-xs font-bold transition-colors text-center"
+                className="py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-sm font-black transition-all flex items-center justify-center gap-2 shadow-sm active:scale-98"
               >
-                -30초
+                <Minus className="w-4 h-4" />
+                <span>-30초 차감</span>
               </button>
             </div>
           </div>
 
-          {/* Match Mode Selection */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3">
-            <span className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
-              경기 모드 변경
+          {/* [REQ] 10. 매치 모드 3종: ① 1분 매치, ② 입력한 시간으로 매치, ③ n점 선승제 */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 flex flex-col gap-2.5">
+            <span className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
+              경기 매치 모드 (3종)
             </span>
-            <div className="grid grid-cols-4 gap-2">
-              {(Object.keys(MATCH_MODES) as MatchMode[]).map((mode) => (
+
+            {/* 1. 1분 매치 */}
+            <div
+              className={`p-2.5 rounded-xl border transition-all flex items-center justify-between ${
+                matchMode === '1MIN'
+                  ? 'bg-indigo-950/60 border-indigo-500/80'
+                  : 'bg-slate-950/50 border-slate-800 hover:border-slate-700'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span className="w-6 h-6 rounded-lg bg-indigo-600/30 text-indigo-400 font-bold text-xs flex items-center justify-center border border-indigo-500/30">
+                  1
+                </span>
+                <div>
+                  <div className="text-xs font-bold text-white">1분 매치 (정규 60초)</div>
+                  <div className="text-[11px] text-slate-400">기본 스피드 1분 숏 매치</div>
+                </div>
+              </div>
+              <button
+                onClick={handleSelectMode1Min}
+                disabled={isPlaying}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  matchMode === '1MIN'
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                } ${isPlaying ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                {matchMode === '1MIN' ? '적용 중' : '선택'}
+              </button>
+            </div>
+
+            {/* 2. 입력한 시간으로 매치 */}
+            <div
+              className={`p-2.5 rounded-xl border transition-all flex flex-col gap-2 ${
+                matchMode === 'CUSTOM_TIME'
+                  ? 'bg-indigo-950/60 border-indigo-500/80'
+                  : 'bg-slate-950/50 border-slate-800 hover:border-slate-700'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-lg bg-indigo-600/30 text-indigo-400 font-bold text-xs flex items-center justify-center border border-indigo-500/30">
+                    2
+                  </span>
+                  <div>
+                    <div className="text-xs font-bold text-white">입력한 시간으로 매치</div>
+                    <div className="text-[11px] text-slate-400">분/초를 직접 입력하여 플레이</div>
+                  </div>
+                </div>
                 <button
-                  key={mode}
-                  onClick={() => handleChangeMode(mode)}
+                  onClick={handleApplyCustomTimeMode}
                   disabled={isPlaying}
-                  className={`py-2 px-1 rounded-xl border text-center transition-all ${
-                    matchMode === mode
-                      ? 'bg-indigo-600/30 border-indigo-500 text-white font-bold'
-                      : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200'
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    matchMode === 'CUSTOM_TIME'
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                   } ${isPlaying ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                  <div className="text-xs">{MATCH_MODES[mode].label}</div>
+                  {matchMode === 'CUSTOM_TIME' ? '적용 중' : '시간 설정 적용'}
                 </button>
-              ))}
+              </div>
+
+              <div className="flex items-center gap-2 pl-8">
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min="0"
+                    max="59"
+                    value={customMinutes}
+                    onChange={(e) => setCustomMinutes(Math.max(0, parseInt(e.target.value) || 0))}
+                    disabled={isPlaying}
+                    className="w-14 px-2 py-1 bg-slate-900 border border-slate-700 rounded-lg text-center font-mono text-sm text-white focus:outline-none focus:border-indigo-500"
+                  />
+                  <span className="text-xs text-slate-300 font-semibold">분</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min="0"
+                    max="59"
+                    step="5"
+                    value={customSeconds}
+                    onChange={(e) => setCustomSeconds(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
+                    disabled={isPlaying}
+                    className="w-14 px-2 py-1 bg-slate-900 border border-slate-700 rounded-lg text-center font-mono text-sm text-white focus:outline-none focus:border-indigo-500"
+                  />
+                  <span className="text-xs text-slate-300 font-semibold">초</span>
+                </div>
+              </div>
+            </div>
+
+            {/* 3. n점 선승제 */}
+            <div
+              className={`p-2.5 rounded-xl border transition-all flex flex-col gap-2 ${
+                matchMode === 'TARGET_N'
+                  ? 'bg-indigo-950/60 border-indigo-500/80'
+                  : 'bg-slate-950/50 border-slate-800 hover:border-slate-700'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-lg bg-indigo-600/30 text-indigo-400 font-bold text-xs flex items-center justify-center border border-indigo-500/30">
+                    3
+                  </span>
+                  <div>
+                    <div className="text-xs font-bold text-white">n점 선승제 (목표 점수제)</div>
+                    <div className="text-[11px] text-slate-400">먼저 목표 점수에 도달한 팀 승리</div>
+                  </div>
+                </div>
+                <button
+                  onClick={handleApplyTargetPointsMode}
+                  disabled={isPlaying}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    matchMode === 'TARGET_N'
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  } ${isPlaying ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  {matchMode === 'TARGET_N' ? '적용 중' : '점수 설정 적용'}
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2 pl-8">
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min="1"
+                    max="50"
+                    value={targetPointsInput}
+                    onChange={(e) => setTargetPointsInput(Math.max(1, parseInt(e.target.value) || 1))}
+                    disabled={isPlaying}
+                    className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded-lg text-center font-mono text-sm text-white focus:outline-none focus:border-indigo-500"
+                  />
+                  <span className="text-xs text-slate-300 font-semibold">점 먼저 내면 승리</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* [REQ] 8. 설정 및 2단계 캘리브레이션 모달 */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Settings className="w-5 h-5 text-indigo-400" />
+                <h2 className="text-base font-black text-white">경기장 설정 및 캘리브레이션</h2>
+              </div>
+              <button
+                onClick={() => setIsSettingsOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Navigation Tabs */}
+            <div className="flex border-b border-slate-800 bg-slate-950/60 p-2 gap-2">
+              <button
+                onClick={() => setSettingsTab('SCREEN')}
+                className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+                  settingsTab === 'SCREEN'
+                    ? 'bg-sky-600 text-white shadow'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Monitor className="w-4 h-4" />
+                <span>1. 창 캘리브레이션 (프로젝터)</span>
+              </button>
+              <button
+                onClick={() => setSettingsTab('CAMERA')}
+                className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+                  settingsTab === 'CAMERA'
+                    ? 'bg-indigo-600 text-white shadow'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Camera className="w-4 h-4" />
+                <span>2. 카메라 캘리브레이션 (웹캠)</span>
+              </button>
+              <button
+                onClick={() => setSettingsTab('TABLE')}
+                className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+                  settingsTab === 'TABLE'
+                    ? 'bg-slate-800 text-white shadow'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Target className="w-4 h-4" />
+                <span>3. 골대 크기 설정</span>
+              </button>
+            </div>
+
+            {/* Tab Contents */}
+            <div className="p-5 flex-1 overflow-y-auto">
+              {/* Tab 1: Screen (Projector) Calibration */}
+              {settingsTab === 'SCREEN' && (
+                <div className="flex flex-col gap-4">
+                  <div className="p-4 rounded-2xl bg-sky-950/40 border border-sky-800/60 flex flex-col gap-2">
+                    <span className="text-sm font-bold text-sky-300 flex items-center gap-1.5">
+                      <Monitor className="w-4 h-4" />
+                      프로젝터 투사 화면 책상 맞춤 (창 캘리브레이션)
+                    </span>
+                    <p className="text-xs text-slate-300 leading-relaxed">
+                      아래 <strong>[메인 경기장 캘리브레이션 시작]</strong> 버튼을 누르면, 빔프로젝터가 투사 중인 <strong>메인 경기창에 4개 모서리 조절 핀</strong>이 나타납니다.
+                      메인 경기창에서 마우스로 네 모서리를 실제 책상 모서리에 맞춘 뒤 완료를 누르세요.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col gap-2.5">
+                    <button
+                      onClick={handleStartScreenCalibrate}
+                      className="w-full py-3.5 px-4 rounded-xl bg-sky-600 hover:bg-sky-500 active:scale-98 text-white font-black text-sm flex items-center justify-center gap-2 transition-all shadow-lg"
+                    >
+                      <Monitor className="w-5 h-5" />
+                      메인 경기장 캘리브레이션 시작 (메인 창에 핀 띄움)
+                    </button>
+                    <button
+                      onClick={handleConfirmScreenCalibrate}
+                      className="w-full py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center gap-2 border border-slate-700 transition-colors"
+                    >
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      창 캘리브레이션 저장 및 완료
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 2: Camera Calibration (Live Webcam in Console) */}
+              {settingsTab === 'CAMERA' && (
+                <div className="flex flex-col gap-3">
+                  <div className="p-3 rounded-2xl bg-indigo-950/40 border border-indigo-800/60 flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
+                        <Camera className="w-4 h-4" />
+                        카메라 웹캠 캘리브레이션 (관리 콘솔 내부 조절)
+                      </span>
+                      <p className="text-[11px] text-slate-300 mt-0.5">
+                        영상 속 책상 네 모서리에 4개 핀(1=좌상, 2=우상, 3=우하, 4=좌하)을 맞추세요.
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleToggleCameraMirror}
+                      className={`px-3 py-1.5 rounded-lg border text-xs font-bold flex items-center gap-1.5 transition-colors ${
+                        isCameraMirrored
+                          ? 'bg-indigo-600 text-white border-indigo-500'
+                          : 'bg-slate-800 text-slate-300 border-slate-700'
+                      }`}
+                    >
+                      <FlipHorizontal className="w-3.5 h-3.5" />
+                      <span>{isCameraMirrored ? '반전 ON' : '반전 OFF'}</span>
+                    </button>
+                  </div>
+
+                  {/* Live Webcam Video Container with Corner Pins Overlay */}
+                  <div
+                    ref={camContainerRef}
+                    onPointerMove={handleCamContainerPointerMove}
+                    onPointerUp={handleCamContainerPointerUp}
+                    className="relative w-full aspect-video bg-black rounded-2xl border-2 border-slate-700 overflow-hidden cursor-crosshair select-none touch-none flex items-center justify-center"
+                  >
+                    <video
+                      ref={consoleVideoRef}
+                      playsInline
+                      muted
+                      className={`w-full h-full object-cover pointer-events-none ${
+                        isCameraMirrored ? 'scale-x-[-1]' : ''
+                      }`}
+                    />
+
+                    {!isCameraStreaming && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80 text-slate-400 text-xs gap-2">
+                        <Camera className="w-8 h-8 animate-pulse text-slate-500" />
+                        <span>웹캠 영상을 불러오는 중이거나 카메라 권한이 필요합니다...</span>
+                      </div>
+                    )}
+
+                    {/* SVG Connecting Polygon */}
+                    <svg className="absolute inset-0 w-full h-full pointer-events-none">
+                      <polygon
+                        points={cameraCorners
+                          .map((p) => {
+                            if (!camContainerRef.current) return '0,0';
+                            const w = camContainerRef.current.clientWidth || 640;
+                            const h = camContainerRef.current.clientHeight || 360;
+                            return `${p.x * w},${p.y * h}`;
+                          })
+                          .join(' ')}
+                        fill="rgba(99, 102, 241, 0.2)"
+                        stroke="#6366f1"
+                        strokeWidth="2.5"
+                        strokeDasharray="6 4"
+                      />
+                    </svg>
+
+                    {/* 4 Draggable Camera Corner Pins */}
+                    {cameraCorners.map((corner, idx) => {
+                      const colors = ['#0284c7', '#2563eb', '#d97706', '#7c3aed'];
+                      const labels = ['1.좌상', '2.우상', '3.우하', '4.좌하'];
+                      return (
+                        <div
+                          key={idx}
+                          onPointerDown={(e) => handleCamPointerDown(idx, e)}
+                          style={{
+                            left: `${corner.x * 100}%`,
+                            top: `${corner.y * 100}%`,
+                          }}
+                          className="absolute -translate-x-1/2 -translate-y-1/2 cursor-move z-30 select-none group touch-none"
+                        >
+                          <div
+                            className="w-8 h-8 rounded-full border-2 border-white shadow-lg flex items-center justify-center text-xs font-black text-white group-hover:scale-125 transition-transform"
+                            style={{ backgroundColor: colors[idx] }}
+                          >
+                            {idx + 1}
+                          </div>
+                          <span className="absolute top-9 left-1/2 -translate-x-1/2 whitespace-nowrap bg-black/80 px-1.5 py-0.5 rounded text-[10px] text-white pointer-events-none font-bold">
+                            {labels[idx]}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 3: Table & Goal Size */}
+              {settingsTab === 'TABLE' && (
+                <div className="flex flex-col gap-4">
+                  <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 flex flex-col gap-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-bold text-white flex items-center gap-1.5">
+                        <Target className="w-4 h-4 text-amber-400" />
+                        골대 크기 조절
+                      </span>
+                      <span className="text-xs font-mono font-bold text-indigo-400 px-2 py-0.5 rounded bg-indigo-950 border border-indigo-800">
+                        {goalSize} px
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="160"
+                      max="380"
+                      step="10"
+                      value={goalSize}
+                      onChange={(e) => handleUpdateGoalSize(Number(e.target.value))}
+                      className="w-full accent-indigo-500 cursor-pointer"
+                    />
+                    <div className="flex justify-between text-[11px] text-slate-500">
+                      <span>좁은 골대 (160px - 고난도)</span>
+                      <span>기본 (260px)</span>
+                      <span>넓은 골대 (380px - 쉬움)</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-800 bg-slate-950/40 flex justify-end">
+              <button
+                onClick={() => setIsSettingsOpen(false)}
+                className="py-2.5 px-6 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-colors shadow"
+              >
+                설정 닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

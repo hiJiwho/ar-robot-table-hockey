@@ -7,6 +7,8 @@ export const ScoreboardScreen: React.FC = () => {
   const [timeLeft, setTimeLeft] = useState<number>(60);
   const [gamePhase, setGamePhase] = useState<GamePhase>('READY');
   const [matchMode, setMatchMode] = useState<MatchMode>('1MIN');
+  const [customDuration, setCustomDuration] = useState<number>(180);
+  const [targetPoints, setTargetPoints] = useState<number>(5);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [stats, setStats] = useState<MatchStats>({
     blueHits: 0,
@@ -27,6 +29,8 @@ export const ScoreboardScreen: React.FC = () => {
       if (typeof data.timeLeft === 'number') setTimeLeft(data.timeLeft);
       if (data.gamePhase) setGamePhase(data.gamePhase);
       if (data.matchMode) setMatchMode(data.matchMode);
+      if (typeof data.customDuration === 'number') setCustomDuration(data.customDuration);
+      if (typeof data.targetPoints === 'number') setTargetPoints(data.targetPoints);
       if (data.stats) setStats(data.stats);
       if ('goalAnnouncement' in data) setGoalAnnouncement(data.goalAnnouncement);
     };
@@ -110,11 +114,17 @@ export const ScoreboardScreen: React.FC = () => {
   const mins = Math.floor(timeLeft / 60);
   const secs = timeLeft % 60;
   const timeFormatted = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  const totalDuration = MATCH_MODES[matchMode]?.duration || 60;
+  const totalDuration = matchMode === '1MIN' ? 60 : (matchMode === 'CUSTOM_TIME' ? customDuration : 600);
   const progressRatio = Math.max(0, Math.min(1, timeLeft / totalDuration));
 
-  const isReady = gamePhase === 'READY' || gamePhase === 'CALIBRATION';
+  const isReady = gamePhase === 'READY' || gamePhase === 'CALIBRATION_SCREEN' || gamePhase === 'CALIBRATION_CAMERA';
   const isTimeUp = gamePhase === 'TIME_UP';
+
+  const modeLabel = matchMode === '1MIN'
+    ? '1분 매치'
+    : matchMode === 'CUSTOM_TIME'
+    ? `지정 시간 (${Math.floor(customDuration / 60)}분 ${customDuration % 60 ? `${customDuration % 60}초` : ''})`
+    : `${targetPoints}점 선승제`;
 
   return (
     <div className="w-screen h-screen bg-slate-950 text-white flex flex-col items-center justify-between p-6 sm:p-10 select-none font-sans overflow-hidden">
@@ -134,7 +144,7 @@ export const ScoreboardScreen: React.FC = () => {
 
         <div className="flex items-center gap-3">
           <span className="px-3 py-1 rounded-lg bg-slate-900 border border-slate-700 text-xs font-semibold text-slate-300">
-            {MATCH_MODES[matchMode]?.label || '매치 모드'}
+            {modeLabel}
           </span>
           <div className="flex items-center gap-2 px-3.5 py-1 rounded-full bg-slate-900/90 border border-slate-700 text-xs font-semibold">
             <span
@@ -243,7 +253,7 @@ export const ScoreboardScreen: React.FC = () => {
         <div className="flex flex-col items-center justify-center px-6 py-6 rounded-3xl bg-slate-900/90 border border-slate-800 shadow-2xl min-w-[240px] sm:min-w-[280px]">
           <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-2">
             <Clock className="w-4 h-4 text-indigo-400" />
-            <span>경기 잔여 시간</span>
+            <span>{matchMode === 'TARGET_N' ? `선승 목표: ${targetPoints}점` : '경기 잔여 시간'}</span>
           </div>
 
           <div

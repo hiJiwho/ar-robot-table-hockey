@@ -58,15 +58,34 @@ export function stepPuckPhysics(
     pvy *= 0.9996;
 
     // 3. Top and Bottom Cushion Rails (Crisp elastic rebound)
-    const RAIL_RESTITUTION = 0.98;
+    const RAIL_RESTITUTION = 0.99;
     if (py - r < 0) {
       py = r;
       pvy = Math.abs(pvy) * RAIL_RESTITUTION;
-      events.push({ type: 'WALL', x: px, y: py, speed: Math.abs(pvy) });
+      // [REQ] 상하 벽면으로만 튕기며 공이 멈추는 현상(Dead Puck) 완전 제거:
+      // Y축 반사 시 항상 강력한 X축 전진 추진력(최소 360 px/s)을 주입
+      const dir = pvx >= 0 ? 1 : -1;
+      if (Math.abs(pvx) < 320) {
+        pvx = dir * 360;
+      }
+      // 수직 왕복 억제: Y속도가 너무 크면 일부를 X로 분산
+      if (Math.abs(pvy) > Math.abs(pvx) * 1.5) {
+        pvy *= 0.75;
+        pvx = dir * Math.max(Math.abs(pvx), 340);
+      }
+      events.push({ type: 'WALL', x: px, y: py, speed: Math.hypot(pvx, pvy) });
     } else if (py + r > TABLE_HEIGHT) {
       py = TABLE_HEIGHT - r;
       pvy = -Math.abs(pvy) * RAIL_RESTITUTION;
-      events.push({ type: 'WALL', x: px, y: py, speed: Math.abs(pvy) });
+      const dir = pvx >= 0 ? 1 : -1;
+      if (Math.abs(pvx) < 320) {
+        pvx = dir * 360;
+      }
+      if (Math.abs(pvy) > Math.abs(pvx) * 1.5) {
+        pvy *= 0.75;
+        pvx = dir * Math.max(Math.abs(pvx), 340);
+      }
+      events.push({ type: 'WALL', x: px, y: py, speed: Math.hypot(pvx, pvy) });
     }
 
     // 4. Goal Posts (Rounded Corner Bounces)
@@ -157,32 +176,33 @@ export function stepPuckPhysics(
 
         // Only reflect if approaching striker
         if (vDotN < 0) {
-          // Dynamic air-hockey restitution (1.35 = snappy, energetic smash)
-          const restitution = 1.35;
+          // Dynamic air-hockey restitution (1.45 = snappy, energetic smash)
+          const restitution = 1.45;
           const impulse = -(1 + restitution) * vDotN;
 
           // Transfer momentum: normal reflection + fraction of paddle swing momentum
-          pvx += impulse * nx + robot.vx * 0.65;
-          pvy += impulse * ny + robot.vy * 0.65;
+          pvx += impulse * nx + robot.vx * 0.7;
+          pvy += impulse * ny + robot.vy * 0.7;
 
-          // [REQ] 마커가 좌우로만 움직여도 공이 상대 골대 방향으로 시원하게 날아가도록 전방 추진력 보정
+          // [REQ] 좀만 쳐도 앞뒤(상대 골대 X축)로만 시원하게 잘 나가게 강력한 전방 추진력 보정
+          const forwardSpeed = 680;
           if (team === 'blue') {
-            if (pvx < 320) pvx = Math.max(360, Math.abs(pvx) + 260);
+            pvx = Math.max(forwardSpeed, Math.abs(pvx) + 420);
           } else {
-            if (pvx > -320) pvx = -Math.max(360, Math.abs(pvx) + 260);
+            pvx = -Math.max(forwardSpeed, Math.abs(pvx) + 420);
           }
 
-          // Off-center vertical deflection for crisp bank shots off rails
+          // Off-center vertical deflection: 위아래 편향은 대폭 억제(0.2x)하여 퍽이 상하 벽에 처박히지 않고 앞뒤로 곧장 날아가게 함
           const offsetRatio = Math.max(-1, Math.min(1, dy / minDist));
-          pvy += offsetRatio * 200;
+          pvy = pvy * 0.2 + offsetRatio * 110;
 
-          // Ensure minimum lively hit speed (420 px/s) so even light touches produce a crisp shot
+          // Ensure minimum lively hit speed (680 px/s) so even light touches produce a crisp shot
           let curSpeed = Math.hypot(pvx, pvy);
-          if (curSpeed < 420) {
-            const boost = 420 / (curSpeed || 1);
+          if (curSpeed < forwardSpeed) {
+            const boost = forwardSpeed / (curSpeed || 1);
             pvx *= boost;
             pvy *= boost;
-            curSpeed = 420;
+            curSpeed = forwardSpeed;
           }
 
           lastHitTeam = team;
@@ -201,9 +221,9 @@ export function stepPuckPhysics(
     checkStriker(redRobot, 'red');
   }
 
-  // Speed clamping to terminal velocity (1350 px/s)
+  // Speed clamping to terminal velocity (1450 px/s)
   let speed = Math.hypot(pvx, pvy);
-  const MAX_SPEED = 1350;
+  const MAX_SPEED = 1450;
   if (speed > MAX_SPEED) {
     const scale = MAX_SPEED / speed;
     pvx *= scale;
@@ -211,11 +231,20 @@ export function stepPuckPhysics(
     speed = MAX_SPEED;
   }
 
-  // Smooth rest threshold: if speed drops below 16 px/s, gently halt
-  if (speed < 16) {
-    pvx = 0;
-    pvy = 0;
-    speed = 0;
+  // [REQ] 공이 어정쩡하게 멈추는 현상(Dead Puck) 완전 방지:
+  // 1) X축 속도가 약해져 벽 사이에서만 맴돌면 전진 가속 부여
+  if (speed > 1 && Math.abs(pvx) < 260) {
+    const dir = pvx >= 0 ? 1 : -1;
+    pvx = dir * 280;
+    speed = Math.hypot(pvx, pvy);
+  }
+
+  // 2) 움직이고 있는 상태라면 최소 260 px/s 이상의 활공 속도를 유지하여 랠리가 끊기지 않음
+  if (speed > 1 && speed < 260) {
+    const boost = 260 / speed;
+    pvx *= boost;
+    pvy *= boost;
+    speed = 260;
   }
 
   // [REQ] 공 주변 효과 지우기: 트레일 완전 제거

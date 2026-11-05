@@ -48,10 +48,12 @@ import {
 } from 'lucide-react';
 
 export default function App() {
-  // Game & Match States (Blue vs Red, Match Modes: 1m, 2m, 3m, 5pts)
+  // Game & Match States (1MIN, CUSTOM_TIME, TARGET_N)
   const [matchMode, setMatchMode] = useState<MatchMode>('1MIN');
+  const [customDuration, setCustomDuration] = useState<number>(180);
+  const [targetPoints, setTargetPoints] = useState<number>(5);
   const [gamePhase, setGamePhase] = useState<GamePhase>('READY');
-  const [timeLeft, setTimeLeft] = useState<number>(MATCH_MODES['1MIN'].duration);
+  const [timeLeft, setTimeLeft] = useState<number>(60);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [score, setScore] = useState<MatchScore>({ blue: 0, red: 0 });
@@ -86,11 +88,30 @@ export default function App() {
   // 2-Step Calibration State:
   // 1. screenCorners: 4 corners of the game court on the screen/projector display
   // 2. cameraCorners: 4 matching points picked in the live camera video
-  const [screenCorners, setScreenCorners] = useState<FourCorners>(DEFAULT_NORMALIZED_CORNERS);
-  const [cameraCorners, setCameraCorners] = useState<FourCorners>(DEFAULT_NORMALIZED_CORNERS);
-  const [goalSize, setGoalSize] = useState<number>(DEFAULT_GOAL_SIZE);
+  const [screenCorners, setScreenCorners] = useState<FourCorners>(() => {
+    try {
+      const saved = localStorage.getItem('airhockey_screen_corners');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return DEFAULT_NORMALIZED_CORNERS;
+  });
+  const [cameraCorners, setCameraCorners] = useState<FourCorners>(() => {
+    try {
+      const saved = localStorage.getItem('airhockey_camera_corners');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return DEFAULT_NORMALIZED_CORNERS;
+  });
+  const [goalSize, setGoalSize] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('airhockey_goal_size');
+      if (saved) return Number(saved) || DEFAULT_GOAL_SIZE;
+    } catch {}
+    return DEFAULT_GOAL_SIZE;
+  });
   const [isCameraMirrored, setIsCameraMirrored] = useState(false);
   const [isCalibrating, setIsCalibrating] = useState(false);
+  const [draggingScreenCorner, setDraggingScreenCorner] = useState<number | null>(null);
 
   // Helper to convert normalized [0, 1] corners to pixel coordinates
   const getPixelCorners = useCallback((corners: FourCorners, w: number, h: number): FourCorners => [
@@ -271,6 +292,12 @@ export default function App() {
       timeLeft,
       gamePhase,
       matchMode,
+      customDuration,
+      targetPoints,
+      goalSize,
+      screenCorners,
+      cameraCorners,
+      isCameraMirrored,
       theme,
       stats,
       goalAnnouncement,
@@ -283,7 +310,7 @@ export default function App() {
       broadcastRef.current?.postMessage(payload);
       localStorage.setItem('airhockey_sync', JSON.stringify(payload));
     } catch {}
-  }, [score, timeLeft, gamePhase, matchMode, theme, stats, goalAnnouncement]);
+  }, [score, timeLeft, gamePhase, matchMode, customDuration, targetPoints, goalSize, screenCorners, cameraCorners, isCameraMirrored, theme, stats, goalAnnouncement]);
 
   useEffect(() => {
     sendFullSyncState();
@@ -427,7 +454,8 @@ export default function App() {
   const handleStartGame = () => {
     soundManager.playWhistle();
     if (gamePhase === 'TIME_UP' || timeLeft === 0) {
-      setTimeLeft(MATCH_MODES[matchMode].duration);
+      const duration = matchMode === '1MIN' ? 60 : (matchMode === 'CUSTOM_TIME' ? customDuration : 600);
+      setTimeLeft(duration);
       setScore({ blue: 0, red: 0 });
       setStats({
         blueHits: 0,
@@ -446,7 +474,8 @@ export default function App() {
   };
 
   const handleResetGame = () => {
-    setTimeLeft(MATCH_MODES[matchMode].duration);
+    const duration = matchMode === '1MIN' ? 60 : (matchMode === 'CUSTOM_TIME' ? customDuration : 600);
+    setTimeLeft(duration);
     setScore({ blue: 0, red: 0 });
     setStats({
       blueHits: 0,
@@ -470,7 +499,8 @@ export default function App() {
       } else if (msg.action === 'RESET' || msg.action === 'PREPARE') {
         // [REQ] 콘솔에서 게임 종료 누르면: 콘솔은 게임 시작 버튼, 서브는 게임 플레이 가능, 메인은 골대 없는 경기장으로
         const currentMode = matchModeRef.current || '1MIN';
-        setTimeLeft(MATCH_MODES[currentMode].duration);
+        const initTime = currentMode === '1MIN' ? 60 : (currentMode === 'CUSTOM_TIME' ? customDuration : 600);
+        setTimeLeft(initTime);
         setScore({ blue: 0, red: 0 });
         setStats({
           blueHits: 0,
@@ -487,9 +517,12 @@ export default function App() {
         if (msg.score) setScore(msg.score);
       } else if (msg.action === 'CHANGE_MODE') {
         const modeKey = msg.mode as MatchMode;
-        if (modeKey && MATCH_MODES[modeKey]) {
+        if (modeKey) {
           setMatchMode(modeKey);
-          setTimeLeft(MATCH_MODES[modeKey].duration);
+          if (msg.customDuration) setCustomDuration(msg.customDuration);
+          if (msg.targetPoints) setTargetPoints(msg.targetPoints);
+          const duration = modeKey === '1MIN' ? 60 : (modeKey === 'CUSTOM_TIME' ? (msg.customDuration || customDuration) : 600);
+          setTimeLeft(duration);
           setScore({ blue: 0, red: 0 });
           setGamePhase('READY');
           resetPuckServe();
@@ -498,6 +531,35 @@ export default function App() {
         if (msg.theme === 'dark' || msg.theme === 'light') {
           setTheme(msg.theme);
         }
+      } else if (msg.action === 'START_CALIBRATE_SCREEN') {
+        setGamePhase('CALIBRATION_SCREEN');
+      } else if (msg.action === 'START_CALIBRATE_CAMERA') {
+        setGamePhase('CALIBRATION_CAMERA');
+      } else if (msg.action === 'CONFIRM_CALIBRATION') {
+        setGamePhase('READY');
+      } else if (msg.action === 'UPDATE_SCREEN_CORNERS') {
+        if (msg.screenCorners) {
+          setScreenCorners(msg.screenCorners);
+          try {
+            localStorage.setItem('airhockey_screen_corners', JSON.stringify(msg.screenCorners));
+          } catch {}
+        }
+      } else if (msg.action === 'UPDATE_CAMERA_CORNERS') {
+        if (msg.cameraCorners) {
+          setCameraCorners(msg.cameraCorners);
+          try {
+            localStorage.setItem('airhockey_camera_corners', JSON.stringify(msg.cameraCorners));
+          } catch {}
+        }
+      } else if (msg.action === 'UPDATE_GOAL_SIZE') {
+        if (typeof msg.goalSize === 'number') {
+          setGoalSize(msg.goalSize);
+          try {
+            localStorage.setItem('airhockey_goal_size', String(msg.goalSize));
+          } catch {}
+        }
+      } else if (msg.action === 'TOGGLE_MIRROR') {
+        setIsCameraMirrored((prev) => !prev);
       }
     };
 
@@ -555,7 +617,7 @@ export default function App() {
         ...prev,
         [scoringTeam]: prev[scoringTeam] + 1,
       };
-      if (matchMode === 'TARGET_5' && nextScore[scoringTeam] >= 5) {
+      if (matchModeRef.current === 'TARGET_N' && nextScore[scoringTeam] >= (targetPoints || 5)) {
         isTargetReached = true;
       }
       return nextScore;
@@ -984,6 +1046,64 @@ export default function App() {
     return () => cancelAnimationFrame(animId);
   }, [cameraActive, handleGoalScored]);
 
+  // Screen Court Corner Dragging during CALIBRATION_SCREEN
+  const handleScreenPointerDown = (idx: number, e: React.PointerEvent) => {
+    e.stopPropagation();
+    setDraggingScreenCorner(idx);
+  };
+
+  const handleContainerPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (draggingScreenCorner === null || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+
+    const normX = Math.max(0.01, Math.min(0.99, (e.clientX - rect.left) / rect.width));
+    const normY = Math.max(0.01, Math.min(0.99, (e.clientY - rect.top) / rect.height));
+
+    setScreenCorners((prev) => {
+      const next = [...prev] as FourCorners;
+      next[draggingScreenCorner] = { x: normX, y: normY };
+      try {
+        localStorage.setItem('airhockey_screen_corners', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  const handleContainerPointerUp = () => {
+    if (draggingScreenCorner !== null) {
+      setDraggingScreenCorner(null);
+      // Sync corners to console
+      try {
+        window.electronAPI?.sendAction({
+          type: 'GAME_ACTION',
+          action: 'UPDATE_SCREEN_CORNERS',
+          screenCorners,
+        });
+        broadcastRef.current?.postMessage({
+          type: 'GAME_ACTION',
+          action: 'UPDATE_SCREEN_CORNERS',
+          screenCorners,
+        });
+      } catch {}
+    }
+  };
+
+  const handleConfirmScreenCalibration = () => {
+    setGamePhase('READY');
+    try {
+      localStorage.setItem('airhockey_screen_corners', JSON.stringify(screenCorners));
+      window.electronAPI?.sendAction({
+        type: 'GAME_ACTION',
+        action: 'CONFIRM_CALIBRATION',
+      });
+      broadcastRef.current?.postMessage({
+        type: 'GAME_ACTION',
+        action: 'CONFIRM_CALIBRATION',
+      });
+    } catch {}
+  };
+
   return (
     <div className={`relative w-screen h-screen overflow-hidden select-none font-sans ${theme === 'light' ? 'bg-white' : 'bg-black'}`}>
       {/* Hidden Live Video Element for Computer Vision */}
@@ -995,14 +1115,18 @@ export default function App() {
         className="hidden"
       />
 
-      {/* [REQ] 매인 경기창에는 모든 UI 넣지 말고 경기장 라인, 골대, 말만 띄워 */}
+      {/* [REQ] 매인 경기창에는 모든 UI 넣지 말고 경기장 라인, 골대, 말, 숫자/시간만 띄워 */}
       <div
         ref={containerRef}
-        className="relative w-full h-full overflow-hidden flex items-center justify-center"
+        onPointerMove={handleContainerPointerMove}
+        onPointerUp={handleContainerPointerUp}
+        className="relative w-full h-full overflow-hidden flex items-center justify-center cursor-default"
       >
         <GameCanvas
           normalizedCorners={screenCorners}
           gamePhase={gamePhase}
+          score={score}
+          timeLeft={timeLeft}
           blueRobot={blueRobot}
           redRobot={redRobot}
           puck={puck}
@@ -1012,6 +1136,71 @@ export default function App() {
           goalSize={goalSize}
           theme={theme}
         />
+
+        {/* [REQ] 8. 창 캘리브레이션 모드 시 메인 경기장 화면에 4개 모서리 핀 오버레이 표시 */}
+        {gamePhase === 'CALIBRATION_SCREEN' && (
+          <div className="absolute inset-0 z-30 pointer-events-auto">
+            {/* SVG Connecting Polygon */}
+            <svg className="absolute inset-0 w-full h-full pointer-events-none">
+              <polygon
+                points={screenCorners
+                  .map((p) => `${p.x * containerSize.width},${p.y * containerSize.height}`)
+                  .join(' ')}
+                fill="rgba(56, 189, 248, 0.12)"
+                stroke="#38bdf8"
+                strokeWidth="3"
+                strokeDasharray="8 6"
+              />
+            </svg>
+
+            {/* 4 Interactive Corner Pins */}
+            {screenCorners.map((corner, idx) => {
+              const cornerColors = ['#0284c7', '#2563eb', '#d97706', '#7c3aed'];
+              const cornerNames = ['1.좌상(TL)', '2.우상(TR)', '3.우하(BR)', '4.좌하(BL)'];
+              const px = corner.x * containerSize.width;
+              const py = corner.y * containerSize.height;
+
+              return (
+                <div
+                  key={idx}
+                  onPointerDown={(e) => handleScreenPointerDown(idx, e)}
+                  style={{
+                    transform: `translate(${px}px, ${py}px) translate(-50%, -50%)`,
+                  }}
+                  className="absolute cursor-move group select-none touch-none z-40"
+                >
+                  <div
+                    className="w-12 h-12 rounded-full border-4 border-white shadow-[0_0_20px_rgba(0,0,0,0.8)] flex items-center justify-center font-black text-xs text-white transition-transform group-hover:scale-125"
+                    style={{ backgroundColor: cornerColors[idx] }}
+                  >
+                    {idx + 1}
+                  </div>
+                  <div className="absolute top-14 left-1/2 -translate-x-1/2 whitespace-nowrap bg-slate-900/90 text-white text-[11px] font-bold px-2 py-0.5 rounded border border-slate-700 shadow pointer-events-none">
+                    {cornerNames[idx]}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Top Calibration Banner with Done Button */}
+            <div className="absolute top-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-6 py-3 rounded-2xl bg-slate-900/95 border-2 border-sky-400 text-white shadow-2xl backdrop-blur-md">
+              <div className="flex flex-col">
+                <span className="text-sm font-black text-sky-400">
+                  📐 [창 캘리브레이션] 프로젝터 화면 책상 맞춤
+                </span>
+                <span className="text-xs text-slate-300">
+                  모서리 4개 핀(1, 2, 3, 4)을 실제 책상 네 모퉁이에 맞춰 드래그하세요.
+                </span>
+              </div>
+              <button
+                onClick={handleConfirmScreenCalibration}
+                className="px-5 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 active:scale-95 text-slate-950 font-black text-xs uppercase tracking-wider transition-all shadow-lg"
+              >
+                설정 완료
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
