@@ -170,15 +170,18 @@ export const ConsoleScreen: React.FC = () => {
   }, []);
 
   const sendAction = (action: GameActionMessage) => {
+    const actionId = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const payload = { ...action, actionId };
     if (window.electronAPI?.sendAction) {
-      window.electronAPI.sendAction(action);
+      window.electronAPI.sendAction(payload);
+    } else {
+      try {
+        const channel = new BroadcastChannel('airhockey_channel');
+        channel.postMessage(payload);
+        channel.close();
+        localStorage.setItem('airhockey_action', JSON.stringify(payload));
+      } catch {}
     }
-    try {
-      const channel = new BroadcastChannel('airhockey_channel');
-      channel.postMessage(action);
-      channel.close();
-      localStorage.setItem('airhockey_action', JSON.stringify({ ...action, timestamp: Date.now() }));
-    } catch {}
   };
 
   // Start webcam stream when Camera Calibration tab opens
@@ -225,8 +228,9 @@ export const ConsoleScreen: React.FC = () => {
     sendAction({ type: 'GAME_ACTION', action: 'PREPARE' });
   };
 
-  // [REQ] 콘설에서 시간을 30초 단위로 추가
+  // [REQ] 콘설에서 시간을 30초 단위로 추가 (로컬 상태 즉각 반영 & 단일 고유 액션 전송)
   const handleAddTime = (seconds: number) => {
+    setTimeLeft((prev) => Math.max(1, prev + seconds));
     sendAction({ type: 'GAME_ACTION', action: 'ADD_TIME', seconds });
   };
 
@@ -235,16 +239,23 @@ export const ConsoleScreen: React.FC = () => {
       ...score,
       [team]: Math.max(0, score[team] + delta),
     };
+    setScore(nextScore);
     sendAction({ type: 'GAME_ACTION', action: 'SET_SCORE', score: nextScore });
   };
 
-  // [REQ] 3개 모드: 1분 매치, 입력한 시간으로 매치, n점 선승제
+  // [REQ] 3개 모드: 1분 매치, 입력한 시간으로 매치, n점 선승제 (원클릭 즉시 변경)
   const handleSelectMode1Min = () => {
+    setMatchMode('1MIN');
+    setTimeLeft(60);
     sendAction({ type: 'GAME_ACTION', action: 'CHANGE_MODE', mode: '1MIN' });
   };
 
-  const handleApplyCustomTimeMode = () => {
-    const totalSecs = Math.max(10, customMinutes * 60 + customSeconds);
+  const handleApplyCustomTimeMode = (mins?: number, secs?: number) => {
+    const m = typeof mins === 'number' ? mins : customMinutes;
+    const s = typeof secs === 'number' ? secs : customSeconds;
+    const totalSecs = Math.max(10, m * 60 + s);
+    setMatchMode('CUSTOM_TIME');
+    setTimeLeft(totalSecs);
     sendAction({
       type: 'GAME_ACTION',
       action: 'CHANGE_MODE',
@@ -253,8 +264,11 @@ export const ConsoleScreen: React.FC = () => {
     });
   };
 
-  const handleApplyTargetPointsMode = () => {
-    const target = Math.max(1, targetPointsInput);
+  const handleApplyTargetPointsMode = (points?: number) => {
+    const p = typeof points === 'number' ? points : targetPointsInput;
+    const target = Math.max(1, p);
+    setMatchMode('TARGET_N');
+    setTimeLeft(600);
     sendAction({
       type: 'GAME_ACTION',
       action: 'CHANGE_MODE',
@@ -657,31 +671,44 @@ export const ConsoleScreen: React.FC = () => {
             </div>
           </div>
 
-          {/* [REQ] 10. 매치 모드 3종: ① 1분 매치, ② 입력한 시간으로 매치, ③ n점 선승제 */}
+          {/* [REQ] 10. 매치 모드 3종: ① 1분 매치, ② 입력한 시간으로 매치, ③ n점 선승제 (원클릭 즉시 전환) */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 flex flex-col gap-2.5">
             <span className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
-              경기 매치 모드 (3종)
+              경기 매치 모드 (3종) - 클릭 시 즉시 변경
             </span>
 
             {/* 1. 1분 매치 */}
             <div
-              className={`p-2.5 rounded-xl border transition-all flex items-center justify-between ${
+              onClick={() => !isPlaying && handleSelectMode1Min()}
+              className={`p-3 rounded-xl border transition-all flex items-center justify-between cursor-pointer ${
                 matchMode === '1MIN'
-                  ? 'bg-indigo-950/60 border-indigo-500/80'
+                  ? 'bg-indigo-950/80 border-indigo-500 shadow-md ring-1 ring-indigo-500/50'
                   : 'bg-slate-950/50 border-slate-800 hover:border-slate-700'
-              }`}
+              } ${isPlaying ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-              <div className="flex items-center gap-2">
-                <span className="w-6 h-6 rounded-lg bg-indigo-600/30 text-indigo-400 font-bold text-xs flex items-center justify-center border border-indigo-500/30">
+              <div className="flex items-center gap-2.5">
+                <span className={`w-7 h-7 rounded-lg font-bold text-xs flex items-center justify-center border ${
+                  matchMode === '1MIN' ? 'bg-indigo-600 text-white border-indigo-400' : 'bg-slate-800 text-slate-400 border-slate-700'
+                }`}>
                   1
                 </span>
                 <div>
-                  <div className="text-xs font-bold text-white">1분 매치 (정규 60초)</div>
+                  <div className="text-xs font-bold text-white flex items-center gap-2">
+                    1분 매치 (정규 60초)
+                    {matchMode === '1MIN' && (
+                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                        현재 선택됨
+                      </span>
+                    )}
+                  </div>
                   <div className="text-[11px] text-slate-400">기본 스피드 1분 숏 매치</div>
                 </div>
               </div>
               <button
-                onClick={handleSelectMode1Min}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  !isPlaying && handleSelectMode1Min();
+                }}
                 disabled={isPlaying}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                   matchMode === '1MIN'
@@ -695,24 +722,37 @@ export const ConsoleScreen: React.FC = () => {
 
             {/* 2. 입력한 시간으로 매치 */}
             <div
-              className={`p-2.5 rounded-xl border transition-all flex flex-col gap-2 ${
+              onClick={() => !isPlaying && handleApplyCustomTimeMode()}
+              className={`p-3 rounded-xl border transition-all flex flex-col gap-2 cursor-pointer ${
                 matchMode === 'CUSTOM_TIME'
-                  ? 'bg-indigo-950/60 border-indigo-500/80'
+                  ? 'bg-indigo-950/80 border-indigo-500 shadow-md ring-1 ring-indigo-500/50'
                   : 'bg-slate-950/50 border-slate-800 hover:border-slate-700'
-              }`}
+              } ${isPlaying ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-lg bg-indigo-600/30 text-indigo-400 font-bold text-xs flex items-center justify-center border border-indigo-500/30">
+                <div className="flex items-center gap-2.5">
+                  <span className={`w-7 h-7 rounded-lg font-bold text-xs flex items-center justify-center border ${
+                    matchMode === 'CUSTOM_TIME' ? 'bg-indigo-600 text-white border-indigo-400' : 'bg-slate-800 text-slate-400 border-slate-700'
+                  }`}>
                     2
                   </span>
                   <div>
-                    <div className="text-xs font-bold text-white">입력한 시간으로 매치</div>
+                    <div className="text-xs font-bold text-white flex items-center gap-2">
+                      입력한 시간으로 매치
+                      {matchMode === 'CUSTOM_TIME' && (
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                          현재 선택됨
+                        </span>
+                      )}
+                    </div>
                     <div className="text-[11px] text-slate-400">분/초를 직접 입력하여 플레이</div>
                   </div>
                 </div>
                 <button
-                  onClick={handleApplyCustomTimeMode}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    !isPlaying && handleApplyCustomTimeMode();
+                  }}
                   disabled={isPlaying}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                     matchMode === 'CUSTOM_TIME'
@@ -724,16 +764,20 @@ export const ConsoleScreen: React.FC = () => {
                 </button>
               </div>
 
-              <div className="flex items-center gap-2 pl-8">
+              <div className="flex items-center gap-2 pl-9" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center gap-1.5">
                   <input
                     type="number"
                     min="0"
                     max="59"
                     value={customMinutes}
-                    onChange={(e) => setCustomMinutes(Math.max(0, parseInt(e.target.value) || 0))}
+                    onChange={(e) => {
+                      const val = Math.max(0, parseInt(e.target.value) || 0);
+                      setCustomMinutes(val);
+                      handleApplyCustomTimeMode(val, customSeconds);
+                    }}
                     disabled={isPlaying}
-                    className="w-14 px-2 py-1 bg-slate-900 border border-slate-700 rounded-lg text-center font-mono text-sm text-white focus:outline-none focus:border-indigo-500"
+                    className="w-16 px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-center font-mono text-sm text-white focus:outline-none focus:border-indigo-500 font-bold"
                   />
                   <span className="text-xs text-slate-300 font-semibold">분</span>
                 </div>
@@ -744,9 +788,13 @@ export const ConsoleScreen: React.FC = () => {
                     max="59"
                     step="5"
                     value={customSeconds}
-                    onChange={(e) => setCustomSeconds(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
+                    onChange={(e) => {
+                      const val = Math.max(0, Math.min(59, parseInt(e.target.value) || 0));
+                      setCustomSeconds(val);
+                      handleApplyCustomTimeMode(customMinutes, val);
+                    }}
                     disabled={isPlaying}
-                    className="w-14 px-2 py-1 bg-slate-900 border border-slate-700 rounded-lg text-center font-mono text-sm text-white focus:outline-none focus:border-indigo-500"
+                    className="w-16 px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-center font-mono text-sm text-white focus:outline-none focus:border-indigo-500 font-bold"
                   />
                   <span className="text-xs text-slate-300 font-semibold">초</span>
                 </div>
@@ -755,24 +803,37 @@ export const ConsoleScreen: React.FC = () => {
 
             {/* 3. n점 선승제 */}
             <div
-              className={`p-2.5 rounded-xl border transition-all flex flex-col gap-2 ${
+              onClick={() => !isPlaying && handleApplyTargetPointsMode()}
+              className={`p-3 rounded-xl border transition-all flex flex-col gap-2 cursor-pointer ${
                 matchMode === 'TARGET_N'
-                  ? 'bg-indigo-950/60 border-indigo-500/80'
+                  ? 'bg-indigo-950/80 border-indigo-500 shadow-md ring-1 ring-indigo-500/50'
                   : 'bg-slate-950/50 border-slate-800 hover:border-slate-700'
-              }`}
+              } ${isPlaying ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-lg bg-indigo-600/30 text-indigo-400 font-bold text-xs flex items-center justify-center border border-indigo-500/30">
+                <div className="flex items-center gap-2.5">
+                  <span className={`w-7 h-7 rounded-lg font-bold text-xs flex items-center justify-center border ${
+                    matchMode === 'TARGET_N' ? 'bg-indigo-600 text-white border-indigo-400' : 'bg-slate-800 text-slate-400 border-slate-700'
+                  }`}>
                     3
                   </span>
                   <div>
-                    <div className="text-xs font-bold text-white">n점 선승제 (목표 점수제)</div>
+                    <div className="text-xs font-bold text-white flex items-center gap-2">
+                      n점 선승제 (목표 점수제)
+                      {matchMode === 'TARGET_N' && (
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                          현재 선택됨
+                        </span>
+                      )}
+                    </div>
                     <div className="text-[11px] text-slate-400">먼저 목표 점수에 도달한 팀 승리</div>
                   </div>
                 </div>
                 <button
-                  onClick={handleApplyTargetPointsMode}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    !isPlaying && handleApplyTargetPointsMode();
+                  }}
                   disabled={isPlaying}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                     matchMode === 'TARGET_N'
@@ -784,18 +845,22 @@ export const ConsoleScreen: React.FC = () => {
                 </button>
               </div>
 
-              <div className="flex items-center gap-2 pl-8">
+              <div className="flex items-center gap-2 pl-9" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center gap-1.5">
                   <input
                     type="number"
                     min="1"
                     max="50"
                     value={targetPointsInput}
-                    onChange={(e) => setTargetPointsInput(Math.max(1, parseInt(e.target.value) || 1))}
+                    onChange={(e) => {
+                      const val = Math.max(1, parseInt(e.target.value) || 1);
+                      setTargetPointsInput(val);
+                      handleApplyTargetPointsMode(val);
+                    }}
                     disabled={isPlaying}
-                    className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded-lg text-center font-mono text-sm text-white focus:outline-none focus:border-indigo-500"
+                    className="w-18 px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-center font-mono text-sm text-white focus:outline-none focus:border-indigo-500 font-bold"
                   />
-                  <span className="text-xs text-slate-300 font-semibold">점 먼저 내면 승리</span>
+                  <span className="text-xs text-slate-300 font-semibold">점 먼저 내면 즉시 승리</span>
                 </div>
               </div>
             </div>

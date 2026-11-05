@@ -280,29 +280,31 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
       ctx.arc(centerPt.x, centerPt.y, 6, 0, Math.PI * 2);
       ctx.fill();
 
-      // [REQ] Left (1P) Score Number - 중앙 기점으로 왼쪽 파란색 표시
-      const p1ScorePt = tf.tableToScreen(TABLE_WIDTH / 2 - 140, TABLE_HEIGHT / 2 + 10);
+      // [REQ] Left (1P) Score Number - 중앙 기점으로 왼쪽 파란색 표시, 1P 선수가 보이게 90도 회전 (+90deg), 초대형 160px
+      const p1ScorePt = tf.tableToScreen(TABLE_WIDTH / 2 - 150, TABLE_HEIGHT / 2);
       ctx.save();
       ctx.translate(p1ScorePt.x, p1ScorePt.y);
-      ctx.font = '900 96px monospace, system-ui, sans-serif';
+      ctx.rotate(Math.PI / 2); // 1P 골대 쪽에 선 사람이 똑바로 보이도록 90도 회전
+      ctx.font = '900 160px monospace, system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillStyle = isGameOver
         ? (isLight ? '#cbd5e1' : '#3f3f46')
-        : (isLight ? 'rgba(37, 99, 235, 0.65)' : 'rgba(56, 189, 248, 0.65)');
+        : (isLight ? 'rgba(37, 99, 235, 0.70)' : 'rgba(56, 189, 248, 0.75)');
       ctx.fillText(String(score.blue), 0, 0);
       ctx.restore();
 
-      // [REQ] Right (2P) Score Number - 중앙 기점으로 오른쪽 빨간색 표시
-      const p2ScorePt = tf.tableToScreen(TABLE_WIDTH / 2 + 140, TABLE_HEIGHT / 2 + 10);
+      // [REQ] Right (2P) Score Number - 중앙 기점으로 오른쪽 빨간색 표시, 2P 선수가 보이게 -90도 회전 (-90deg), 초대형 160px
+      const p2ScorePt = tf.tableToScreen(TABLE_WIDTH / 2 + 150, TABLE_HEIGHT / 2);
       ctx.save();
       ctx.translate(p2ScorePt.x, p2ScorePt.y);
-      ctx.font = '900 96px monospace, system-ui, sans-serif';
+      ctx.rotate(-Math.PI / 2); // 2P 골대 쪽에 선 사람이 똑바로 보이도록 -90도 회전
+      ctx.font = '900 160px monospace, system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillStyle = isGameOver
         ? (isLight ? '#cbd5e1' : '#3f3f46')
-        : (isLight ? 'rgba(225, 29, 72, 0.65)' : 'rgba(244, 63, 94, 0.65)');
+        : (isLight ? 'rgba(225, 29, 72, 0.70)' : 'rgba(244, 63, 94, 0.75)');
       ctx.fillText(String(score.red), 0, 0);
       ctx.restore();
 

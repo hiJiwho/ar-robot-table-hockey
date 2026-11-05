@@ -488,10 +488,31 @@ export default function App() {
     resetPuckServe();
   };
 
+  // Action Deduplication cache to prevent 3x duplicated triggers from IPC + BroadcastChannel + LocalStorage
+  const processedActionIdsRef = useRef<Map<string, number>>(new Map());
+
   // Listen for actions from Admin Console / Scoreboard
   useEffect(() => {
     const handleAction = (msg: any) => {
       if (!msg || msg.type !== 'GAME_ACTION') return;
+
+      // Deduplicate actions using actionId or action fingerprint
+      const now = Date.now();
+      const actionKey = msg.actionId || `${msg.action}-${JSON.stringify(msg.seconds || msg.mode || msg.theme || '')}`;
+      const lastTime = processedActionIdsRef.current.get(actionKey);
+      if (lastTime && now - lastTime < 350) {
+        // Drop duplicate delivery
+        return;
+      }
+      processedActionIdsRef.current.set(actionKey, now);
+
+      // Clean up old entries in cache
+      if (processedActionIdsRef.current.size > 50) {
+        for (const [k, t] of processedActionIdsRef.current.entries()) {
+          if (now - t > 5000) processedActionIdsRef.current.delete(k);
+        }
+      }
+
       if (msg.action === 'START') {
         handleStartGame();
       } else if (msg.action === 'PAUSE') {
@@ -519,9 +540,18 @@ export default function App() {
         const modeKey = msg.mode as MatchMode;
         if (modeKey) {
           setMatchMode(modeKey);
-          if (msg.customDuration) setCustomDuration(msg.customDuration);
-          if (msg.targetPoints) setTargetPoints(msg.targetPoints);
-          const duration = modeKey === '1MIN' ? 60 : (modeKey === 'CUSTOM_TIME' ? (msg.customDuration || customDuration) : 600);
+          let duration = 60;
+          if (modeKey === '1MIN') {
+            duration = 60;
+          } else if (modeKey === 'CUSTOM_TIME') {
+            const customDur = msg.customDuration || customDuration || 180;
+            setCustomDuration(customDur);
+            duration = customDur;
+          } else if (modeKey === 'TARGET_N') {
+            const target = msg.targetPoints || targetPoints || 5;
+            setTargetPoints(target);
+            duration = 600;
+          }
           setTimeLeft(duration);
           setScore({ blue: 0, red: 0 });
           setGamePhase('READY');
