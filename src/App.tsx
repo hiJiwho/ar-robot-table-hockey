@@ -1263,6 +1263,7 @@ export default function App() {
           containerHeight={containerSize.height}
           goalSize={goalSize}
           theme={theme}
+          isVirtualMode={isVirtualMode}
         />
 
         {/* [REQ] 경기장은 깔끔한 4개 모서리 핀 캘리브레이션 */}

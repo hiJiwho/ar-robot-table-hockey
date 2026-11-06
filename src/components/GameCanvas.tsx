@@ -24,6 +24,7 @@ interface GameCanvasProps {
   containerHeight: number;
   goalSize?: number;
   theme?: 'dark' | 'light';
+  isVirtualMode?: boolean;
 }
 
 export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
@@ -358,9 +359,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
         ctx.stroke();
       }
 
-      // 7. [REQ] 말 (패들 / 스트라이커) - 실제 에어하키 말 형태의 깔끔한 디자인
-      renderRealisticMal(ctx, tf, blueRobot, isLight, isGameOver);
-      renderRealisticMal(ctx, tf, redRobot, isLight, isGameOver);
+      // 7. [REQ] "그 패들에 는 색 붙이지 말아줘!"
+      // 실제 손에 든 패들/레고블록 위에 프로젝터 빛이 덮어씌워지지 않도록 메인 경기장에서 패들 색상 원형 투사를 완전 비활성화.
+      // (가상 봇 모드일 때만 마우스 위치 확인용으로 은은하게 표시)
+      if (currentProps.isVirtualMode) {
+        renderRealisticMal(ctx, tf, blueRobot, isLight, isGameOver);
+        renderRealisticMal(ctx, tf, redRobot, isLight, isGameOver);
+      }
 
       // 8. [REQ] 공 (퍽) - 순수 원형 스포츠 퍽
       renderRealisticPuck(ctx, tf, puck, isLight, isGameOver);

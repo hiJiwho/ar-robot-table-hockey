@@ -168,11 +168,12 @@ export function stepPuckPhysics(
         let ny = dist > 0.0001 ? dy / dist : 0;
 
         // [Anti-Own-Goal Guarantee]
-        // 1P (Blue): 퍽이 절대 패들 뒤(왼쪽 골대)로 뚫고 들어가지 않도록 전방(오른쪽)으로 강제 분리 & 전진
-        // 2P (Red): 퍽이 절대 패들 뒤(오른쪽 골대)로 뚫고 들어가지 않도록 전방(왼쪽)으로 강제 분리 & 전진
-        if (team === 'blue') {
-          // Blue striker faces right (+X). If normal points backwards, flip to front
-          if (nx < 0.15) {
+        // [REQ] "그냥 퍽 인식시 골대 반대로 밀어내게"
+        // 패들의 현재 위치(왼쪽 진영 / 오른쪽 진영)에 따라 뒤쪽 골대의 정반대 방향으로 100% 강력하게 퍽을 밀어냄!
+        const isLeftSide = robot.tableX < TABLE_WIDTH / 2;
+        if (isLeftSide) {
+          // 왼쪽 진영 패들: 왼쪽 골대(X=0) 반대편인 오른쪽(+X)으로 무조건 밀어냄!
+          if (nx < 0.2) {
             nx = Math.max(0.4, Math.abs(nx));
             const reLen = Math.hypot(nx, ny) || 1;
             nx /= reLen;
@@ -181,12 +182,12 @@ export function stepPuckPhysics(
           px = Math.max(robot.tableX + minDist * 0.5, robot.tableX + nx * (minDist + 1));
           py = robot.tableY + ny * (minDist + 1);
 
-          // Force energetic forward propulsion (+X)
-          const swingBonus = Math.max(0, robot.vx * 0.8);
-          pvx = Math.max(620, Math.abs(pvx) * 1.1 + swingBonus + 380);
+          // Force energetic forward propulsion (+X, 오른쪽 골대 방향)
+          const swingBonus = Math.max(0, robot.vx * 0.85);
+          pvx = Math.max(680, Math.abs(pvx) * 1.15 + swingBonus + 420);
         } else {
-          // Red striker faces left (-X). If normal points backwards, flip to front
-          if (nx > -0.15) {
+          // 오른쪽 진영 패들: 오른쪽 골대(X=TABLE_WIDTH) 반대편인 왼쪽(-X)으로 무조건 밀어냄!
+          if (nx > -0.2) {
             nx = -Math.max(0.4, Math.abs(nx));
             const reLen = Math.hypot(nx, ny) || 1;
             nx /= reLen;
@@ -195,9 +196,9 @@ export function stepPuckPhysics(
           px = Math.min(robot.tableX - minDist * 0.5, robot.tableX + nx * (minDist + 1));
           py = robot.tableY + ny * (minDist + 1);
 
-          // Force energetic forward propulsion (-X)
-          const swingBonus = Math.max(0, -robot.vx * 0.8);
-          pvx = -Math.max(620, Math.abs(pvx) * 1.1 + swingBonus + 380);
+          // Force energetic forward propulsion (-X, 왼쪽 골대 방향)
+          const swingBonus = Math.max(0, -robot.vx * 0.85);
+          pvx = -Math.max(680, Math.abs(pvx) * 1.15 + swingBonus + 420);
         }
 
         // Controlled Y deflection based on impact height & paddle vertical velocity
