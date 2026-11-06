@@ -75,13 +75,19 @@ export const ConsoleScreen: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'SCREEN' | 'CAMERA' | 'TABLE' | 'LOWLIGHT'>('SCREEN');
 
-  // Calibration Corners (8-Point Mesh Warping)
-  const [screenCorners, setScreenCorners] = useState<EightPoints>(() => {
+  // Calibration Corners:
+  // - screenCorners: 4-Point Projector Display Quad (경기장은 4점으로 깨끗하고 반듯하게)
+  // - cameraCorners: 8-Point Wide-Angle Mesh Warping (카메라는 8점으로 렌즈 왜곡 보정)
+  const [screenCorners, setScreenCorners] = useState<FourCorners>(() => {
     try {
       const saved = localStorage.getItem('airhockey_screen_corners');
-      if (saved) return toEightPoints(JSON.parse(saved));
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.length === 4) return parsed;
+        if (parsed.length === 8) return [parsed[0], parsed[2], parsed[4], parsed[6]];
+      }
     } catch {}
-    return DEFAULT_NORMALIZED_8POINTS;
+    return DEFAULT_NORMALIZED_CORNERS;
   });
   const [cameraCorners, setCameraCorners] = useState<EightPoints>(() => {
     try {
@@ -117,7 +123,10 @@ export const ConsoleScreen: React.FC = () => {
       if (data.puck) setPuck(data.puck);
       if (data.blueRobot) setBlueRobot(data.blueRobot);
       if (data.redRobot) setRedRobot(data.redRobot);
-      if (data.screenCorners) setScreenCorners(toEightPoints(data.screenCorners));
+      if (data.screenCorners) {
+        const sc = data.screenCorners;
+        setScreenCorners(sc.length === 4 ? sc : [sc[0], sc[2], sc[4], sc[6]]);
+      }
       if (data.cameraCorners) setCameraCorners(toEightPoints(data.cameraCorners));
       if (typeof data.lowLightMode === 'boolean') setLowLightMode(data.lowLightMode);
       if (typeof data.goalSize === 'number') setGoalSize(data.goalSize);
@@ -146,7 +155,8 @@ export const ConsoleScreen: React.FC = () => {
           applyState(data);
         } else if (data.type === 'GAME_ACTION') {
           if (data.action === 'UPDATE_SCREEN_CORNERS' && data.screenCorners) {
-            setScreenCorners(toEightPoints(data.screenCorners));
+            const sc = data.screenCorners;
+            setScreenCorners(sc.length === 4 ? sc : [sc[0], sc[2], sc[4], sc[6]]);
           } else if (data.action === 'UPDATE_CAMERA_CORNERS' && data.cameraCorners) {
             setCameraCorners(toEightPoints(data.cameraCorners));
           } else if (data.action === 'SET_LOW_LIGHT_MODE') {

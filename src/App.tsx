@@ -90,15 +90,19 @@ export default function App() {
   const [isColorTunerOpen, setIsColorTunerOpen] = useState(false);
   const [isPickingColor, setIsPickingColor] = useState(false);
 
-  // 8-Point Mesh Warping Calibration:
-  // 1. screenCorners: 8 calibration pins around the court on the screen/projector display
-  // 2. cameraCorners: 8 matching calibration pins in the live camera video
-  const [screenCorners, setScreenCorners] = useState<EightPoints>(() => {
+  // [REQ] 8점 보정은 카메라만. 경기장은 4점으로 해!
+  // 1. screenCorners: 4 corners of the game court on the screen/projector display (Pure Planar Homography)
+  // 2. cameraCorners: 8 calibration pins in the live camera video (Wide-angle Distortion Correction)
+  const [screenCorners, setScreenCorners] = useState<FourCorners>(() => {
     try {
       const saved = localStorage.getItem('airhockey_screen_corners');
-      if (saved) return toEightPoints(JSON.parse(saved));
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.length === 4) return parsed;
+        if (parsed.length === 8) return [parsed[0], parsed[2], parsed[4], parsed[6]];
+      }
     } catch {}
-    return DEFAULT_NORMALIZED_8POINTS;
+    return DEFAULT_NORMALIZED_CORNERS;
   });
   const [cameraCorners, setCameraCorners] = useState<EightPoints>(() => {
     try {
@@ -119,32 +123,38 @@ export default function App() {
   const [draggingScreenCorner, setDraggingScreenCorner] = useState<number | null>(null);
 
   // Helper to convert normalized [0, 1] points to pixel coordinates
-  const getPixelPoints = useCallback((corners: CalibrationCorners, w: number, h: number): EightPoints => {
-    const eight = toEightPoints(corners);
-    return eight.map((p) => ({ x: p.x * w, y: p.y * h })) as unknown as EightPoints;
+  const getPixelCorners4 = useCallback((corners: FourCorners, w: number, h: number): FourCorners => [
+    { x: corners[0].x * w, y: corners[0].y * h },
+    { x: corners[1].x * w, y: corners[1].y * h },
+    { x: corners[2].x * w, y: corners[2].y * h },
+    { x: corners[3].x * w, y: corners[3].y * h },
+  ], []);
+
+  const getPixelPoints8 = useCallback((corners: EightPoints, w: number, h: number): EightPoints => {
+    return corners.map((p) => ({ x: p.x * w, y: p.y * h })) as unknown as EightPoints;
   }, []);
 
-  // 1. Screen Transformer: maps virtual table coordinates (1200 x 700) to screen display pixels
+  // 1. Screen Transformer: maps virtual table coordinates (1200 x 700) to screen display pixels using 4 pure corners
   const screenTransformerRef = useRef<PerspectiveTransformer>(
-    new PerspectiveTransformer(getPixelPoints(DEFAULT_NORMALIZED_8POINTS, 1200, 680))
+    new PerspectiveTransformer(getPixelCorners4(DEFAULT_NORMALIZED_CORNERS, 1200, 680))
   );
 
-  // 2. Camera Transformer: maps camera processing frame coordinates (640 x 360) to table coordinates (1200 x 700)
+  // 2. Camera Transformer: maps camera processing frame coordinates (640 x 360) to table coordinates using 8 points
   const cameraTransformerRef = useRef<PerspectiveTransformer>(
-    new PerspectiveTransformer(getPixelPoints(DEFAULT_NORMALIZED_8POINTS, 640, 360))
+    new PerspectiveTransformer(getPixelPoints8(DEFAULT_NORMALIZED_8POINTS, 640, 360))
   );
 
-  // Update screen transformer when screenCorners or containerSize change
+  // Update screen transformer when screenCorners or containerSize change (Zero seam tearing!)
   useEffect(() => {
-    const pixelPoints = getPixelPoints(screenCorners, containerSize.width, containerSize.height);
-    screenTransformerRef.current.updateCorners(pixelPoints);
-  }, [screenCorners, containerSize, getPixelPoints]);
+    const pixelCorners = getPixelCorners4(screenCorners, containerSize.width, containerSize.height);
+    screenTransformerRef.current.updateCorners(pixelCorners);
+  }, [screenCorners, containerSize, getPixelCorners4]);
 
-  // Update camera transformer when cameraCorners change
+  // Update camera transformer when cameraCorners change (8-point mesh warping)
   useEffect(() => {
-    const pixelPoints = getPixelPoints(cameraCorners, 640, 360);
+    const pixelPoints = getPixelPoints8(cameraCorners, 640, 360);
     cameraTransformerRef.current.updateCorners(pixelPoints);
-  }, [cameraCorners, getPixelPoints]);
+  }, [cameraCorners, getPixelPoints8]);
 
   // Track container dimensions on resize
   useEffect(() => {
@@ -578,10 +588,13 @@ export default function App() {
         setGamePhase('READY');
       } else if (msg.action === 'UPDATE_SCREEN_CORNERS') {
         if (msg.screenCorners) {
-          const eight = toEightPoints(msg.screenCorners);
-          setScreenCorners(eight);
+          const four: FourCorners =
+            msg.screenCorners.length === 4
+              ? msg.screenCorners
+              : [msg.screenCorners[0], msg.screenCorners[2], msg.screenCorners[4], msg.screenCorners[6]];
+          setScreenCorners(four);
           try {
-            localStorage.setItem('airhockey_screen_corners', JSON.stringify(eight));
+            localStorage.setItem('airhockey_screen_corners', JSON.stringify(four));
           } catch {}
         }
       } else if (msg.action === 'UPDATE_CAMERA_CORNERS') {
@@ -1120,7 +1133,7 @@ export default function App() {
     const normY = Math.max(0.01, Math.min(0.99, (e.clientY - rect.top) / rect.height));
 
     setScreenCorners((prev) => {
-      const next = [...prev] as EightPoints;
+      const next = [...prev] as FourCorners;
       next[draggingScreenCorner] = { x: normX, y: normY };
       try {
         localStorage.setItem('airhockey_screen_corners', JSON.stringify(next));
@@ -1196,10 +1209,10 @@ export default function App() {
           theme={theme}
         />
 
-        {/* [REQ] 8점 왜곡 보정 창 캘리브레이션 모드 시 메인 경기장 화면에 8개 핀 오버레이 표시 */}
+        {/* [REQ] 경기장은 깔끔한 4개 모서리 핀 캘리브레이션 */}
         {gamePhase === 'CALIBRATION_SCREEN' && (
           <div className="absolute inset-0 z-30 pointer-events-auto">
-            {/* SVG Connecting 8-point Polygon */}
+            {/* SVG Connecting 4-point Quadrilateral */}
             <svg className="absolute inset-0 w-full h-full pointer-events-none">
               <polygon
                 points={screenCorners
@@ -1212,28 +1225,10 @@ export default function App() {
               />
             </svg>
 
-            {/* 8 Interactive Corner & Mid-Edge Pins */}
+            {/* 4 Interactive Corner Pins */}
             {screenCorners.map((corner, idx) => {
-              const cornerColors = [
-                '#0284c7', // 1. 좌상
-                '#06b6d4', // 2. 상단 중앙
-                '#2563eb', // 3. 우상
-                '#3b82f6', // 4. 우측 중앙
-                '#d97706', // 5. 우하
-                '#eab308', // 6. 하단 중앙
-                '#7c3aed', // 7. 좌하
-                '#9333ea', // 8. 좌측 중앙
-              ];
-              const cornerNames = [
-                '1.좌상(TL)',
-                '2.상단중앙',
-                '3.우상(TR)',
-                '4.우측중앙',
-                '5.우하(BR)',
-                '6.하단중앙',
-                '7.좌하(BL)',
-                '8.좌측중앙',
-              ];
+              const cornerColors = ['#0284c7', '#2563eb', '#d97706', '#7c3aed'];
+              const cornerNames = ['1.좌상(TL)', '2.우상(TR)', '3.우하(BR)', '4.좌하(BL)'];
               const px = corner.x * containerSize.width;
               const py = corner.y * containerSize.height;
 
@@ -1247,12 +1242,12 @@ export default function App() {
                   className="absolute cursor-move group select-none touch-none z-40"
                 >
                   <div
-                    className="w-11 h-11 rounded-full border-3 border-white shadow-[0_0_20px_rgba(0,0,0,0.85)] flex items-center justify-center font-black text-xs text-white transition-transform group-hover:scale-125"
+                    className="w-12 h-12 rounded-full border-4 border-white shadow-[0_0_20px_rgba(0,0,0,0.85)] flex items-center justify-center font-black text-xs text-white transition-transform group-hover:scale-125"
                     style={{ backgroundColor: cornerColors[idx % cornerColors.length] }}
                   >
                     {idx + 1}
                   </div>
-                  <div className="absolute top-13 left-1/2 -translate-x-1/2 whitespace-nowrap bg-slate-900/90 text-white text-[10px] font-bold px-2 py-0.5 rounded border border-slate-700 shadow pointer-events-none">
+                  <div className="absolute top-14 left-1/2 -translate-x-1/2 whitespace-nowrap bg-slate-900/90 text-white text-[11px] font-bold px-2 py-0.5 rounded border border-slate-700 shadow pointer-events-none">
                     {cornerNames[idx % cornerNames.length]}
                   </div>
                 </div>
@@ -1263,10 +1258,10 @@ export default function App() {
             <div className="absolute top-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-6 py-3 rounded-2xl bg-slate-900/95 border-2 border-cyan-400 text-white shadow-2xl backdrop-blur-md">
               <div className="flex flex-col">
                 <span className="text-sm font-black text-cyan-400">
-                  📐 [8점 정밀 캘리브레이션] 프로젝터 화면 왜곡 보정
+                  📐 [창 캘리브레이션] 프로젝터 화면 책상 맞춤 (4점)
                 </span>
                 <span className="text-xs text-slate-300">
-                  모서리와 변 사이 8개 핀(1~8번)을 실제 책상 테두리에 맞춰 드래그하세요.
+                  모서리 4개 핀(1~4번)을 실제 책상 네 모서리에 맞춰 드래그하세요.
                 </span>
               </div>
               <button

@@ -113,32 +113,54 @@ interface SubQuadWarp {
 }
 
 /**
- * [REQ] 8-Point Calibration Mesh Perspective Transformer
- * Solves optical & projector distortion (barrel, keystone curvature) by dividing
- * the table into 4 quadrants using 8 perimeter points and a dynamic center intersection.
+ * PerspectiveTransformer
+ * - For Screen / Court Display: Uses pure 4-point Planar Homography, guaranteeing perfectly straight lines and round circles without mesh seams!
+ * - For Camera Vision: Supports 8-point Mesh Homography to counteract wide-angle camera barrel/cushion distortion.
  */
 export class PerspectiveTransformer {
-  private eightPoints: EightPoints;
-  private subQuads: SubQuadWarp[] = [];
+  private isEightPointMode = false;
+  private fourCorners: FourCorners;
+  private eightPoints: EightPoints | null = null;
   private globalT2S: Matrix3x3 | null = null;
   private globalS2T: Matrix3x3 | null = null;
+  private subQuads: SubQuadWarp[] = [];
   private centerPt: Point2D = { x: 0, y: 0 };
 
   constructor(corners: CalibrationCorners) {
-    this.eightPoints = toEightPoints(corners as Point2D[]);
+    if (corners.length === 8) {
+      this.fourCorners = [corners[0], corners[2], corners[4], corners[6]];
+      this.eightPoints = corners as EightPoints;
+      this.isEightPointMode = true;
+    } else {
+      this.fourCorners = corners as FourCorners;
+      this.isEightPointMode = false;
+    }
     this.updateCorners(corners);
   }
 
   public updateCorners(corners: CalibrationCorners) {
-    this.eightPoints = toEightPoints(corners as Point2D[]);
+    if (corners.length === 8) {
+      this.isEightPointMode = true;
+      this.eightPoints = corners as EightPoints;
+      this.fourCorners = [corners[0], corners[2], corners[4], corners[6]];
+    } else {
+      this.isEightPointMode = false;
+      this.fourCorners = corners as FourCorners;
+      this.eightPoints = null;
+    }
+
+    // Always compute Global Homography: TABLE_CORNERS <-> fourCorners
+    this.globalT2S = getHomographyMatrix(TABLE_CORNERS, this.fourCorners);
+    this.globalS2T = getHomographyMatrix(this.fourCorners, TABLE_CORNERS);
+
+    // If 4-point mode (Screen/Projector), do NOT use subquads (prevents seam tearing and line warping)
+    if (!this.isEightPointMode || !this.eightPoints) {
+      this.subQuads = [];
+      return;
+    }
+
+    // 8-Point Mode (Camera Wide-Angle Distortion Correction):
     const pts = this.eightPoints;
-
-    // Global homography for fallback
-    const fourCorners: FourCorners = [pts[0], pts[2], pts[4], pts[6]];
-    this.globalT2S = getHomographyMatrix(TABLE_CORNERS, fourCorners);
-    this.globalS2T = getHomographyMatrix(fourCorners, TABLE_CORNERS);
-
-    // Compute center intersection: line P1-P5 (TopMid -> BottomMid) & line P7-P3 (LeftMid -> RightMid)
     const p1 = pts[1];
     const p5 = pts[5];
     const p7 = pts[7];
@@ -206,6 +228,18 @@ export class PerspectiveTransformer {
   }
 
   public tableToScreen(tableX: number, tableY: number): Point2D {
+    // Pure 4-point mode: 100% clean planar projection
+    if (!this.isEightPointMode || this.subQuads.length === 0) {
+      if (this.globalT2S) {
+        return applyHomography(tableX, tableY, this.globalT2S);
+      }
+      return {
+        x: (tableX / TABLE_WIDTH) * (this.fourCorners[1].x - this.fourCorners[0].x) + this.fourCorners[0].x,
+        y: (tableY / TABLE_HEIGHT) * (this.fourCorners[3].y - this.fourCorners[0].y) + this.fourCorners[0].y,
+      };
+    }
+
+    // 8-point camera mesh mode
     const midX = TABLE_WIDTH / 2;
     const midY = TABLE_HEIGHT / 2;
 
@@ -224,16 +258,22 @@ export class PerspectiveTransformer {
       return applyHomography(tableX, tableY, this.globalT2S);
     }
 
-    const pts = this.eightPoints;
-    const u = tableX / TABLE_WIDTH;
-    const v = tableY / TABLE_HEIGHT;
-    return {
-      x: (1 - u) * (1 - v) * pts[0].x + u * (1 - v) * pts[2].x + u * v * pts[4].x + (1 - u) * v * pts[6].x,
-      y: (1 - u) * (1 - v) * pts[0].y + u * (1 - v) * pts[2].y + u * v * pts[4].y + (1 - u) * v * pts[6].y,
-    };
+    return { x: tableX, y: tableY };
   }
 
   public screenToTable(screenX: number, screenY: number): Point2D {
+    // Pure 4-point mode: 100% clean planar inverse projection
+    if (!this.isEightPointMode || this.subQuads.length === 0) {
+      if (this.globalS2T) {
+        return applyHomography(screenX, screenY, this.globalS2T);
+      }
+      return {
+        x: (screenX / 1200) * TABLE_WIDTH,
+        y: (screenY / 680) * TABLE_HEIGHT,
+      };
+    }
+
+    // 8-point camera mesh mode
     for (let i = 0; i < this.subQuads.length; i++) {
       const quad = this.subQuads[i];
       if (isPointInQuad(screenX, screenY, quad.screenQuad)) {
@@ -241,7 +281,6 @@ export class PerspectiveTransformer {
       }
     }
 
-    // Outside all subquads: find closest subquad center
     if (this.subQuads.length > 0) {
       let bestDist = Infinity;
       let bestQuad = this.subQuads[0];
@@ -279,11 +318,10 @@ export class PerspectiveTransformer {
   }
 
   public getCorners(): FourCorners {
-    const pts = this.eightPoints;
-    return [pts[0], pts[2], pts[4], pts[6]];
+    return this.fourCorners;
   }
 
   public getEightPoints(): EightPoints {
-    return this.eightPoints;
+    return this.eightPoints || toEightPoints(this.fourCorners);
   }
 }
