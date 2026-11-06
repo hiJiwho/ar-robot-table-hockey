@@ -194,15 +194,15 @@ export const ScoreboardScreen: React.FC = () => {
 
       {/* [REQ] 게임 종료시 서브는 점수판 크게 뜨고 */}
       {isTimeUp && (
-        <div className="w-full max-w-6xl my-2 py-3.5 px-6 rounded-2xl bg-gradient-to-r from-rose-950/90 via-slate-900 to-rose-950/90 border-2 border-rose-500 shadow-[0_0_50px_rgba(244,63,94,0.4)] flex flex-col items-center justify-center text-center">
+        <div className="w-full max-w-6xl my-2 py-3.5 px-6 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-2 border-indigo-500 shadow-[0_0_50px_rgba(99,102,241,0.4)] flex flex-col items-center justify-center text-center">
           <span className="text-2xl sm:text-3xl font-black uppercase tracking-wider text-white">
             🏆 경기 종료 (FINAL RESULT)
           </span>
-          <span className="text-base sm:text-lg font-bold text-slate-300 mt-1">
+          <span className="text-base sm:text-lg font-bold text-slate-200 mt-1">
             {score.blue > score.red
-              ? 'BLUE TEAM (청팀) 승리!!'
+              ? 'CYAN TEAM 승리!!'
               : score.red > score.blue
-              ? 'RED TEAM (적팀) 승리!!'
+              ? 'YELLOW TEAM 승리!!'
               : '무승부 (DRAW MATCH)!'}
           </span>
         </div>
@@ -214,8 +214,8 @@ export const ScoreboardScreen: React.FC = () => {
           <div
             className={`px-12 py-8 rounded-3xl border-4 shadow-2xl text-center transform scale-105 ${
               goalAnnouncement.team === 'blue'
-                ? 'bg-blue-950/90 border-blue-400 shadow-[0_0_80px_rgba(37,99,235,0.8)]'
-                : 'bg-rose-950/90 border-rose-400 shadow-[0_0_80px_rgba(225,29,72,0.8)]'
+                ? 'bg-cyan-950/90 border-cyan-400 shadow-[0_0_80px_rgba(6,182,212,0.8)]'
+                : 'bg-yellow-950/90 border-yellow-400 shadow-[0_0_80px_rgba(234,179,8,0.8)]'
             }`}
           >
             <div className="text-5xl sm:text-7xl font-black tracking-wider uppercase text-white drop-shadow-lg">
@@ -223,10 +223,10 @@ export const ScoreboardScreen: React.FC = () => {
             </div>
             <div
               className={`mt-2 text-lg sm:text-2xl font-bold ${
-                goalAnnouncement.team === 'blue' ? 'text-blue-300' : 'text-rose-300'
+                goalAnnouncement.team === 'blue' ? 'text-cyan-300' : 'text-yellow-300'
               }`}
             >
-              {goalAnnouncement.team === 'blue' ? 'BLUE TEAM (청팀) 득점!' : 'RED TEAM (적팀) 득점!'}
+              {goalAnnouncement.team === 'blue' ? 'CYAN TEAM 득점!' : 'YELLOW TEAM 득점!'}
             </div>
           </div>
         </div>
@@ -234,17 +234,17 @@ export const ScoreboardScreen: React.FC = () => {
 
       {/* Main Giant Scoreboard Arena */}
       <main className="w-full max-w-6xl flex-1 flex flex-col lg:flex-row items-center justify-center gap-6 sm:gap-10 my-4">
-        {/* Blue Team Scoreboard Card */}
-        <div className="flex-1 w-full flex flex-col items-center justify-center p-6 sm:p-10 rounded-3xl bg-gradient-to-b from-blue-950/50 via-slate-900/80 to-slate-900 border-2 border-blue-500/50 shadow-[0_0_60px_rgba(37,99,235,0.3)] relative overflow-hidden group">
-          <div className="absolute top-0 inset-x-0 h-2 bg-gradient-to-r from-blue-600 via-sky-400 to-blue-600" />
-          <span className="text-sm sm:text-base font-extrabold text-blue-400 uppercase tracking-widest mb-1">
-            BLUE TEAM (청팀)
+        {/* Cyan Team Scoreboard Card */}
+        <div className="flex-1 w-full flex flex-col items-center justify-center p-6 sm:p-10 rounded-3xl bg-gradient-to-b from-cyan-950/50 via-slate-900/80 to-slate-900 border-2 border-cyan-500/50 shadow-[0_0_60px_rgba(6,182,212,0.3)] relative overflow-hidden group">
+          <div className="absolute top-0 inset-x-0 h-2 bg-gradient-to-r from-cyan-600 via-cyan-400 to-cyan-600" />
+          <span className="text-sm sm:text-base font-extrabold text-cyan-400 uppercase tracking-widest mb-1">
+            CYAN TEAM (1P)
           </span>
-          <div className="text-[110px] sm:text-[150px] lg:text-[190px] font-black font-mono tracking-tight text-white leading-none my-2 drop-shadow-[0_4px_28px_rgba(37,99,235,0.6)]">
+          <div className="text-[110px] sm:text-[150px] lg:text-[190px] font-black font-mono tracking-tight text-white leading-none my-2 drop-shadow-[0_4px_28px_rgba(6,182,212,0.6)]">
             {score.blue}
           </div>
-          <div className="flex items-center gap-2 text-xs text-blue-300/80 font-mono mt-1">
-            <Activity className="w-3.5 h-3.5 text-blue-400" />
+          <div className="flex items-center gap-2 text-xs text-cyan-300/80 font-mono mt-1">
+            <Activity className="w-3.5 h-3.5 text-cyan-400" />
             <span>타격 수: {stats.blueHits}회</span>
           </div>
         </div>
@@ -281,17 +281,17 @@ export const ScoreboardScreen: React.FC = () => {
           </span>
         </div>
 
-        {/* Red Team Scoreboard Card */}
-        <div className="flex-1 w-full flex flex-col items-center justify-center p-6 sm:p-10 rounded-3xl bg-gradient-to-b from-rose-950/50 via-slate-900/80 to-slate-900 border-2 border-rose-500/50 shadow-[0_0_60px_rgba(225,29,72,0.3)] relative overflow-hidden group">
-          <div className="absolute top-0 inset-x-0 h-2 bg-gradient-to-r from-rose-600 via-rose-400 to-rose-600" />
-          <span className="text-sm sm:text-base font-extrabold text-rose-400 uppercase tracking-widest mb-1">
-            RED TEAM (적팀)
+        {/* Yellow Team Scoreboard Card */}
+        <div className="flex-1 w-full flex flex-col items-center justify-center p-6 sm:p-10 rounded-3xl bg-gradient-to-b from-yellow-950/50 via-slate-900/80 to-slate-900 border-2 border-yellow-500/50 shadow-[0_0_60px_rgba(234,179,8,0.3)] relative overflow-hidden group">
+          <div className="absolute top-0 inset-x-0 h-2 bg-gradient-to-r from-yellow-600 via-amber-400 to-yellow-600" />
+          <span className="text-sm sm:text-base font-extrabold text-yellow-400 uppercase tracking-widest mb-1">
+            YELLOW TEAM (2P)
           </span>
-          <div className="text-[110px] sm:text-[150px] lg:text-[190px] font-black font-mono tracking-tight text-white leading-none my-2 drop-shadow-[0_4px_28px_rgba(225,29,72,0.6)]">
+          <div className="text-[110px] sm:text-[150px] lg:text-[190px] font-black font-mono tracking-tight text-white leading-none my-2 drop-shadow-[0_4px_28px_rgba(234,179,8,0.6)]">
             {score.red}
           </div>
-          <div className="flex items-center gap-2 text-xs text-rose-300/80 font-mono mt-1">
-            <Activity className="w-3.5 h-3.5 text-rose-400" />
+          <div className="flex items-center gap-2 text-xs text-yellow-300/80 font-mono mt-1">
+            <Activity className="w-3.5 h-3.5 text-yellow-400" />
             <span>타격 수: {stats.redHits}회</span>
           </div>
         </div>

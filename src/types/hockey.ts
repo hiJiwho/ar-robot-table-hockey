@@ -5,6 +5,21 @@ export interface Point2D {
 
 export type FourCorners = [Point2D, Point2D, Point2D, Point2D]; // [TopLeft, TopRight, BottomRight, BottomLeft]
 
+// [REQ] 8-Point Calibration: 4 corners + 4 edge midpoints to eliminate optical/projector distortion
+// [0:TL, 1:TopMid, 2:TR, 3:RightMid, 4:BR, 5:BottomMid, 6:BL, 7:LeftMid]
+export type EightPoints = [
+  Point2D,
+  Point2D,
+  Point2D,
+  Point2D,
+  Point2D,
+  Point2D,
+  Point2D,
+  Point2D
+];
+
+export type CalibrationCorners = FourCorners | EightPoints;
+
 export interface RobotState {
   team: 'blue' | 'red';
   // Position in virtual table coordinates (e.g. 0..1000 x 0..600)
@@ -72,6 +87,7 @@ export interface ColorSettings {
   visionEngine: VisionEngineType;
   sensitivity: number; // 1 (narrow) to 5 (wide), default 3
   customSample?: { r: number; g: number; b: number; hex: string } | null;
+  lowLightMode?: boolean; // [REQ] 불 꺼도 인식 잘 되는 암실/저조도 감도 부스트 모드
 }
 
 export type GamePhase = 'READY' | 'PLAYING' | 'GOAL' | 'TIME_UP' | 'CALIBRATION_SCREEN' | 'CALIBRATION_CAMERA';
@@ -113,9 +129,10 @@ export type GameActionMessage = {
   customDuration?: number;
   targetPoints?: number;
   goalSize?: number;
-  screenCorners?: FourCorners;
-  cameraCorners?: FourCorners;
+  screenCorners?: CalibrationCorners;
+  cameraCorners?: CalibrationCorners;
   isCameraMirrored?: boolean;
+  lowLightMode?: boolean;
 };
 
 export const DEFAULT_NORMALIZED_CORNERS: FourCorners = [
@@ -124,6 +141,41 @@ export const DEFAULT_NORMALIZED_CORNERS: FourCorners = [
   { x: 0.96, y: 0.95 }, // Bottom-Right
   { x: 0.04, y: 0.95 }, // Bottom-Left
 ];
+
+// [REQ] Default 8 normalized points with 4 edge midpoints for wide-angle distortion correction
+export const DEFAULT_NORMALIZED_8POINTS: EightPoints = [
+  { x: 0.04, y: 0.05 }, // 0: TL (좌상)
+  { x: 0.50, y: 0.05 }, // 1: Top-Mid (상단 중앙)
+  { x: 0.96, y: 0.05 }, // 2: TR (우상)
+  { x: 0.96, y: 0.50 }, // 3: Right-Mid (우측 중앙)
+  { x: 0.96, y: 0.95 }, // 4: BR (우하)
+  { x: 0.50, y: 0.95 }, // 5: Bottom-Mid (하단 중앙)
+  { x: 0.04, y: 0.95 }, // 6: BL (좌하)
+  { x: 0.04, y: 0.50 }, // 7: Left-Mid (좌측 중앙)
+];
+
+export function toEightPoints(pts: Point2D[]): EightPoints {
+  if (pts && pts.length >= 8) {
+    return [pts[0], pts[1], pts[2], pts[3], pts[4], pts[5], pts[6], pts[7]];
+  }
+  if (pts && pts.length === 4) {
+    const p0 = pts[0];
+    const p2 = pts[1];
+    const p4 = pts[2];
+    const p6 = pts[3];
+    return [
+      p0,
+      { x: (p0.x + p2.x) / 2, y: (p0.y + p2.y) / 2 },
+      p2,
+      { x: (p2.x + p4.x) / 2, y: (p2.y + p4.y) / 2 },
+      p4,
+      { x: (p4.x + p6.x) / 2, y: (p4.y + p6.y) / 2 },
+      p6,
+      { x: (p6.x + p0.x) / 2, y: (p6.y + p0.y) / 2 },
+    ];
+  }
+  return DEFAULT_NORMALIZED_8POINTS;
+}
 
 export const FULL_FRAME_NORMALIZED_CORNERS: FourCorners = [
   { x: 0.03, y: 0.03 },
@@ -162,9 +214,10 @@ export interface SyncStatePayload {
   theme?: 'dark' | 'light';
   stats: MatchStats;
   goalAnnouncement?: { team: 'blue' | 'red'; countdown: number } | null;
-  screenCorners?: FourCorners;
-  cameraCorners?: FourCorners;
+  screenCorners?: CalibrationCorners;
+  cameraCorners?: CalibrationCorners;
   isCameraMirrored?: boolean;
+  lowLightMode?: boolean;
   puck?: { x: number; y: number; vx: number; vy: number };
   blueRobot?: { tableX: number; tableY: number; detected: boolean; confidence: number };
   redRobot?: { tableX: number; tableY: number; detected: boolean; confidence: number };

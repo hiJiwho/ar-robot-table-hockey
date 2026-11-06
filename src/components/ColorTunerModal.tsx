@@ -205,6 +205,30 @@ export const ColorTunerModal: React.FC<ColorTunerModalProps> = ({
             </div>
           </div>
 
+          {/* [REQ] 암실 / 불 끈 환경 최적화 토글 (설정에 이거 인식용 하나 넣어주면 ㄱㅅ) */}
+          <div className="p-4 bg-purple-950/30 rounded-xl border border-purple-800/60 flex items-center justify-between">
+            <div className="space-y-0.5">
+              <span className="font-semibold text-xs text-purple-200 flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-purple-400" />
+                🌙 암실 / 불 끈 환경 최적화 (저조도 모드)
+              </span>
+              <p className="text-[11px] text-slate-400">
+                실내 조명을 끈 어두운 방이나 프로젝터 전용 환경에서 마젠타 감도와 명암비를 자동 증폭합니다.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => onUpdateSettings({ ...settings, lowLightMode: !settings.lowLightMode })}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${
+                settings.lowLightMode
+                  ? 'bg-purple-600 text-white shadow-[0_0_12px_rgba(168,85,247,0.5)] border border-purple-400'
+                  : 'bg-slate-800 text-slate-400 border border-slate-700 hover:text-slate-200'
+              }`}
+            >
+              {settings.lowLightMode ? 'ON (활성화)' : 'OFF'}
+            </button>
+          </div>
+
           {/* 3. Real-time Vision Mask PIP Preview */}
           <div className="p-4 bg-slate-950/80 rounded-xl border border-slate-800">
             <div className="flex items-center justify-between mb-2">

@@ -174,8 +174,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
         ctx.lineTo(rightBot.x, rightBot.y);
         ctx.stroke();
 
-        // Left Goal Post Net Arc (청팀 Blue)
-        ctx.strokeStyle = isGameOver ? primaryLine : '#3b82f6';
+        // Left Goal Post Net Arc (Cyan 팀)
+        ctx.strokeStyle = isGameOver ? primaryLine : '#06b6d4';
         ctx.lineWidth = 4;
         ctx.beginPath();
         const leftNetBack = tf.tableToScreen(-45, TABLE_HEIGHT / 2);
@@ -183,8 +183,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
         ctx.quadraticCurveTo(leftNetBack.x, leftNetBack.y, leftGoalPostBot.x, leftGoalPostBot.y);
         ctx.stroke();
 
-        // Right Goal Post Net Arc (적팀 Red)
-        ctx.strokeStyle = isGameOver ? primaryLine : '#ef4444';
+        // Right Goal Post Net Arc (Yellow 팀)
+        ctx.strokeStyle = isGameOver ? primaryLine : '#eab308';
         ctx.lineWidth = 4;
         ctx.beginPath();
         const rightNetBack = tf.tableToScreen(TABLE_WIDTH + 45, TABLE_HEIGHT / 2);
@@ -192,12 +192,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
         ctx.quadraticCurveTo(rightNetBack.x, rightNetBack.y, rightGoalPostBot.x, rightGoalPostBot.y);
         ctx.stroke();
 
-        // Goal Crease Semi-Circles (골대 앞 반원 수비 구역: 좌측 파랑, 우측 빨강)
+        // Goal Crease Semi-Circles (골대 앞 반원 수비 구역: 좌측 Cyan, 우측 Yellow)
         ctx.lineWidth = 2.5;
         ctx.setLineDash([6, 5]);
 
-        // Left Crease (Blue)
-        ctx.strokeStyle = isGameOver ? secondaryLine : 'rgba(59, 130, 246, 0.75)';
+        // Left Crease (Cyan)
+        ctx.strokeStyle = isGameOver ? secondaryLine : 'rgba(6, 182, 212, 0.75)';
         ctx.beginPath();
         const creaseRadius = goalHalf + 25;
         for (let i = -16; i <= 16; i++) {
@@ -211,8 +211,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
         }
         ctx.stroke();
 
-        // Right Crease (Red)
-        ctx.strokeStyle = isGameOver ? secondaryLine : 'rgba(239, 68, 68, 0.75)';
+        // Right Crease (Yellow)
+        ctx.strokeStyle = isGameOver ? secondaryLine : 'rgba(234, 179, 8, 0.75)';
         ctx.beginPath();
         for (let i = -16; i <= 16; i++) {
           const theta = (i / 16) * (Math.PI / 2);
@@ -280,35 +280,43 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
       ctx.arc(centerPt.x, centerPt.y, 6, 0, Math.PI * 2);
       ctx.fill();
 
-      // [REQ] Left (1P) Score Number - 중앙 기점으로 왼쪽 파란색 표시, 1P 선수가 보이게 90도 회전 (+90deg), 초대형 160px
-      const p1ScorePt = tf.tableToScreen(TABLE_WIDTH / 2 - 150, TABLE_HEIGHT / 2);
+      // [REQ] Left (1P) Score Number - 각자 진영(왼쪽)으로 더 내리고(이동), 90도 회전 (+90deg), 초대형 230px Ultra-Bold Cyan
+      const p1ScorePt = tf.tableToScreen(TABLE_WIDTH / 2 - 270, TABLE_HEIGHT / 2);
       ctx.save();
       ctx.translate(p1ScorePt.x, p1ScorePt.y);
       ctx.rotate(Math.PI / 2); // 1P 골대 쪽에 선 사람이 똑바로 보이도록 90도 회전
-      ctx.font = '900 160px monospace, system-ui, sans-serif';
+      ctx.font = '900 230px "Arial Black", Impact, -apple-system, system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
+      if (!isGameOver) {
+        ctx.shadowColor = isLight ? 'rgba(6, 182, 212, 0.6)' : 'rgba(34, 211, 238, 0.75)';
+        ctx.shadowBlur = 18;
+      }
       ctx.fillStyle = isGameOver
         ? (isLight ? '#cbd5e1' : '#3f3f46')
-        : (isLight ? 'rgba(37, 99, 235, 0.70)' : 'rgba(56, 189, 248, 0.75)');
+        : (isLight ? 'rgba(6, 182, 212, 0.90)' : 'rgba(34, 211, 238, 0.95)');
       ctx.fillText(String(score.blue), 0, 0);
       ctx.restore();
 
-      // [REQ] Right (2P) Score Number - 중앙 기점으로 오른쪽 빨간색 표시, 2P 선수가 보이게 -90도 회전 (-90deg), 초대형 160px
-      const p2ScorePt = tf.tableToScreen(TABLE_WIDTH / 2 + 150, TABLE_HEIGHT / 2);
+      // [REQ] Right (2P) Score Number - 각자 진영(오른쪽)으로 더 내리고(이동), -90도 회전 (-90deg), 초대형 230px Ultra-Bold Yellow
+      const p2ScorePt = tf.tableToScreen(TABLE_WIDTH / 2 + 270, TABLE_HEIGHT / 2);
       ctx.save();
       ctx.translate(p2ScorePt.x, p2ScorePt.y);
       ctx.rotate(-Math.PI / 2); // 2P 골대 쪽에 선 사람이 똑바로 보이도록 -90도 회전
-      ctx.font = '900 160px monospace, system-ui, sans-serif';
+      ctx.font = '900 230px "Arial Black", Impact, -apple-system, system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
+      if (!isGameOver) {
+        ctx.shadowColor = isLight ? 'rgba(234, 179, 8, 0.6)' : 'rgba(250, 204, 21, 0.75)';
+        ctx.shadowBlur = 18;
+      }
       ctx.fillStyle = isGameOver
         ? (isLight ? '#cbd5e1' : '#3f3f46')
-        : (isLight ? 'rgba(225, 29, 72, 0.70)' : 'rgba(244, 63, 94, 0.75)');
+        : (isLight ? 'rgba(202, 138, 4, 0.92)' : 'rgba(250, 204, 21, 0.95)');
       ctx.fillText(String(score.red), 0, 0);
       ctx.restore();
 
-      // 6. Face-off Dots (양 진영 페이스오프 스팟: 좌측 파랑, 우측 빨강)
+      // 6. Face-off Dots (양 진영 페이스오프 스팟: 좌측 Cyan, 우측 Yellow)
       const spotOffsetX = 220;
       const spotOffsetY = 160;
       const faceOffSpots = [
@@ -322,8 +330,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
         ctx.strokeStyle = isGameOver
           ? secondaryLine
           : spot.team === 'blue'
-          ? '#3b82f6'
-          : '#ef4444';
+          ? '#06b6d4'
+          : '#eab308';
         const screenPt = tf.tableToScreen(spot.x, spot.y);
         ctx.beginPath();
         ctx.arc(screenPt.x, screenPt.y, 8, 0, Math.PI * 2);
@@ -371,7 +379,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
   );
 };
 
-// [REQ] 실제 에어하키 "말 (Striker/Mal)" 디자인: 중앙 기준 좌측 파랑, 우측 빨강
+// [REQ] 실제 에어하키 "말 (Striker/Mal)" 디자인: 중앙 기준 좌측 Cyan, 우측 Yellow
 function renderRealisticMal(
   ctx: CanvasRenderingContext2D,
   tf: PerspectiveTransformer,
@@ -382,35 +390,35 @@ function renderRealisticMal(
   if (!robot.detected && Date.now() - robot.lastSeenTime > 500) return;
   const screenPos = tf.tableToScreen(robot.tableX, robot.tableY);
   const outerRadius = 32;
-  const isBlue = robot.team === 'blue';
+  const isCyan = robot.team === 'blue';
 
   ctx.save();
   ctx.translate(screenPos.x, screenPos.y);
 
-  // [REQ] 경기장에서도 빨간색, 파란색 표시 (게임 종료 시에는 무채색 회색으로 비활성화)
+  // [REQ] 경기장에서도 Cyan, Yellow 표시 (게임 종료 시에는 무채색 회색으로 비활성화)
   const primary = isGameOver
     ? '#52525b'
-    : isBlue
-    ? '#38bdf8'
-    : '#fb7185';
+    : isCyan
+    ? '#22d3ee'
+    : '#facc15';
 
   const rimFill = isGameOver
     ? 'rgba(82, 82, 91, 0.25)'
-    : isBlue
-    ? 'rgba(37, 99, 235, 0.28)'
-    : 'rgba(225, 29, 72, 0.28)';
+    : isCyan
+    ? 'rgba(6, 182, 212, 0.35)'
+    : 'rgba(234, 179, 8, 0.35)';
 
   const knobFill = isGameOver
     ? '#3f3f46'
-    : isBlue
-    ? '#1d4ed8'
-    : '#be123c';
+    : isCyan
+    ? '#0891b2'
+    : '#ca8a04';
 
   const innerRingColor = isGameOver
     ? '#52525b'
-    : isBlue
-    ? '#60a5fa'
-    : '#f43f5e';
+    : isCyan
+    ? '#67e8f9'
+    : '#fde047';
 
   // 1. Base Outer Flange (말 밑판)
   ctx.fillStyle = rimFill;

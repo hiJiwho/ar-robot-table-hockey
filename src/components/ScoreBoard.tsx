@@ -75,14 +75,14 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
         <div className="flex items-center gap-3 shrink-0">
           <div className="flex flex-col">
             <h1 className="text-sm font-bold tracking-tight text-white flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block shadow-[0_0_8px_rgba(59,130,246,0.8)]" />
+              <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 inline-block shadow-[0_0_8px_rgba(34,211,238,0.8)]" />
               테이블 에어하키
-              <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block shadow-[0_0_8px_rgba(239,68,68,0.8)]" />
+              <span className="w-2.5 h-2.5 rounded-full bg-yellow-400 inline-block shadow-[0_0_8px_rgba(250,204,21,0.8)]" />
             </h1>
             <div className="flex items-center gap-2 text-xs text-slate-400">
               <span className="text-pink-400 font-medium">마젠타 블록 2개 감지</span>
               <span aria-hidden="true">·</span>
-              <span>골대: 청 / 적</span>
+              <span>골대: Cyan / Yellow</span>
             </div>
           </div>
 
@@ -107,21 +107,21 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
 
         {/* Center: Match Score & Match Countdown */}
         <div className="flex items-center gap-5 sm:gap-7 mx-auto">
-          {/* Blue Team Score (청팀) */}
+          {/* Cyan Team Score */}
           <div className="flex items-center gap-2">
             <div className="text-right">
-              <div className="text-xs font-semibold text-blue-400 tracking-wide uppercase">
-                청팀 (Blue)
+              <div className="text-xs font-semibold text-cyan-400 tracking-wide uppercase">
+                Cyan 팀 (Cyan)
               </div>
               <div className="text-[11px] text-slate-400">
                 {blueRobot.detected ? (
-                  <span className="text-blue-300">마젠타 1 ({(blueRobot.confidence * 100).toFixed(0)}%)</span>
+                  <span className="text-cyan-300">마젠타 1 ({(blueRobot.confidence * 100).toFixed(0)}%)</span>
                 ) : (
                   <span className="text-slate-500">탐색 중...</span>
                 )}
               </div>
             </div>
-            <div className="w-11 h-11 rounded-lg bg-blue-950/90 border border-blue-500/50 flex items-center justify-center font-mono text-2xl font-bold text-blue-300 shadow-[0_0_12px_rgba(59,130,246,0.3)] tabular-nums">
+            <div className="w-11 h-11 rounded-lg bg-cyan-950/90 border border-cyan-500/50 flex items-center justify-center font-mono text-2xl font-bold text-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.3)] tabular-nums">
               {score.blue}
             </div>
           </div>
@@ -148,18 +148,18 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
             </span>
           </div>
 
-          {/* Red Team Score (적팀) */}
+          {/* Yellow Team Score */}
           <div className="flex items-center gap-2">
-            <div className="w-11 h-11 rounded-lg bg-red-950/90 border border-red-500/50 flex items-center justify-center font-mono text-2xl font-bold text-red-300 shadow-[0_0_12px_rgba(239,68,68,0.3)] tabular-nums">
+            <div className="w-11 h-11 rounded-lg bg-yellow-950/90 border border-yellow-500/50 flex items-center justify-center font-mono text-2xl font-bold text-yellow-300 shadow-[0_0_12px_rgba(234,179,8,0.3)] tabular-nums">
               {score.red}
             </div>
             <div className="text-left">
-              <div className="text-xs font-semibold text-red-400 tracking-wide uppercase">
-                적팀 (Red)
+              <div className="text-xs font-semibold text-yellow-400 tracking-wide uppercase">
+                Yellow 팀 (Yellow)
               </div>
               <div className="text-[11px] text-slate-400">
                 {redRobot.detected ? (
-                  <span className="text-red-300">마젠타 2 ({(redRobot.confidence * 100).toFixed(0)}%)</span>
+                  <span className="text-yellow-300">마젠타 2 ({(redRobot.confidence * 100).toFixed(0)}%)</span>
                 ) : (
                   <span className="text-slate-500">탐색 중...</span>
                 )}

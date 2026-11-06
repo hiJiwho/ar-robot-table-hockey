@@ -7,8 +7,11 @@ import {
   TABLE_WIDTH,
   TABLE_HEIGHT,
   DEFAULT_NORMALIZED_CORNERS,
+  DEFAULT_NORMALIZED_8POINTS,
   DEFAULT_GOAL_SIZE,
   FourCorners,
+  EightPoints,
+  toEightPoints,
   GameActionMessage,
 } from '../types/hockey';
 import {
@@ -32,6 +35,7 @@ import {
   Monitor,
   FlipHorizontal,
   Target,
+  Sparkles,
 } from 'lucide-react';
 
 export const ConsoleScreen: React.FC = () => {
@@ -65,25 +69,26 @@ export const ConsoleScreen: React.FC = () => {
     confidence: 0,
   });
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [lowLightMode, setLowLightMode] = useState<boolean>(false);
 
   // Settings & Calibration Modal
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<'SCREEN' | 'CAMERA' | 'TABLE'>('SCREEN');
+  const [settingsTab, setSettingsTab] = useState<'SCREEN' | 'CAMERA' | 'TABLE' | 'LOWLIGHT'>('SCREEN');
 
-  // Calibration Corners
-  const [screenCorners, setScreenCorners] = useState<FourCorners>(() => {
+  // Calibration Corners (8-Point Mesh Warping)
+  const [screenCorners, setScreenCorners] = useState<EightPoints>(() => {
     try {
       const saved = localStorage.getItem('airhockey_screen_corners');
-      if (saved) return JSON.parse(saved);
+      if (saved) return toEightPoints(JSON.parse(saved));
     } catch {}
-    return DEFAULT_NORMALIZED_CORNERS;
+    return DEFAULT_NORMALIZED_8POINTS;
   });
-  const [cameraCorners, setCameraCorners] = useState<FourCorners>(() => {
+  const [cameraCorners, setCameraCorners] = useState<EightPoints>(() => {
     try {
       const saved = localStorage.getItem('airhockey_camera_corners');
-      if (saved) return JSON.parse(saved);
+      if (saved) return toEightPoints(JSON.parse(saved));
     } catch {}
-    return DEFAULT_NORMALIZED_CORNERS;
+    return DEFAULT_NORMALIZED_8POINTS;
   });
   const [goalSize, setGoalSize] = useState<number>(DEFAULT_GOAL_SIZE);
   const [isCameraMirrored, setIsCameraMirrored] = useState(false);
@@ -112,8 +117,9 @@ export const ConsoleScreen: React.FC = () => {
       if (data.puck) setPuck(data.puck);
       if (data.blueRobot) setBlueRobot(data.blueRobot);
       if (data.redRobot) setRedRobot(data.redRobot);
-      if (data.screenCorners) setScreenCorners(data.screenCorners);
-      if (data.cameraCorners) setCameraCorners(data.cameraCorners);
+      if (data.screenCorners) setScreenCorners(toEightPoints(data.screenCorners));
+      if (data.cameraCorners) setCameraCorners(toEightPoints(data.cameraCorners));
+      if (typeof data.lowLightMode === 'boolean') setLowLightMode(data.lowLightMode);
       if (typeof data.goalSize === 'number') setGoalSize(data.goalSize);
       if (typeof data.isCameraMirrored === 'boolean') setIsCameraMirrored(data.isCameraMirrored);
       if (typeof data.targetPoints === 'number') setTargetPointsInput(data.targetPoints);
@@ -140,9 +146,11 @@ export const ConsoleScreen: React.FC = () => {
           applyState(data);
         } else if (data.type === 'GAME_ACTION') {
           if (data.action === 'UPDATE_SCREEN_CORNERS' && data.screenCorners) {
-            setScreenCorners(data.screenCorners);
+            setScreenCorners(toEightPoints(data.screenCorners));
           } else if (data.action === 'UPDATE_CAMERA_CORNERS' && data.cameraCorners) {
-            setCameraCorners(data.cameraCorners);
+            setCameraCorners(toEightPoints(data.cameraCorners));
+          } else if (data.action === 'SET_LOW_LIGHT_MODE') {
+            setLowLightMode(!!data.lowLightMode);
           }
         }
       };
@@ -312,7 +320,7 @@ export const ConsoleScreen: React.FC = () => {
     const normX = Math.max(0.01, Math.min(0.99, (e.clientX - rect.left) / rect.width));
     const normY = Math.max(0.01, Math.min(0.99, (e.clientY - rect.top) / rect.height));
 
-    const next = [...cameraCorners] as FourCorners;
+    const next = [...cameraCorners] as EightPoints;
     next[draggingCamIdx] = { x: normX, y: normY };
     setCameraCorners(next);
 
@@ -324,6 +332,16 @@ export const ConsoleScreen: React.FC = () => {
     try {
       localStorage.setItem('airhockey_camera_corners', JSON.stringify(next));
     } catch {}
+  };
+
+  const handleToggleLowLightMode = () => {
+    const next = !lowLightMode;
+    setLowLightMode(next);
+    sendAction({
+      type: 'GAME_ACTION',
+      action: 'SET_LOW_LIGHT_MODE',
+      lowLightMode: next,
+    });
   };
 
   const handleCamContainerPointerUp = () => {
@@ -377,6 +395,20 @@ export const ConsoleScreen: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* [REQ] 글고 불 꺼도 인식 잘 되게 해줘 (설정에 이거 인식용 하나 넣어주면 ㄱㅅ) */}
+          <button
+            onClick={handleToggleLowLightMode}
+            className={`px-3 py-1.5 rounded-lg border text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm ${
+              lowLightMode
+                ? 'bg-purple-600 hover:bg-purple-500 text-white border-purple-400 shadow-[0_0_12px_rgba(168,85,247,0.5)]'
+                : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-700'
+            }`}
+            title="불을 끈 어두운 방이나 프로젝터 전용 환경에서 마젠타 색상 인식을 증폭합니다"
+          >
+            <Sparkles className={`w-3.5 h-3.5 ${lowLightMode ? 'text-yellow-300 animate-spin' : 'text-slate-400'}`} />
+            <span>암실 최적화: {lowLightMode ? 'ON' : 'OFF'}</span>
+          </button>
+
           {/* [REQ] 8. 관리 콘솔에 설정 버튼 넣어야지 ㅋㅋ */}
           <button
             onClick={() => setIsSettingsOpen(true)}
@@ -506,22 +538,22 @@ export const ConsoleScreen: React.FC = () => {
             </svg>
           </div>
 
-          {/* 패들 1, 패들 2 상태창 */}
+          {/* 패들 1 (Cyan), 패들 2 (Yellow) 상태창 */}
           <div className="grid grid-cols-2 gap-2 text-xs">
-            <div className="bg-slate-950/80 border border-slate-800 rounded-lg p-2.5 flex items-center justify-between">
-              <span className="font-bold text-slate-200 flex items-center gap-2">
-                <span className={`w-2.5 h-2.5 rounded-full ${blueRobot.detected ? 'bg-emerald-400' : 'bg-slate-600'}`} />
-                패들 1 (좌측)
+            <div className="bg-slate-950/80 border border-cyan-500/30 rounded-lg p-2.5 flex items-center justify-between">
+              <span className="font-bold text-cyan-300 flex items-center gap-2">
+                <span className={`w-2.5 h-2.5 rounded-full ${blueRobot.detected ? 'bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]' : 'bg-slate-600'}`} />
+                Cyan 팀 (1P)
               </span>
               <span className="font-mono text-slate-400">
                 {blueRobot.detected ? `${Math.round(blueRobot.tableX)}, ${Math.round(blueRobot.tableY)}` : '미감지'}
               </span>
             </div>
 
-            <div className="bg-slate-950/80 border border-slate-800 rounded-lg p-2.5 flex items-center justify-between">
-              <span className="font-bold text-slate-200 flex items-center gap-2">
-                <span className={`w-2.5 h-2.5 rounded-full ${redRobot.detected ? 'bg-emerald-400' : 'bg-slate-600'}`} />
-                패들 2 (우측)
+            <div className="bg-slate-950/80 border border-yellow-500/30 rounded-lg p-2.5 flex items-center justify-between">
+              <span className="font-bold text-yellow-300 flex items-center gap-2">
+                <span className={`w-2.5 h-2.5 rounded-full ${redRobot.detected ? 'bg-yellow-400 shadow-[0_0_8px_rgba(250,204,21,0.8)]' : 'bg-slate-600'}`} />
+                Yellow 팀 (2P)
               </span>
               <span className="font-mono text-slate-400">
                 {redRobot.detected ? `${Math.round(redRobot.tableX)}, ${Math.round(redRobot.tableY)}` : '미감지'}
@@ -534,10 +566,10 @@ export const ConsoleScreen: React.FC = () => {
         <div className="lg:col-span-6 flex flex-col gap-2.5 overflow-y-auto">
           {/* Sports Scoreboard */}
           <div className="grid grid-cols-3 gap-2 bg-slate-900 border border-slate-800 rounded-2xl p-3 text-center">
-            {/* Player 1 Score */}
-            <div className="flex flex-col items-center justify-center p-2 rounded-xl bg-slate-950/60 border border-slate-800">
-              <span className="text-xs font-bold text-slate-300 mb-1">좌측 점수 (1P)</span>
-              <div className="text-4xl sm:text-5xl font-black font-mono text-white">{score.blue}</div>
+            {/* Player 1 Score (Cyan) */}
+            <div className="flex flex-col items-center justify-center p-2 rounded-xl bg-slate-950/60 border border-cyan-500/30">
+              <span className="text-xs font-bold text-cyan-400 mb-1">Cyan 팀 (1P)</span>
+              <div className="text-4xl sm:text-5xl font-black font-mono text-cyan-300">{score.blue}</div>
               <div className="flex items-center gap-1 mt-2">
                 <button
                   onClick={() => handleAdjustScore('blue', -1)}
@@ -547,7 +579,7 @@ export const ConsoleScreen: React.FC = () => {
                 </button>
                 <button
                   onClick={() => handleAdjustScore('blue', 1)}
-                  className="w-7 h-7 rounded bg-slate-700 hover:bg-slate-600 text-white flex items-center justify-center text-xs font-bold"
+                  className="w-7 h-7 rounded bg-cyan-700 hover:bg-cyan-600 text-white flex items-center justify-center text-xs font-bold shadow-sm"
                 >
                   <Plus className="w-3.5 h-3.5" />
                 </button>
@@ -576,10 +608,10 @@ export const ConsoleScreen: React.FC = () => {
               </span>
             </div>
 
-            {/* Player 2 Score */}
-            <div className="flex flex-col items-center justify-center p-2 rounded-xl bg-slate-950/60 border border-slate-800">
-              <span className="text-xs font-bold text-slate-300 mb-1">우측 점수 (2P)</span>
-              <div className="text-4xl sm:text-5xl font-black font-mono text-white">{score.red}</div>
+            {/* Player 2 Score (Yellow) */}
+            <div className="flex flex-col items-center justify-center p-2 rounded-xl bg-slate-950/60 border border-yellow-500/30">
+              <span className="text-xs font-bold text-yellow-400 mb-1">Yellow 팀 (2P)</span>
+              <div className="text-4xl sm:text-5xl font-black font-mono text-yellow-300">{score.red}</div>
               <div className="flex items-center gap-1 mt-2">
                 <button
                   onClick={() => handleAdjustScore('red', -1)}
@@ -589,7 +621,7 @@ export const ConsoleScreen: React.FC = () => {
                 </button>
                 <button
                   onClick={() => handleAdjustScore('red', 1)}
-                  className="w-7 h-7 rounded bg-slate-700 hover:bg-slate-600 text-white flex items-center justify-center text-xs font-bold"
+                  className="w-7 h-7 rounded bg-yellow-600 hover:bg-yellow-500 text-slate-950 flex items-center justify-center text-xs font-bold shadow-sm"
                 >
                   <Plus className="w-3.5 h-3.5" />
                 </button>
@@ -965,10 +997,10 @@ export const ConsoleScreen: React.FC = () => {
                     <div>
                       <span className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
                         <Camera className="w-4 h-4" />
-                        카메라 웹캠 캘리브레이션 (관리 콘솔 내부 조절)
+                        8점 왜곡 보정 웹캠 캘리브레이션 (관리 콘솔 내부 조절)
                       </span>
                       <p className="text-[11px] text-slate-300 mt-0.5">
-                        영상 속 책상 네 모서리에 4개 핀(1=좌상, 2=우상, 3=우하, 4=좌하)을 맞추세요.
+                        책상 네 모서리와 각 변의 중앙 8개 핀(1~8번)을 책상 테두리에 맞춰 왜곡을 완벽히 잡으세요.
                       </p>
                     </div>
                     <button
@@ -984,7 +1016,7 @@ export const ConsoleScreen: React.FC = () => {
                     </button>
                   </div>
 
-                  {/* Live Webcam Video Container with Corner Pins Overlay */}
+                  {/* Live Webcam Video Container with 8 Corner Pins Overlay */}
                   <div
                     ref={camContainerRef}
                     onPointerMove={handleCamContainerPointerMove}
@@ -1025,10 +1057,28 @@ export const ConsoleScreen: React.FC = () => {
                       />
                     </svg>
 
-                    {/* 4 Draggable Camera Corner Pins */}
+                    {/* 8 Draggable Camera Calibration Pins */}
                     {cameraCorners.map((corner, idx) => {
-                      const colors = ['#0284c7', '#2563eb', '#d97706', '#7c3aed'];
-                      const labels = ['1.좌상', '2.우상', '3.우하', '4.좌하'];
+                      const colors = [
+                        '#0284c7', // 1. 좌상
+                        '#06b6d4', // 2. 상단중앙
+                        '#2563eb', // 3. 우상
+                        '#3b82f6', // 4. 우측중앙
+                        '#d97706', // 5. 우하
+                        '#eab308', // 6. 하단중앙
+                        '#7c3aed', // 7. 좌하
+                        '#9333ea', // 8. 좌측중앙
+                      ];
+                      const labels = [
+                        '1.좌상',
+                        '2.상단중앙',
+                        '3.우상',
+                        '4.우측중앙',
+                        '5.우하',
+                        '6.하단중앙',
+                        '7.좌하',
+                        '8.좌측중앙',
+                      ];
                       return (
                         <div
                           key={idx}
@@ -1040,13 +1090,13 @@ export const ConsoleScreen: React.FC = () => {
                           className="absolute -translate-x-1/2 -translate-y-1/2 cursor-move z-30 select-none group touch-none"
                         >
                           <div
-                            className="w-8 h-8 rounded-full border-2 border-white shadow-lg flex items-center justify-center text-xs font-black text-white group-hover:scale-125 transition-transform"
-                            style={{ backgroundColor: colors[idx] }}
+                            className="w-7 h-7 rounded-full border-2 border-white shadow-lg flex items-center justify-center text-xs font-black text-white group-hover:scale-125 transition-transform"
+                            style={{ backgroundColor: colors[idx % colors.length] }}
                           >
                             {idx + 1}
                           </div>
-                          <span className="absolute top-9 left-1/2 -translate-x-1/2 whitespace-nowrap bg-black/80 px-1.5 py-0.5 rounded text-[10px] text-white pointer-events-none font-bold">
-                            {labels[idx]}
+                          <span className="absolute top-8 left-1/2 -translate-x-1/2 whitespace-nowrap bg-black/80 px-1.5 py-0.5 rounded text-[9px] text-white pointer-events-none font-bold">
+                            {labels[idx % labels.length]}
                           </span>
                         </div>
                       );

@@ -1,4 +1,4 @@
-import { FourCorners, Point2D, TABLE_WIDTH, TABLE_HEIGHT } from '../types/hockey';
+import { FourCorners, EightPoints, CalibrationCorners, Point2D, TABLE_WIDTH, TABLE_HEIGHT, toEightPoints } from '../types/hockey';
 
 export type Matrix3x3 = [
   number, number, number,
@@ -11,9 +11,6 @@ export type Matrix3x3 = [
  * Maps src points to dst points: dst = H * src
  */
 export function getHomographyMatrix(src: FourCorners, dst: FourCorners): Matrix3x3 | null {
-  // src[i] -> (xs_i, ys_i), dst[i] -> (xd_i, yd_i)
-  // [xs, ys, 1, 0, 0, 0, -xd*xs, -xd*ys] [h0..h7]^T = xd
-  // [0, 0, 0, xs, ys, 1, -yd*xs, -yd*ys] [h0..h7]^T = yd
   const A: number[][] = [];
   const b: number[] = [];
 
@@ -30,10 +27,8 @@ export function getHomographyMatrix(src: FourCorners, dst: FourCorners): Matrix3
     b.push(yd);
   }
 
-  // Gaussian elimination with partial pivoting to solve A * h = b
   const n = 8;
   for (let i = 0; i < n; i++) {
-    // Find pivot
     let maxRow = i;
     for (let k = i + 1; k < n; k++) {
       if (Math.abs(A[k][i]) > Math.abs(A[maxRow][i])) {
@@ -41,7 +36,6 @@ export function getHomographyMatrix(src: FourCorners, dst: FourCorners): Matrix3
       }
     }
 
-    // Swap rows
     const tempA = A[i];
     A[i] = A[maxRow];
     A[maxRow] = tempA;
@@ -51,10 +45,9 @@ export function getHomographyMatrix(src: FourCorners, dst: FourCorners): Matrix3
     b[maxRow] = tempB;
 
     if (Math.abs(A[i][i]) < 1e-9) {
-      return null; // Singular or degenerate points
+      return null;
     }
 
-    // Eliminate below
     for (let k = i + 1; k < n; k++) {
       const factor = A[k][i] / A[i][i];
       b[k] -= factor * b[i];
@@ -64,7 +57,6 @@ export function getHomographyMatrix(src: FourCorners, dst: FourCorners): Matrix3
     }
   }
 
-  // Back substitution
   const h = new Array(8);
   for (let i = n - 1; i >= 0; i--) {
     let sum = b[i];
@@ -81,9 +73,6 @@ export function getHomographyMatrix(src: FourCorners, dst: FourCorners): Matrix3
   ];
 }
 
-/**
- * Transforms point (x, y) with a 3x3 homography matrix.
- */
 export function applyHomography(x: number, y: number, H: Matrix3x3): Point2D {
   const w = H[6] * x + H[7] * y + H[8];
   const denom = Math.abs(w) < 1e-7 ? 1e-7 : w;
@@ -93,10 +82,6 @@ export function applyHomography(x: number, y: number, H: Matrix3x3): Point2D {
   };
 }
 
-/**
- * Standard table corners in virtual table space:
- * [TopLeft(0,0), TopRight(W,0), BottomRight(W,H), BottomLeft(0,H)]
- */
 export const TABLE_CORNERS: FourCorners = [
   { x: 0, y: 0 },
   { x: TABLE_WIDTH, y: 0 },
@@ -104,51 +89,182 @@ export const TABLE_CORNERS: FourCorners = [
   { x: 0, y: TABLE_HEIGHT }
 ];
 
-export class PerspectiveTransformer {
-  private screenCorners: FourCorners;
-  private tableToScreenMatrix: Matrix3x3 | null = null;
-  private screenToTableMatrix: Matrix3x3 | null = null;
+function isPointInQuad(px: number, py: number, quad: FourCorners): boolean {
+  let sign = 0;
+  for (let i = 0; i < 4; i++) {
+    const p1 = quad[i];
+    const p2 = quad[(i + 1) % 4];
+    const cross = (p2.x - p1.x) * (py - p1.y) - (p2.y - p1.y) * (px - p1.x);
+    if (Math.abs(cross) < 1e-5) continue;
+    if (sign === 0) {
+      sign = cross > 0 ? 1 : -1;
+    } else if ((cross > 0 ? 1 : -1) !== sign) {
+      return false;
+    }
+  }
+  return true;
+}
 
-  constructor(screenCorners: FourCorners) {
-    this.screenCorners = screenCorners;
-    this.updateCorners(screenCorners);
+interface SubQuadWarp {
+  tableQuad: FourCorners;
+  screenQuad: FourCorners;
+  tableToScreen: Matrix3x3;
+  screenToTable: Matrix3x3;
+}
+
+/**
+ * [REQ] 8-Point Calibration Mesh Perspective Transformer
+ * Solves optical & projector distortion (barrel, keystone curvature) by dividing
+ * the table into 4 quadrants using 8 perimeter points and a dynamic center intersection.
+ */
+export class PerspectiveTransformer {
+  private eightPoints: EightPoints;
+  private subQuads: SubQuadWarp[] = [];
+  private globalT2S: Matrix3x3 | null = null;
+  private globalS2T: Matrix3x3 | null = null;
+  private centerPt: Point2D = { x: 0, y: 0 };
+
+  constructor(corners: CalibrationCorners) {
+    this.eightPoints = toEightPoints(corners as Point2D[]);
+    this.updateCorners(corners);
   }
 
-  public updateCorners(screenCorners: FourCorners) {
-    this.screenCorners = screenCorners;
-    this.tableToScreenMatrix = getHomographyMatrix(TABLE_CORNERS, screenCorners);
-    this.screenToTableMatrix = getHomographyMatrix(screenCorners, TABLE_CORNERS);
+  public updateCorners(corners: CalibrationCorners) {
+    this.eightPoints = toEightPoints(corners as Point2D[]);
+    const pts = this.eightPoints;
+
+    // Global homography for fallback
+    const fourCorners: FourCorners = [pts[0], pts[2], pts[4], pts[6]];
+    this.globalT2S = getHomographyMatrix(TABLE_CORNERS, fourCorners);
+    this.globalS2T = getHomographyMatrix(fourCorners, TABLE_CORNERS);
+
+    // Compute center intersection: line P1-P5 (TopMid -> BottomMid) & line P7-P3 (LeftMid -> RightMid)
+    const p1 = pts[1];
+    const p5 = pts[5];
+    const p7 = pts[7];
+    const p3 = pts[3];
+
+    const dx1 = p5.x - p1.x;
+    const dy1 = p5.y - p1.y;
+    const dx2 = p3.x - p7.x;
+    const dy2 = p3.y - p7.y;
+
+    const denom = dx1 * dy2 - dy1 * dx2;
+    if (Math.abs(denom) > 1e-5) {
+      const t = ((p7.x - p1.x) * dy2 - (p7.y - p1.y) * dx2) / denom;
+      this.centerPt = {
+        x: p1.x + t * dx1,
+        y: p1.y + t * dy1,
+      };
+    } else {
+      this.centerPt = {
+        x: (p1.x + p3.x + p5.x + p7.x) / 4,
+        y: (p1.y + p3.y + p5.y + p7.y) / 4,
+      };
+    }
+
+    const c = this.centerPt;
+    const midX = TABLE_WIDTH / 2;
+    const midY = TABLE_HEIGHT / 2;
+
+    const defs: Array<{ table: FourCorners; screen: FourCorners }> = [
+      // Q0: Top-Left
+      {
+        table: [{ x: 0, y: 0 }, { x: midX, y: 0 }, { x: midX, y: midY }, { x: 0, y: midY }],
+        screen: [pts[0], pts[1], c, pts[7]],
+      },
+      // Q1: Top-Right
+      {
+        table: [{ x: midX, y: 0 }, { x: TABLE_WIDTH, y: 0 }, { x: TABLE_WIDTH, y: midY }, { x: midX, y: midY }],
+        screen: [pts[1], pts[2], pts[3], c],
+      },
+      // Q2: Bottom-Right
+      {
+        table: [{ x: midX, y: midY }, { x: TABLE_WIDTH, y: midY }, { x: TABLE_WIDTH, y: TABLE_HEIGHT }, { x: midX, y: TABLE_HEIGHT }],
+        screen: [c, pts[3], pts[4], pts[5]],
+      },
+      // Q3: Bottom-Left
+      {
+        table: [{ x: 0, y: midY }, { x: midX, y: midY }, { x: midX, y: TABLE_HEIGHT }, { x: 0, y: TABLE_HEIGHT }],
+        screen: [pts[7], c, pts[5], pts[6]],
+      },
+    ];
+
+    this.subQuads = [];
+    for (const d of defs) {
+      const t2s = getHomographyMatrix(d.table, d.screen);
+      const s2t = getHomographyMatrix(d.screen, d.table);
+      if (t2s && s2t) {
+        this.subQuads.push({
+          tableQuad: d.table,
+          screenQuad: d.screen,
+          tableToScreen: t2s,
+          screenToTable: s2t,
+        });
+      }
+    }
   }
 
   public tableToScreen(tableX: number, tableY: number): Point2D {
-    if (this.tableToScreenMatrix) {
-      return applyHomography(tableX, tableY, this.tableToScreenMatrix);
+    const midX = TABLE_WIDTH / 2;
+    const midY = TABLE_HEIGHT / 2;
+
+    let qIdx = 0;
+    if (tableX < midX && tableY < midY) qIdx = 0;
+    else if (tableX >= midX && tableY < midY) qIdx = 1;
+    else if (tableX >= midX && tableY >= midY) qIdx = 2;
+    else qIdx = 3;
+
+    const quad = this.subQuads[qIdx];
+    if (quad) {
+      return applyHomography(tableX, tableY, quad.tableToScreen);
     }
-    // Fallback: Bilinear interpolation
+
+    if (this.globalT2S) {
+      return applyHomography(tableX, tableY, this.globalT2S);
+    }
+
+    const pts = this.eightPoints;
     const u = tableX / TABLE_WIDTH;
     const v = tableY / TABLE_HEIGHT;
-    const c = this.screenCorners;
-    const x = (1 - u) * (1 - v) * c[0].x + u * (1 - v) * c[1].x + u * v * c[2].x + (1 - u) * v * c[3].x;
-    const y = (1 - u) * (1 - v) * c[0].y + u * (1 - v) * c[1].y + u * v * c[2].y + (1 - u) * v * c[3].y;
-    return { x, y };
+    return {
+      x: (1 - u) * (1 - v) * pts[0].x + u * (1 - v) * pts[2].x + u * v * pts[4].x + (1 - u) * v * pts[6].x,
+      y: (1 - u) * (1 - v) * pts[0].y + u * (1 - v) * pts[2].y + u * v * pts[4].y + (1 - u) * v * pts[6].y,
+    };
   }
 
   public screenToTable(screenX: number, screenY: number): Point2D {
-    if (this.screenToTableMatrix) {
-      return applyHomography(screenX, screenY, this.screenToTableMatrix);
+    for (let i = 0; i < this.subQuads.length; i++) {
+      const quad = this.subQuads[i];
+      if (isPointInQuad(screenX, screenY, quad.screenQuad)) {
+        return applyHomography(screenX, screenY, quad.screenToTable);
+      }
     }
-    // Fallback: rough bounding box mapping
-    const c = this.screenCorners;
-    const minX = Math.min(c[0].x, c[1].x, c[2].x, c[3].x);
-    const maxX = Math.max(c[0].x, c[1].x, c[2].x, c[3].x);
-    const minY = Math.min(c[0].y, c[1].y, c[2].y, c[3].y);
-    const maxY = Math.max(c[0].y, c[1].y, c[2].y, c[3].y);
 
-    const normX = Math.max(0, Math.min(1, (screenX - minX) / (maxX - minX || 1)));
-    const normY = Math.max(0, Math.min(1, (screenY - minY) / (maxY - minY || 1)));
+    // Outside all subquads: find closest subquad center
+    if (this.subQuads.length > 0) {
+      let bestDist = Infinity;
+      let bestQuad = this.subQuads[0];
+      for (const quad of this.subQuads) {
+        const sq = quad.screenQuad;
+        const avgX = (sq[0].x + sq[1].x + sq[2].x + sq[3].x) / 4;
+        const avgY = (sq[0].y + sq[1].y + sq[2].y + sq[3].y) / 4;
+        const d = Math.hypot(screenX - avgX, screenY - avgY);
+        if (d < bestDist) {
+          bestDist = d;
+          bestQuad = quad;
+        }
+      }
+      return applyHomography(screenX, screenY, bestQuad.screenToTable);
+    }
+
+    if (this.globalS2T) {
+      return applyHomography(screenX, screenY, this.globalS2T);
+    }
+
     return {
-      x: normX * TABLE_WIDTH,
-      y: normY * TABLE_HEIGHT,
+      x: (screenX / 1200) * TABLE_WIDTH,
+      y: (screenY / 680) * TABLE_HEIGHT,
     };
   }
 
@@ -163,6 +279,11 @@ export class PerspectiveTransformer {
   }
 
   public getCorners(): FourCorners {
-    return this.screenCorners;
+    const pts = this.eightPoints;
+    return [pts[0], pts[2], pts[4], pts[6]];
+  }
+
+  public getEightPoints(): EightPoints {
+    return this.eightPoints;
   }
 }

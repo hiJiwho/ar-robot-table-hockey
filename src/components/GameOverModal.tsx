@@ -35,38 +35,38 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
             <Trophy
               className={`w-8 h-8 ${
                 winner === 'blue'
-                  ? 'text-blue-400'
+                  ? 'text-cyan-400'
                   : winner === 'red'
-                  ? 'text-red-400'
+                  ? 'text-yellow-400'
                   : 'text-amber-400'
               }`}
             />
           </div>
 
           <h2 className="text-2xl font-bold tracking-tight text-white">
-            {winner === 'blue' && <span className="text-blue-400">청팀 (Blue) 승리!</span>}
-            {winner === 'red' && <span className="text-red-400">적팀 (Red) 승리!</span>}
+            {winner === 'blue' && <span className="text-cyan-400">Cyan 팀 승리!</span>}
+            {winner === 'red' && <span className="text-yellow-400">Yellow 팀 승리!</span>}
             {winner === 'draw' && <span className="text-amber-400">무승부 (동점)!</span>}
           </h2>
 
           <p className="text-xs text-slate-400">
-            총 1분(60초) 정규 경기가 종료되었습니다.
+            정규 경기가 종료되었습니다.
           </p>
         </div>
 
         {/* Final Scoreboard */}
         <div className="grid grid-cols-2 gap-4 p-4 bg-slate-950/80 rounded-xl border border-slate-800">
           <div className="text-center">
-            <div className="text-xs font-semibold text-blue-400 mb-1">청팀 (Blue)</div>
-            <div className="font-mono text-4xl font-bold text-blue-300 tabular-nums">
+            <div className="text-xs font-semibold text-cyan-400 mb-1">Cyan 팀</div>
+            <div className="font-mono text-4xl font-bold text-cyan-300 tabular-nums">
               {score.blue}
             </div>
             <div className="text-[11px] text-slate-500 mt-1">유효타 {stats.blueHits}회</div>
           </div>
 
           <div className="text-center">
-            <div className="text-xs font-semibold text-red-400 mb-1">적팀 (Red)</div>
-            <div className="font-mono text-4xl font-bold text-red-300 tabular-nums">
+            <div className="text-xs font-semibold text-yellow-400 mb-1">Yellow 팀</div>
+            <div className="font-mono text-4xl font-bold text-yellow-300 tabular-nums">
               {score.red}
             </div>
             <div className="text-[11px] text-slate-500 mt-1">유효타 {stats.redHits}회</div>

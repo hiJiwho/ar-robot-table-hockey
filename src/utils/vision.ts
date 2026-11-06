@@ -1,4 +1,4 @@
-import { ColorFilter, ColorSettings, FourCorners, Point2D, VisionEngineType } from '../types/hockey';
+import { CalibrationCorners, ColorFilter, ColorSettings, EightPoints, FourCorners, Point2D, VisionEngineType } from '../types/hockey';
 
 export interface DetectedBlob {
   x: number; // In processing canvas pixel coordinates
@@ -14,15 +14,16 @@ export const DEFAULT_COLOR_SETTINGS: ColorSettings = {
     // Magenta / Violet-Pink (wrap-around 275 to 20 deg)
     hMin: 275,
     hMax: 20,
-    sMin: 0.18,
+    sMin: 0.16,
     sMax: 1.0,
-    vMin: 0.16,
+    vMin: 0.14,
     vMax: 1.0,
   },
   minBlobSize: 8, // Support small physical Lego blocks (>= 8 pixels)
   maxBlobSize: 15000,
   visionEngine: 'OPENCV', // Default to OpenCV (opencv.js WASM); falls back to JS Chromatic engine while loading
   sensitivity: 3, // 1 to 5 (3 is optimal standard)
+  lowLightMode: false,
   customSample: null,
 };
 
@@ -81,7 +82,7 @@ export function matchesFilter(h: number, s: number, v: number, filter: ColorFilt
 
 /**
  * ENGINE 1: Smart Invariant Chromatic Index (OpenCV-Grade Projector-Proof Engine)
- * Specifically engineered for white projection desk reflection and camera auto-exposure!
+ * Enhanced with Low-Light & Anti-Jitter Verification:
  * - White projector light: R ≈ G ≈ B -> Excess Magenta ≈ 0 (REJECTED)
  * - Gray / white table: R ≈ G ≈ B -> Excess Magenta ≈ 0 (REJECTED)
  * - Green Lego blocks: G >> R, B -> Strongly Negative (REJECTED)
@@ -94,10 +95,19 @@ function isMagentaChromatic(
   g: number,
   b: number,
   sensitivity: number,
-  customSample?: { r: number; g: number; b: number } | null
+  customSample?: { r: number; g: number; b: number } | null,
+  lowLightMode = false
 ): boolean {
   const sum = r + g + b;
-  if (sum < 35) return false; // Ignore pure black darkness
+  const minSum = lowLightMode ? 14 : 35; // Allow darker pixels when lights are off
+  if (sum < minSum) return false;
+
+  // Strict anti-jitter: Magenta must have dominant Red and Blue over Green
+  const gRatio = lowLightMode ? 1.12 : 1.25;
+  const bRatio = lowLightMode ? 1.05 : 1.15;
+  if (r < g * gRatio || b < g * bRatio) {
+    return false;
+  }
 
   const rc = r / sum;
   const gc = g / sum;
@@ -106,35 +116,37 @@ function isMagentaChromatic(
   // If user calibrated a specific physical sample from the camera feed:
   if (customSample) {
     const sSum = customSample.r + customSample.g + customSample.b;
-    if (sSum > 20) {
+    if (sSum > 16) {
       const src = customSample.r / sSum;
       const sgc = customSample.g / sSum;
       const sbc = customSample.b / sSum;
 
       // Chromatic distance in normalized color space (invariant to lighting intensity)
       const dist = Math.hypot(rc - src, (gc - sgc) * 1.2, bc - sbc);
-      const tolerance = 0.12 + sensitivity * 0.04; // 0.16 to 0.32
+      const tolerance = (0.12 + sensitivity * 0.04) * (lowLightMode ? 1.25 : 1.0);
       if (dist < tolerance) return true;
     }
   }
 
   // Base threshold adjusted by sensitivity (1=strict, 5=lenient)
-  // sensitivity 1..5 -> thresh ~ 0.22 .. 0.10
-  const thresh = Math.max(0.08, 0.24 - sensitivity * 0.03);
+  let thresh = Math.max(0.06, 0.24 - sensitivity * 0.035);
+  if (lowLightMode) {
+    thresh *= 0.72; // More permissive chromatic excess in darkness
+  }
 
-  // Normalized Excess Magenta (NEM): (rc - gc) + (bc - gc) = rc + bc - 2*gc
+  // Normalized Excess Magenta (NEM): (rc + bc) - 2*gc
   const nem = (rc + bc) - 2 * gc;
 
-  // Criteria for Magenta / Fuchsia / Purple Lego brick:
-  // 1. NEM must exceed threshold
-  // 2. Green must be suppressed compared to Red and Blue
-  // 3. Both Red and Blue must have healthy chromatic share
-  if (nem > thresh && gc < 0.33 && rc > 0.30 && bc > 0.24) {
+  const maxGc = lowLightMode ? 0.36 : 0.33;
+  const minRc = lowLightMode ? 0.28 : 0.31;
+  const minBc = lowLightMode ? 0.21 : 0.24;
+
+  if (nem > thresh && gc < maxGc && rc > minRc && bc > minBc) {
     return true;
   }
 
   // Also support shadowed / deep purple Lego blocks
-  if (rc > 0.36 && bc > 0.26 && gc < 0.30) {
+  if (rc > (lowLightMode ? 0.33 : 0.36) && bc > (lowLightMode ? 0.23 : 0.26) && gc < (lowLightMode ? 0.32 : 0.29)) {
     return true;
   }
 
@@ -150,7 +162,8 @@ function isMagentaYCrCb(
   g: number,
   b: number,
   sensitivity: number,
-  customSample?: { r: number; g: number; b: number } | null
+  customSample?: { r: number; g: number; b: number } | null,
+  lowLightMode = false
 ): boolean {
   const { cr, cb } = rgbToYCrCb(r, g, b);
 
@@ -159,16 +172,16 @@ function isMagentaYCrCb(
     const dCr = cr - s.cr;
     const dCb = cb - s.cb;
     const dist = Math.hypot(dCr, dCb);
-    const maxDist = 20 + sensitivity * 8; // 28 to 60
+    const maxDist = (20 + sensitivity * 8) * (lowLightMode ? 1.3 : 1.0);
     if (dist < maxDist) return true;
   }
 
-  // Magenta has elevated Cr (red chrominance) and elevated Cb (blue chrominance)
-  // Neutral table is at Cr=128, Cb=128
-  const crMin = 138 - sensitivity * 2.5;
-  const cbMin = 132 - sensitivity * 2.5;
+  const baseOffset = lowLightMode ? 10 : 0;
+  const crMin = 138 - sensitivity * 2.5 - baseOffset;
+  const cbMin = 132 - sensitivity * 2.5 - baseOffset;
+  const sumMin = 275 - (lowLightMode ? 20 : 0);
 
-  return cr >= crMin && cb >= cbMin && (cr + cb) > 275;
+  return cr >= crMin && cb >= cbMin && (cr + cb) > sumMin;
 }
 
 /**
@@ -179,17 +192,21 @@ function isMagentaHsv(
   g: number,
   b: number,
   filter: ColorFilter,
-  sensitivity: number
+  sensitivity: number,
+  lowLightMode = false
 ): boolean {
   const { h, s, v } = rgbToHsv(r, g, b);
 
-  // Apply sensitivity adjustments to saturation/value cutoffs
-  const sTolerance = Math.max(0.10, filter.sMin - (sensitivity - 3) * 0.03);
-  const vTolerance = Math.max(0.12, filter.vMin - (sensitivity - 3) * 0.03);
+  let sTolerance = Math.max(0.08, filter.sMin - (sensitivity - 3) * 0.03);
+  let vTolerance = Math.max(0.06, filter.vMin - (sensitivity - 3) * 0.03);
+
+  if (lowLightMode) {
+    sTolerance *= 0.65;
+    vTolerance *= 0.50;
+  }
 
   if (s < sTolerance || v < vTolerance) return false;
 
-  // Wrap around hue
   if (filter.hMin <= filter.hMax) {
     return h >= filter.hMin && h <= filter.hMax;
   } else {
@@ -208,16 +225,17 @@ export function isMagentaPixelByEngine(
 ): boolean {
   const engine = settings.visionEngine || 'CHROMATIC';
   const sensitivity = settings.sensitivity || 3;
+  const lowLight = !!settings.lowLightMode;
 
   switch (engine) {
     case 'CHROMATIC':
-      return isMagentaChromatic(r, g, b, sensitivity, settings.customSample);
+      return isMagentaChromatic(r, g, b, sensitivity, settings.customSample, lowLight);
     case 'YCRCB':
-      return isMagentaYCrCb(r, g, b, sensitivity, settings.customSample);
+      return isMagentaYCrCb(r, g, b, sensitivity, settings.customSample, lowLight);
     case 'HSV':
-      return isMagentaHsv(r, g, b, settings.magenta, sensitivity);
+      return isMagentaHsv(r, g, b, settings.magenta, sensitivity, lowLight);
     default:
-      return isMagentaChromatic(r, g, b, sensitivity, settings.customSample);
+      return isMagentaChromatic(r, g, b, sensitivity, settings.customSample, lowLight);
   }
 }
 
@@ -225,41 +243,60 @@ export function isMagentaPixelByEngine(
  * Backward compatibility alias
  */
 export function isMagentaPixel(r: number, g: number, b: number, filter?: ColorFilter): boolean {
-  // If specific filter given, fallback to HSV, otherwise use Chromatic
   if (filter) {
     const { h, s, v } = rgbToHsv(r, g, b);
     return matchesFilter(h, s, v, filter);
   }
-  return isMagentaChromatic(r, g, b, 3, null);
+  return isMagentaChromatic(r, g, b, 3, null, false);
 }
 
 export const isPinkPixel = isMagentaPixel;
 
 /**
- * Checks if point is within quadrilateral with margin buffer
+ * Point-in-Polygon test (Ray-Casting Algorithm)
+ * Accurately supports both 4-point quadrilateral and 8-point mesh polygon calibration!
  */
+export function isPointInPolygon(px: number, py: number, polygon: Point2D[]): boolean {
+  let inside = false;
+  const n = polygon.length;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const xi = polygon[i].x;
+    const yi = polygon[i].y;
+    const xj = polygon[j].x;
+    const yj = polygon[j].y;
+
+    const intersect = yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
 /**
- * Strict Point-in-Convex-Quad test (Cross-Product edge test)
- * Strictly confines detection inside the court, eliminating false positives from desk tools/clutter!
+ * Checks if point is within quadrilateral / 8-point polygon with margin buffer
  */
 export function isPointInConvexQuad(
   px: number,
   py: number,
-  quad: FourCorners,
+  poly: CalibrationCorners | Point2D[],
   margin = 8
 ): boolean {
-  let pos = 0;
-  let neg = 0;
-  for (let i = 0; i < 4; i++) {
-    const p1 = quad[i];
-    const p2 = quad[(i + 1) % 4];
-    // Cross product: (x - x1)(y2 - y1) - (y - y1)(x2 - x1)
-    const cross = (px - p1.x) * (p2.y - p1.y) - (py - p1.y) * (p2.x - p1.x);
-    if (cross > margin) pos++;
-    else if (cross < -margin) neg++;
-    if (pos > 0 && neg > 0) return false;
+  const pts = poly as Point2D[];
+  if (pts.length === 4) {
+    let pos = 0;
+    let neg = 0;
+    for (let i = 0; i < 4; i++) {
+      const p1 = pts[i];
+      const p2 = pts[(i + 1) % 4];
+      const cross = (px - p1.x) * (p2.y - p1.y) - (py - p1.y) * (p2.x - p1.x);
+      if (cross > margin) pos++;
+      else if (cross < -margin) neg++;
+      if (pos > 0 && neg > 0) return false;
+    }
+    return true;
   }
-  return true;
+
+  // 8-point polygon or arbitrary polygon: use ray casting
+  return isPointInPolygon(px, py, pts);
 }
 
 export const isPointInQuadWithMargin = isPointInConvexQuad;
@@ -286,7 +323,7 @@ export function detectTwoMagentaBlobs(
   colorSettingsOrFilter: ColorSettings | ColorFilter,
   minPixels: number,
   maxPixels: number,
-  deskQuadPixels?: FourCorners | null,
+  deskPolyPixels?: CalibrationCorners | Point2D[] | null,
   debugMaskData?: ImageData | null,
   lastBluePos?: Point2D | null,
   lastRedPos?: Point2D | null
@@ -308,24 +345,25 @@ export function detectTwoMagentaBlobs(
           maxBlobSize: maxPixels,
           visionEngine: 'CHROMATIC',
           sensitivity: 3,
+          lowLightMode: false,
         };
 
   const candidatePoints: Array<[number, number]> = [];
 
-  // Calculate Bounding Box of deskQuadPixels to avoid scanning outside areas
+  // Calculate Bounding Box of deskPolyPixels to avoid scanning outside areas
   let startX = 0;
   let endX = width;
   let startY = 0;
   let endY = height;
-  if (deskQuadPixels) {
-    startX = Math.max(0, Math.floor(Math.min(deskQuadPixels[0].x, deskQuadPixels[1].x, deskQuadPixels[2].x, deskQuadPixels[3].x)) - 4);
-    endX = Math.min(width, Math.ceil(Math.max(deskQuadPixels[0].x, deskQuadPixels[1].x, deskQuadPixels[2].x, deskQuadPixels[3].x)) + 4);
-    startY = Math.max(0, Math.floor(Math.min(deskQuadPixels[0].y, deskQuadPixels[1].y, deskQuadPixels[2].y, deskQuadPixels[3].y)) - 4);
-    endY = Math.min(height, Math.ceil(Math.max(deskQuadPixels[0].y, deskQuadPixels[1].y, deskQuadPixels[2].y, deskQuadPixels[3].y)) + 4);
+  if (deskPolyPixels && deskPolyPixels.length >= 4) {
+    const xs = deskPolyPixels.map((p) => p.x);
+    const ys = deskPolyPixels.map((p) => p.y);
+    startX = Math.max(0, Math.floor(Math.min(...xs)) - 4);
+    endX = Math.min(width, Math.ceil(Math.max(...xs)) + 4);
+    startY = Math.max(0, Math.floor(Math.min(...ys)) - 4);
+    endY = Math.min(height, Math.ceil(Math.max(...ys)) + 4);
   }
 
-  // Stride step of 2 (subsampling every 2nd pixel) gives a 4x reduction in pixel processing
-  // Real Lego bricks are 15-30px, so step 2 preserves 100% accuracy while running in < 0.8ms
   const step = 2;
   const effectiveMinPixels = Math.max(3, Math.floor(minPixels / 3));
 
@@ -333,7 +371,7 @@ export function detectTwoMagentaBlobs(
   for (let y = startY; y < endY; y += step) {
     const rowOffset = y * width;
     for (let x = startX; x < endX; x += step) {
-      if (deskQuadPixels && !isPointInConvexQuad(x, y, deskQuadPixels, 6)) {
+      if (deskPolyPixels && !isPointInConvexQuad(x, y, deskPolyPixels, 6)) {
         continue;
       }
 
@@ -345,7 +383,6 @@ export function detectTwoMagentaBlobs(
       if (isMagentaPixelByEngine(r, g, b, settings)) {
         candidatePoints.push([x, y]);
         if (maskData) {
-          // Fill 2x2 footprint for clear debug mask display
           for (let my = 0; my < step && y + my < height; my++) {
             for (let mx = 0; mx < step && x + mx < width; mx++) {
               const mIdx = ((y + my) * width + (x + mx)) * 4;
@@ -365,7 +402,6 @@ export function detectTwoMagentaBlobs(
   }
 
   // Pass 2: Spatial Grid Clustering (OpenCV Connected-Component approximation)
-  // Grid cell size 14px provides tight grouping for Lego bricks
   const cellSize = 14;
   const grid = new Map<string, Array<[number, number]>>();
 
@@ -437,7 +473,6 @@ export function detectTwoMagentaBlobs(
       if (bw > 180 || bh > 180) continue;
 
       const aspect = Math.min(bw, bh) / Math.max(bw, bh || 1);
-      // Compact Lego brick shape score
       const score = clusterPoints.length * (1 + aspect * 1.5);
 
       rawClusters.push({
@@ -484,7 +519,7 @@ export function detectTwoMagentaBlobs(
 
 /**
  * Pairs detected blobs with the Blue / Red robots (shared by the JS and OpenCV engines)
- * using tracking continuity, falling back to left/right position.
+ * using tracking continuity and spatial priors, strictly preventing teleportation and jitter.
  */
 export function assignBlobs(
   allBlobs: DetectedBlob[],
@@ -500,13 +535,14 @@ export function assignBlobs(
     return { blueBlob: null, redBlob: null, allBlobs };
   }
 
+  const MAX_TELEPORT_DIST = 220; // Maximum allowed position shift per frame in camera pixels
+  const midX = width / 2;
 
   // If 2 or more blobs detected:
   if (allBlobs.length >= 2) {
     const b0 = allBlobs[0];
     const b1 = allBlobs[1];
 
-    // Tracking continuity: if previous positions are known, pair by minimum distance sum
     if (lastBluePos && lastRedPos) {
       const distDirect =
         Math.hypot(b0.x - lastBluePos.x, b0.y - lastBluePos.y) +
@@ -531,14 +567,14 @@ export function assignBlobs(
     }
 
     if (lastRedPos) {
-      const d0 = Math.hypot(b0.x - lastRedPos.x, b0.y - lastRedPos.y);
+      const d0 = Math.hypot(b0.x - lastRedPos.x, d0_y => b0.y - lastRedPos.y, b0.y - lastRedPos.y);
       const d1 = Math.hypot(b1.x - lastRedPos.x, b1.y - lastRedPos.y);
-      return d0 <= d1
+      const dist0 = Math.hypot(b0.x - lastRedPos.x, b0.y - lastRedPos.y);
+      return dist0 <= d1
         ? { blueBlob: b1, redBlob: b0, allBlobs }
         : { blueBlob: b0, redBlob: b1, allBlobs };
     }
 
-    // Default initialization: assign left-most blob to Blue (Player 1) and right-most to Red (Player 2)
     if (b0.x <= b1.x) {
       return { blueBlob: b0, redBlob: b1, allBlobs };
     } else {
@@ -552,19 +588,39 @@ export function assignBlobs(
   if (lastBluePos && lastRedPos) {
     const dBlue = Math.hypot(singleBlob.x - lastBluePos.x, singleBlob.y - lastBluePos.y);
     const dRed = Math.hypot(singleBlob.x - lastRedPos.x, singleBlob.y - lastRedPos.y);
-    if (dBlue <= dRed) {
+
+    if (dBlue < dRed) {
+      if (dBlue < MAX_TELEPORT_DIST || singleBlob.x < midX + 30) {
+        return { blueBlob: singleBlob, redBlob: null, allBlobs };
+      }
+    } else {
+      if (dRed < MAX_TELEPORT_DIST || singleBlob.x > midX - 30) {
+        return { blueBlob: null, redBlob: singleBlob, allBlobs };
+      }
+    }
+
+    if (singleBlob.x < midX) {
       return { blueBlob: singleBlob, redBlob: null, allBlobs };
     } else {
       return { blueBlob: null, redBlob: singleBlob, allBlobs };
     }
   } else if (lastBluePos) {
-    return { blueBlob: singleBlob, redBlob: null, allBlobs };
+    const dBlue = Math.hypot(singleBlob.x - lastBluePos.x, singleBlob.y - lastBluePos.y);
+    if (dBlue < MAX_TELEPORT_DIST || singleBlob.x < midX) {
+      return { blueBlob: singleBlob, redBlob: null, allBlobs };
+    } else {
+      return { blueBlob: null, redBlob: singleBlob, allBlobs };
+    }
   } else if (lastRedPos) {
-    return { blueBlob: null, redBlob: singleBlob, allBlobs };
+    const dRed = Math.hypot(singleBlob.x - lastRedPos.x, singleBlob.y - lastRedPos.y);
+    if (dRed < MAX_TELEPORT_DIST || singleBlob.x > midX) {
+      return { blueBlob: null, redBlob: singleBlob, allBlobs };
+    } else {
+      return { blueBlob: singleBlob, redBlob: null, allBlobs };
+    }
   }
 
-  // Fallback: assign according to half of the frame
-  if (singleBlob.x < width / 2) {
+  if (singleBlob.x < midX) {
     return { blueBlob: singleBlob, redBlob: null, allBlobs };
   } else {
     return { blueBlob: null, redBlob: singleBlob, allBlobs };
