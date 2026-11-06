@@ -51,15 +51,16 @@ export interface OpenCVDetectResult {
 }
 
 /**
- * [REQ] Enhanced OpenCV Vision Engine with:
- * 1. Dark Room / Low-Light Optimization (Auto brightness & contrast boost for lights-off play)
- * 2. Excess-Magenta Chromatic Verification (Eliminates skin-tone, projector white glare & color jitter)
- * 3. 8-Point Perimeter ROI masking (Works seamlessly with 8-point distortion calibration)
+ * Robust OpenCV Vision Engine:
+ * - High-speed HSV dual-range segmentation (supporting 360/0 degree magenta wrap-around)
+ * - Projector-proof & Skin-proof chromatic filtering
+ * - 8-Point or 4-Point Table ROI confinement
+ * - Morphological noise removal & contour moment centroiding
  */
 export function detectTwoMagentaBlobsOpenCV(
   imageData: ImageData,
   settings: ColorSettings,
-  courtPoints?: CalibrationCorners | null,
+  courtPoints?: CalibrationCorners | Point2D[] | null,
   debugMaskData?: ImageData | null,
   lastBluePos?: Point2D | null,
   lastRedPos?: Point2D | null
@@ -71,26 +72,22 @@ export function detectTwoMagentaBlobsOpenCV(
   const isLowLight = Boolean(settings.lowLightMode);
   const sens = settings.sensitivity || 3;
 
-  // HSV Filter parameters
+  // HSV Filter parameters:
+  // Magenta spans 250 ~ 360 and 0 ~ 25 degrees.
   const f = settings.customSample
     ? settings.magenta
     : {
-        hMin: 260, // Wrap-around magenta (260 deg to 20 deg)
-        hMax: 20,
-        sMin: isLowLight ? 0.12 : 0.22,
+        hMin: 255, // Wide Magenta / Hot-Pink / Fuchsia spectrum
+        hMax: 25,
+        sMin: isLowLight ? 0.08 : 0.12,
         sMax: 1.0,
-        vMin: isLowLight ? 0.05 : 0.14,
+        vMin: isLowLight ? 0.04 : 0.08,
         vMax: 1.0,
       };
 
-  // Adjust thresholds by sensitivity level (1..5)
-  const sFloor = isLowLight
-    ? Math.max(0.08, f.sMin - (sens - 3) * 0.04)
-    : Math.max(0.14, f.sMin - (sens - 3) * 0.05);
-
-  const vFloor = isLowLight
-    ? Math.max(0.04, f.vMin - (sens - 3) * 0.03)
-    : Math.max(0.10, f.vMin - (sens - 3) * 0.04);
+  // Sensitivity level (1=strict, 5=ultra-wide)
+  const sFloor = Math.max(0.06, f.sMin - (sens - 3) * 0.03);
+  const vFloor = Math.max(0.04, f.vMin - (sens - 3) * 0.025);
 
   const toH = (deg: number) => Math.round((((deg % 360) + 360) % 360) / 2);
   const s0 = Math.round(Math.min(1, sFloor) * 255);
@@ -111,11 +108,10 @@ export function detectTwoMagentaBlobsOpenCV(
     let rgb = track(new cv.Mat());
     cv.cvtColor(rgba, rgb, cv.COLOR_RGBA2RGB);
 
-    // [REQ] Low-Light / Dark Room Mode: Auto-gain & gamma stretch to illuminate dark blocks
+    // Dark Room Mode: Gamma & exposure boost
     if (isLowLight) {
       const brightened = track(new cv.Mat());
-      // alpha = 1.45 (contrast), beta = 22 (brightness boost)
-      cv.convertScaleAbs(rgb, brightened, 1.45, 22);
+      cv.convertScaleAbs(rgb, brightened, 1.40, 20);
       rgb = brightened;
     }
 
@@ -127,7 +123,7 @@ export function detectTwoMagentaBlobsOpenCV(
     const hsv = track(new cv.Mat());
     cv.cvtColor(blurred, hsv, cv.COLOR_RGB2HSV);
 
-    // 3. Color thresholding inRange (supporting 360/0 degree hue wrap-around)
+    // 3. Color thresholding inRange (supporting wrap-around)
     const mask = track(new cv.Mat());
     const makeBounds = (h0: number, h1: number) => ({
       lo: track(new cv.Mat(height, width, cv.CV_8UC3, new cv.Scalar(h0, s0, v0))),
@@ -147,37 +143,29 @@ export function detectTwoMagentaBlobsOpenCV(
       cv.bitwise_or(m1, m2, mask);
     }
 
-    // 4. [REQ] Anti-Jitter Chromatic Filter: reject skin-tone (hands) and projector white reflections
-    // For every magenta pixel, verify that Red and Blue are significantly stronger than Green!
+    // 4. Smart Chromatic Verification (Eliminate skin tone and projector white reflection)
+    // Real Lego Magenta: R > G (Red is dominant over Green by at least 8 units)
     if (!settings.customSample) {
       const rgbPlanes = track(new cv.MatVector());
       cv.split(rgb, rgbPlanes);
       const rPlane = rgbPlanes.get(0);
       const gPlane = rgbPlanes.get(1);
-      const bPlane = rgbPlanes.get(2);
 
-      // Chroma conditions: (R > G * 1.25) and (B > G * 1.15)
       const diffRG = track(new cv.Mat());
-      const diffBG = track(new cv.Mat());
       cv.subtract(rPlane, gPlane, diffRG);
-      cv.subtract(bPlane, gPlane, diffBG);
 
       const threshRG = track(new cv.Mat());
-      const threshBG = track(new cv.Mat());
-      const minDiff = isLowLight ? 8 : 14;
+      const minDiff = isLowLight ? 6 : 10;
       cv.threshold(diffRG, threshRG, minDiff, 255, cv.THRESH_BINARY);
-      cv.threshold(diffBG, threshBG, Math.max(5, minDiff - 4), 255, cv.THRESH_BINARY);
 
-      const chromaMask = track(new cv.Mat());
-      cv.bitwise_and(threshRG, threshBG, chromaMask);
-      cv.bitwise_and(mask, chromaMask, mask);
+      cv.bitwise_and(mask, threshRG, mask);
 
       rPlane.delete();
       gPlane.delete();
-      bPlane.delete();
+      rgbPlanes.get(2).delete();
     }
 
-    // 5. [REQ] 8-Point or 4-Point Perimeter Court Masking
+    // 5. Perimeter Court ROI Masking (Works with both 4-point and 8-point polygons)
     if (courtPoints && courtPoints.length >= 4) {
       const roi = track(cv.Mat.zeros(height, width, cv.CV_8UC1));
       const polyPts = courtPoints.map((p) => [Math.round(p.x), Math.round(p.y)]).flat();
@@ -215,8 +203,8 @@ export function detectTwoMagentaBlobsOpenCV(
     const hierarchy = track(new cv.Mat());
     cv.findContours(mask, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
-    const minArea = Math.max(4, Math.floor(settings.minBlobSize / 3));
-    const maxArea = settings.maxBlobSize || 12000;
+    const minArea = Math.max(3, Math.floor(settings.minBlobSize / 4));
+    const maxArea = settings.maxBlobSize || 15000;
     const scored: Array<{ blob: DetectedBlob; score: number }> = [];
 
     for (let i = 0; i < contours.size(); i++) {
@@ -224,21 +212,19 @@ export function detectTwoMagentaBlobsOpenCV(
       const area = cv.contourArea(cnt);
       if (area >= minArea && area <= maxArea) {
         const r = cv.boundingRect(cnt);
-        // Reject table-wide glare washes
-        if (r.width <= 140 && r.height <= 140) {
+        if (r.width <= 160 && r.height <= 160) {
           const m = cv.moments(cnt, false);
           const cx = m.m00 > 0 ? m.m10 / m.m00 : r.x + r.width / 2;
           const cy = m.m00 > 0 ? m.m01 / m.m00 : r.y + r.height / 2;
           const aspect = Math.min(r.width, r.height) / Math.max(r.width, r.height || 1);
-          // High compactness score preferred for rectangular/square Lego blocks
           scored.push({
-            score: area * (1 + aspect * 1.8),
+            score: area * (1 + aspect * 1.6),
             blob: {
               x: cx,
               y: cy,
               radius: Math.max(14, (r.width + r.height) / 4),
               pixelCount: Math.round(area),
-              confidence: Math.min(1.0, Math.max(0.45, (area / 20) * 0.95)),
+              confidence: Math.min(1.0, Math.max(0.45, (area / 18) * 0.95)),
               bbox: { minX: r.x, maxX: r.x + r.width, minY: r.y, maxY: r.y + r.height },
             },
           });
@@ -259,7 +245,7 @@ export function detectTwoMagentaBlobsOpenCV(
       try {
         m.delete();
       } catch {
-        // already cleaned
+        // cleaned
       }
     }
   }

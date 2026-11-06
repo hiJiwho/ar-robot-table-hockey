@@ -297,6 +297,15 @@ export default function App() {
     };
   }, []);
 
+  const cvReadyRef = useRef<boolean>(false);
+
+  // Preload OpenCV (opencv.js WASM) in the background
+  useEffect(() => {
+    loadOpenCV().then((cv) => {
+      if (cv) cvReadyRef.current = true;
+    });
+  }, []);
+
   const sendFullSyncState = useCallback(() => {
     const live = liveStateRef.current;
     const payload = {
@@ -315,6 +324,14 @@ export default function App() {
       stats,
       goalAnnouncement,
       lowLightMode: !!colorSettings.lowLightMode,
+      colorSettings,
+      visionDiagnostics: {
+        engine: colorSettings.visionEngine || 'OPENCV',
+        isOpenCVActive: cvReadyRef.current,
+        detectedBlobsCount: (live.blueRobot.detected ? 1 : 0) + (live.redRobot.detected ? 1 : 0),
+        blueConfidence: live.blueRobot.confidence,
+        redConfidence: live.redRobot.confidence,
+      },
       puck: { x: live.puck.x, y: live.puck.y, vx: live.puck.vx, vy: live.puck.vy },
       blueRobot: { tableX: live.blueRobot.tableX, tableY: live.blueRobot.tableY, detected: live.blueRobot.detected, confidence: live.blueRobot.confidence },
       redRobot: { tableX: live.redRobot.tableX, tableY: live.redRobot.tableY, detected: live.redRobot.detected, confidence: live.redRobot.confidence },
@@ -324,16 +341,7 @@ export default function App() {
       broadcastRef.current?.postMessage(payload);
       localStorage.setItem('airhockey_sync', JSON.stringify(payload));
     } catch {}
-  }, [score, timeLeft, gamePhase, matchMode, customDuration, targetPoints, goalSize, screenCorners, cameraCorners, isCameraMirrored, theme, stats, goalAnnouncement, colorSettings.lowLightMode]);
-
-  useEffect(() => {
-    sendFullSyncState();
-  }, [sendFullSyncState]);
-
-  // Preload OpenCV (opencv.js WASM) in the background
-  useEffect(() => {
-    loadOpenCV();
-  }, []);
+  }, [score, timeLeft, gamePhase, matchMode, customDuration, targetPoints, goalSize, screenCorners, cameraCorners, isCameraMirrored, theme, stats, goalAnnouncement, colorSettings]);
 
   // Handle Mute
   const handleToggleMute = () => {
@@ -607,6 +615,14 @@ export default function App() {
         }
       } else if (msg.action === 'SET_LOW_LIGHT_MODE') {
         setColorSettings((prev) => ({ ...prev, lowLightMode: !!msg.lowLightMode }));
+      } else if (msg.action === 'UPDATE_COLOR_SETTINGS') {
+        if (msg.colorSettings) {
+          setColorSettings((prev) => ({ ...prev, ...msg.colorSettings }));
+        }
+      } else if (msg.action === 'SAMPLE_COLOR') {
+        if (msg.customSample) {
+          setColorSettings((prev) => ({ ...prev, customSample: msg.customSample }));
+        }
       } else if (msg.action === 'UPDATE_GOAL_SIZE') {
         if (typeof msg.goalSize === 'number') {
           setGoalSize(msg.goalSize);
@@ -875,13 +891,11 @@ export default function App() {
             }
           }
 
-          // Camera quad in processing canvas coordinates:
-          const cameraQuadPixels: FourCorners = [
-            { x: curCameraCorners[0].x * pCanvas.width, y: curCameraCorners[0].y * pCanvas.height },
-            { x: curCameraCorners[1].x * pCanvas.width, y: curCameraCorners[1].y * pCanvas.height },
-            { x: curCameraCorners[2].x * pCanvas.width, y: curCameraCorners[2].y * pCanvas.height },
-            { x: curCameraCorners[3].x * pCanvas.width, y: curCameraCorners[3].y * pCanvas.height },
-          ];
+          // Camera perimeter polygon in processing canvas coordinates (all 8 points for complete court coverage):
+          const cameraCourtPixels = curCameraCorners.map((p) => ({
+            x: p.x * pCanvas.width,
+            y: p.y * pCanvas.height,
+          }));
 
           // Project last known robot positions to camera coordinates for continuous tracking
           const curBlue = liveStateRef.current.blueRobot;
@@ -901,13 +915,13 @@ export default function App() {
               ? detectTwoMagentaBlobsOpenCV(
                   imageData,
                   curColorSettings,
-                  cameraQuadPixels,
+                  cameraCourtPixels,
                   debugMaskData,
                   lastBlueCam,
                   lastRedCam
                 )
               : null;
-          const { blueBlob, redBlob } =
+          const { blueBlob, redBlob, allBlobs } =
             cvResult ??
             detectTwoMagentaBlobs(
               imageData,
@@ -916,7 +930,7 @@ export default function App() {
                 : curColorSettings,
               curColorSettings.minBlobSize,
               curColorSettings.maxBlobSize,
-              cameraQuadPixels,
+              cameraCourtPixels,
               debugMaskData,
               lastBlueCam,
               lastRedCam

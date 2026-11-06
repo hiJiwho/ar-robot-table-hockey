@@ -13,6 +13,8 @@ import {
   EightPoints,
   toEightPoints,
   GameActionMessage,
+  ColorSettings,
+  VisionEngineType,
 } from '../types/hockey';
 import {
   Clock,
@@ -36,6 +38,10 @@ import {
   FlipHorizontal,
   Target,
   Sparkles,
+  Cpu,
+  Pipette,
+  Zap,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 export const ConsoleScreen: React.FC = () => {
@@ -71,9 +77,40 @@ export const ConsoleScreen: React.FC = () => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [lowLightMode, setLowLightMode] = useState<boolean>(false);
 
+  // Vision Diagnostics & Settings
+  const [colorSettings, setColorSettings] = useState<ColorSettings>({
+    magenta: {
+      hMin: 255,
+      hMax: 25,
+      sMin: 0.10,
+      sMax: 1.0,
+      vMin: 0.08,
+      vMax: 1.0,
+    },
+    minBlobSize: 8,
+    maxBlobSize: 15000,
+    visionEngine: 'OPENCV',
+    sensitivity: 3,
+    customSample: null,
+    lowLightMode: false,
+  });
+  const [visionDiagnostics, setVisionDiagnostics] = useState<{
+    engine: VisionEngineType;
+    isOpenCVActive: boolean;
+    detectedBlobsCount: number;
+    blueConfidence: number;
+    redConfidence: number;
+  }>({
+    engine: 'OPENCV',
+    isOpenCVActive: true,
+    detectedBlobsCount: 0,
+    blueConfidence: 0,
+    redConfidence: 0,
+  });
+
   // Settings & Calibration Modal
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<'SCREEN' | 'CAMERA' | 'TABLE' | 'LOWLIGHT'>('SCREEN');
+  const [settingsTab, setSettingsTab] = useState<'SCREEN' | 'CAMERA' | 'VISION' | 'TABLE'>('VISION');
 
   // Calibration Corners:
   // - screenCorners: 4-Point Projector Display Quad (경기장은 4점으로 깨끗하고 반듯하게)
@@ -129,6 +166,8 @@ export const ConsoleScreen: React.FC = () => {
       }
       if (data.cameraCorners) setCameraCorners(toEightPoints(data.cameraCorners));
       if (typeof data.lowLightMode === 'boolean') setLowLightMode(data.lowLightMode);
+      if (data.colorSettings) setColorSettings(data.colorSettings);
+      if (data.visionDiagnostics) setVisionDiagnostics(data.visionDiagnostics);
       if (typeof data.goalSize === 'number') setGoalSize(data.goalSize);
       if (typeof data.isCameraMirrored === 'boolean') setIsCameraMirrored(data.isCameraMirrored);
       if (typeof data.targetPoints === 'number') setTargetPointsInput(data.targetPoints);
@@ -161,6 +200,8 @@ export const ConsoleScreen: React.FC = () => {
             setCameraCorners(toEightPoints(data.cameraCorners));
           } else if (data.action === 'SET_LOW_LIGHT_MODE') {
             setLowLightMode(!!data.lowLightMode);
+          } else if (data.action === 'UPDATE_COLOR_SETTINGS' && data.colorSettings) {
+            setColorSettings((prev) => ({ ...prev, ...data.colorSettings }));
           }
         }
       };
@@ -202,10 +243,10 @@ export const ConsoleScreen: React.FC = () => {
     }
   };
 
-  // Start webcam stream when Camera Calibration tab opens
+  // Start webcam stream when Camera Calibration or Vision Studio tab opens
   useEffect(() => {
     let stream: MediaStream | null = null;
-    if (isSettingsOpen && settingsTab === 'CAMERA') {
+    if (isSettingsOpen && (settingsTab === 'CAMERA' || settingsTab === 'VISION')) {
       navigator.mediaDevices
         ?.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false })
         .then((s) => {
@@ -233,6 +274,94 @@ export const ConsoleScreen: React.FC = () => {
       }
     };
   }, [isSettingsOpen, settingsTab]);
+
+  // Eyedropper Color Sampler on Webcam Feed
+  const handleEyedropperSample = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!consoleVideoRef.current || !camContainerRef.current) return;
+    const video = consoleVideoRef.current;
+    if (video.videoWidth === 0 || video.videoHeight === 0) return;
+
+    const rect = camContainerRef.current.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+
+    const normX = Math.max(0, Math.min(1, clickX / rect.width));
+    const normY = Math.max(0, Math.min(1, clickY / rect.height));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const px = Math.floor(normX * canvas.width);
+    const py = Math.floor(normY * canvas.height);
+    const pixel = ctx.getImageData(px, py, 1, 1).data;
+    const r = pixel[0];
+    const g = pixel[1];
+    const b = pixel[2];
+    const hex = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+
+    const sample = { r, g, b, hex };
+    setColorSettings((prev) => ({ ...prev, customSample: sample }));
+    sendAction({
+      type: 'GAME_ACTION',
+      action: 'SAMPLE_COLOR',
+      customSample: sample,
+    });
+  };
+
+  const handleClearSample = () => {
+    setColorSettings((prev) => ({ ...prev, customSample: null }));
+    sendAction({
+      type: 'GAME_ACTION',
+      action: 'SAMPLE_COLOR',
+      customSample: null,
+    });
+  };
+
+  const handleUpdateEngine = (engine: VisionEngineType) => {
+    setColorSettings((prev) => ({ ...prev, visionEngine: engine }));
+    sendAction({
+      type: 'GAME_ACTION',
+      action: 'UPDATE_COLOR_SETTINGS',
+      colorSettings: { visionEngine: engine },
+    });
+  };
+
+  const handleUpdateSensitivity = (sens: number) => {
+    setColorSettings((prev) => ({ ...prev, sensitivity: sens }));
+    sendAction({
+      type: 'GAME_ACTION',
+      action: 'UPDATE_COLOR_SETTINGS',
+      colorSettings: { sensitivity: sens },
+    });
+  };
+
+  const handleApplyPreset = (preset: 'STANDARD' | 'PROJECTOR' | 'DARKLIGHT' | 'MAX_SENS') => {
+    let next: Partial<ColorSettings> = {};
+    if (preset === 'STANDARD') {
+      next = { visionEngine: 'OPENCV', sensitivity: 3, lowLightMode: false, customSample: null };
+      setLowLightMode(false);
+    } else if (preset === 'PROJECTOR') {
+      next = { visionEngine: 'CHROMATIC', sensitivity: 3, lowLightMode: false };
+      setLowLightMode(false);
+    } else if (preset === 'DARKLIGHT') {
+      next = { visionEngine: 'OPENCV', sensitivity: 4, lowLightMode: true };
+      setLowLightMode(true);
+      sendAction({ type: 'GAME_ACTION', action: 'SET_LOW_LIGHT_MODE', lowLightMode: true });
+    } else if (preset === 'MAX_SENS') {
+      next = { visionEngine: 'OPENCV', sensitivity: 5, lowLightMode: false };
+      setLowLightMode(false);
+    }
+    setColorSettings((prev) => ({ ...prev, ...next } as ColorSettings));
+    sendAction({
+      type: 'GAME_ACTION',
+      action: 'UPDATE_COLOR_SETTINGS',
+      colorSettings: next,
+    });
+  };
 
   const handleStartGame = () => {
     sendAction({ type: 'GAME_ACTION', action: 'START' });
@@ -405,6 +534,19 @@ export const ConsoleScreen: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* [REQ] 전문 인식 관리 시스템 바로가기 버튼 */}
+          <button
+            onClick={() => {
+              setIsSettingsOpen(true);
+              setSettingsTab('VISION');
+            }}
+            className="px-3 py-1.5 rounded-lg bg-pink-600 hover:bg-pink-500 text-white text-xs font-black flex items-center gap-1.5 transition-all shadow-md active:scale-95"
+            title="실시간 비전 엔진 진단, 원클릭 스포이트 및 마젠타 블록 인식 스튜디오"
+          >
+            <Cpu className="w-4 h-4 text-yellow-300" />
+            <span>비전 인식 관리 스튜디오</span>
+          </button>
+
           {/* [REQ] 글고 불 꺼도 인식 잘 되게 해줘 (설정에 이거 인식용 하나 넣어주면 ㄱㅅ) */}
           <button
             onClick={handleToggleLowLightMode}
@@ -939,7 +1081,7 @@ export const ConsoleScreen: React.FC = () => {
                 }`}
               >
                 <Monitor className="w-4 h-4" />
-                <span>1. 창 캘리브레이션 (프로젝터)</span>
+                <span>1. 창 캘리브레이션</span>
               </button>
               <button
                 onClick={() => setSettingsTab('CAMERA')}
@@ -950,7 +1092,18 @@ export const ConsoleScreen: React.FC = () => {
                 }`}
               >
                 <Camera className="w-4 h-4" />
-                <span>2. 카메라 캘리브레이션 (웹캠)</span>
+                <span>2. 카메라 캘리브레이션</span>
+              </button>
+              <button
+                onClick={() => setSettingsTab('VISION')}
+                className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+                  settingsTab === 'VISION'
+                    ? 'bg-pink-600 text-white shadow'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Cpu className="w-4 h-4 text-yellow-300" />
+                <span>3. 비전 인식 스튜디오</span>
               </button>
               <button
                 onClick={() => setSettingsTab('TABLE')}
@@ -961,7 +1114,7 @@ export const ConsoleScreen: React.FC = () => {
                 }`}
               >
                 <Target className="w-4 h-4" />
-                <span>3. 골대 크기 설정</span>
+                <span>4. 골대 크기</span>
               </button>
             </div>
 
@@ -1115,7 +1268,244 @@ export const ConsoleScreen: React.FC = () => {
                 </div>
               )}
 
-              {/* Tab 3: Table & Goal Size */}
+              {/* Tab: VISION - 전문 비전 인식 스튜디오 */}
+              {settingsTab === 'VISION' && (
+                <div className="flex flex-col gap-4">
+                  {/* 1. 실시간 진단 HUD */}
+                  <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 flex flex-col gap-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-bold text-pink-400 flex items-center gap-2">
+                        <Cpu className="w-4 h-4 text-pink-400 animate-pulse" />
+                        실시간 비전 인식 상태 진단 (Live Vision HUD)
+                      </span>
+                      <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-pink-950 border border-pink-700 text-pink-300">
+                        {visionDiagnostics?.engine || colorSettings.visionEngine} {visionDiagnostics?.isOpenCVActive ? '(WASM 활성)' : ''}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* 1P 검출 상태 (Cyan) */}
+                      <div className={`p-3 rounded-xl border flex flex-col gap-1.5 transition-all ${
+                        visionDiagnostics?.blueConfidence > 0.3
+                          ? 'bg-cyan-950/40 border-cyan-500/50 shadow-sm'
+                          : 'bg-slate-900/60 border-slate-800'
+                      }`}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-black text-cyan-400 flex items-center gap-1.5">
+                            <span className={`w-2.5 h-2.5 rounded-full ${visionDiagnostics?.blueConfidence > 0.3 ? 'bg-cyan-400 animate-ping' : 'bg-slate-600'}`} />
+                            1P (Cyan) 패들 블록
+                          </span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            visionDiagnostics?.blueConfidence > 0.3
+                              ? 'bg-cyan-500 text-black'
+                              : 'bg-slate-800 text-slate-400'
+                          }`}>
+                            {visionDiagnostics?.blueConfidence > 0.3 ? '감지 성공' : '미검출'}
+                          </span>
+                        </div>
+                        <div className="text-[11px] font-mono text-slate-300">
+                          {visionDiagnostics?.blueConfidence > 0.3 ? '패들 추적 중 (동기화 완료)' : '패들 수색 중...'}
+                        </div>
+                        <div className="text-[10px] text-slate-400 flex justify-between">
+                          <span>신뢰도: {Math.round((visionDiagnostics?.blueConfidence || 0) * 100)}%</span>
+                          <span>총 블롭 수: {visionDiagnostics?.detectedBlobsCount || 0}</span>
+                        </div>
+                      </div>
+
+                      {/* 2P 검출 상태 (Yellow) */}
+                      <div className={`p-3 rounded-xl border flex flex-col gap-1.5 transition-all ${
+                        visionDiagnostics?.redConfidence > 0.3
+                          ? 'bg-yellow-950/40 border-yellow-500/50 shadow-sm'
+                          : 'bg-slate-900/60 border-slate-800'
+                      }`}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-black text-yellow-400 flex items-center gap-1.5">
+                            <span className={`w-2.5 h-2.5 rounded-full ${visionDiagnostics?.redConfidence > 0.3 ? 'bg-yellow-400 animate-ping' : 'bg-slate-600'}`} />
+                            2P (Yellow) 패들 블록
+                          </span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            visionDiagnostics?.redConfidence > 0.3
+                              ? 'bg-yellow-500 text-black'
+                              : 'bg-slate-800 text-slate-400'
+                          }`}>
+                            {visionDiagnostics?.redConfidence > 0.3 ? '감지 성공' : '미검출'}
+                          </span>
+                        </div>
+                        <div className="text-[11px] font-mono text-slate-300">
+                          {visionDiagnostics?.redConfidence > 0.3 ? '패들 추적 중 (동기화 완료)' : '패들 수색 중...'}
+                        </div>
+                        <div className="text-[10px] text-slate-400 flex justify-between">
+                          <span>신뢰도: {Math.round((visionDiagnostics?.redConfidence || 0) * 100)}%</span>
+                          <span>총 블롭 수: {visionDiagnostics?.detectedBlobsCount || 0}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 2. 원클릭 환경 프리셋 */}
+                  <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 flex flex-col gap-2.5">
+                    <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                      <Zap className="w-4 h-4 text-amber-400" />
+                      원클릭 조명 환경 프리셋 (환경에 맞춰 즉시 최적화)
+                    </span>
+                    <div className="grid grid-cols-4 gap-2">
+                      <button
+                        onClick={() => handleApplyPreset('STANDARD')}
+                        className="py-2.5 px-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-bold text-slate-200 flex flex-col items-center gap-1 transition-all active:scale-95"
+                      >
+                        <Sun className="w-4 h-4 text-amber-300" />
+                        <span>기본 실내 형광등</span>
+                      </button>
+                      <button
+                        onClick={() => handleApplyPreset('PROJECTOR')}
+                        className="py-2.5 px-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-bold text-sky-300 flex flex-col items-center gap-1 transition-all active:scale-95"
+                      >
+                        <Monitor className="w-4 h-4 text-sky-400" />
+                        <span>프로젝터 투사광</span>
+                      </button>
+                      <button
+                        onClick={() => handleApplyPreset('DARKLIGHT')}
+                        className="py-2.5 px-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-purple-700/60 text-xs font-bold text-purple-300 flex flex-col items-center gap-1 transition-all active:scale-95"
+                      >
+                        <Moon className="w-4 h-4 text-purple-400" />
+                        <span>🌙 불 끈 암실</span>
+                      </button>
+                      <button
+                        onClick={() => handleApplyPreset('MAX_SENS')}
+                        className="py-2.5 px-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-pink-700/60 text-xs font-bold text-pink-300 flex flex-col items-center gap-1 transition-all active:scale-95"
+                      >
+                        <Sparkles className="w-4 h-4 text-pink-400" />
+                        <span>초고감도 마젠타</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 3. 웹캠 화면 인터랙티브 스포이트 (Eyedropper) */}
+                  <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 flex flex-col gap-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                        <Pipette className="w-4 h-4 text-pink-400" />
+                        실시간 웹캠 화면 & 원클릭 스포이트 색상 학습
+                      </span>
+                      {colorSettings.customSample && (
+                        <button
+                          onClick={handleClearSample}
+                          className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors"
+                        >
+                          학습 초기화
+                        </button>
+                      )}
+                    </div>
+
+                    <p className="text-[11px] text-slate-400">
+                      💡 아래 웹캠 화면에서 실제 레고 블록/패들을 마우스로 <strong>클릭</strong>하면 그 지점의 색상을 즉시 학습하여 인식률을 극대화합니다.
+                    </p>
+
+                    {/* 인터랙티브 웹캠 화면 */}
+                    <div
+                      ref={camContainerRef}
+                      className="relative w-full aspect-video bg-black rounded-xl overflow-hidden border border-slate-700 cursor-crosshair select-none"
+                      onClick={handleEyedropperSample}
+                    >
+                      <video
+                        ref={consoleVideoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className={`w-full h-full object-contain ${isCameraMirrored ? '-scale-x-100' : ''}`}
+                      />
+                      {/* 스포이트 타겟 오버레이 안내 */}
+                      <div className="absolute top-2 right-2 px-2.5 py-1 rounded-lg bg-black/75 backdrop-blur-sm border border-slate-600 text-[11px] text-white font-bold flex items-center gap-1.5 pointer-events-none">
+                        <Pipette className="w-3.5 h-3.5 text-pink-400 animate-bounce" />
+                        <span>클릭한 위치의 색상을 즉시 학습</span>
+                      </div>
+                    </div>
+
+                    {/* 현재 타겟 색상 미리보기 */}
+                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-400">학습된 커스텀 컬러:</span>
+                        {colorSettings.customSample ? (
+                          <>
+                            <div
+                              className="w-5 h-5 rounded-md border border-white/40 shadow"
+                              style={{ backgroundColor: colorSettings.customSample.hex }}
+                            />
+                            <span className="font-mono text-pink-400 font-bold">{colorSettings.customSample.hex}</span>
+                            <span className="text-[10px] text-slate-500 font-mono">
+                              (R:{colorSettings.customSample.r} G:{colorSettings.customSample.g} B:{colorSettings.customSample.b})
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-slate-500 text-[11px]">기본 고감도 마젠타/형광핑크 모델 적용 중</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 4. 엔진 상세 제어 및 감도 조절 */}
+                  <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 flex flex-col gap-3">
+                    <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                      <SlidersHorizontal className="w-4 h-4 text-indigo-400" />
+                      인식 엔진 모드 & 감도 세부 설정
+                    </span>
+
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        onClick={() => handleUpdateEngine('OPENCV')}
+                        className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
+                          colorSettings.visionEngine === 'OPENCV'
+                            ? 'bg-indigo-600 text-white border-indigo-400 shadow-md'
+                            : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                        }`}
+                      >
+                        OpenCV (WASM 고성능)
+                      </button>
+                      <button
+                        onClick={() => handleUpdateEngine('CHROMATIC')}
+                        className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
+                          colorSettings.visionEngine === 'CHROMATIC'
+                            ? 'bg-indigo-600 text-white border-indigo-400 shadow-md'
+                            : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                        }`}
+                      >
+                        스마트 크로마틱 (RGB 비율)
+                      </button>
+                      <button
+                        onClick={() => handleUpdateEngine('ADAPTIVE_HSV')}
+                        className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
+                          colorSettings.visionEngine === 'ADAPTIVE_HSV'
+                            ? 'bg-indigo-600 text-white border-indigo-400 shadow-md'
+                            : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                        }`}
+                      >
+                        적응형 HSV
+                      </button>
+                    </div>
+
+                    {/* 감도 슬라이더 */}
+                    <div className="flex flex-col gap-1.5 pt-2">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="text-slate-400">인식 감도 (1: 정밀 ~ 5: 초민감)</span>
+                        <span className="font-mono font-bold text-pink-400 bg-pink-950 px-2 py-0.5 rounded border border-pink-800">
+                          Lv.{colorSettings.sensitivity}
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min="1"
+                        max="5"
+                        step="1"
+                        value={colorSettings.sensitivity}
+                        onChange={(e) => handleUpdateSensitivity(Number(e.target.value))}
+                        className="w-full accent-pink-500 cursor-pointer"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 4: Table & Goal Size */}
               {settingsTab === 'TABLE' && (
                 <div className="flex flex-col gap-4">
                   <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 flex flex-col gap-3">

@@ -99,13 +99,16 @@ function isMagentaChromatic(
   lowLightMode = false
 ): boolean {
   const sum = r + g + b;
-  const minSum = lowLightMode ? 14 : 35; // Allow darker pixels when lights are off
+  const minSum = lowLightMode ? 12 : 28;
   if (sum < minSum) return false;
 
-  // Strict anti-jitter: Magenta must have dominant Red and Blue over Green
-  const gRatio = lowLightMode ? 1.12 : 1.25;
-  const bRatio = lowLightMode ? 1.05 : 1.15;
-  if (r < g * gRatio || b < g * bRatio) {
+  // 1. Red must clearly exceed Green (magenta/pink characteristic)
+  if (r <= g + (lowLightMode ? 4 : 8)) {
+    return false;
+  }
+
+  // 2. Reject skin tone / warm hands (hands have high R but very low B: B << G)
+  if (b < g - 25) {
     return false;
   }
 
@@ -123,30 +126,29 @@ function isMagentaChromatic(
 
       // Chromatic distance in normalized color space (invariant to lighting intensity)
       const dist = Math.hypot(rc - src, (gc - sgc) * 1.2, bc - sbc);
-      const tolerance = (0.12 + sensitivity * 0.04) * (lowLightMode ? 1.25 : 1.0);
+      const tolerance = (0.15 + sensitivity * 0.05) * (lowLightMode ? 1.3 : 1.0);
       if (dist < tolerance) return true;
     }
   }
 
   // Base threshold adjusted by sensitivity (1=strict, 5=lenient)
-  let thresh = Math.max(0.06, 0.24 - sensitivity * 0.035);
+  let thresh = Math.max(0.04, 0.20 - sensitivity * 0.035);
   if (lowLightMode) {
-    thresh *= 0.72; // More permissive chromatic excess in darkness
+    thresh *= 0.65;
   }
 
   // Normalized Excess Magenta (NEM): (rc + bc) - 2*gc
   const nem = (rc + bc) - 2 * gc;
 
-  const maxGc = lowLightMode ? 0.36 : 0.33;
-  const minRc = lowLightMode ? 0.28 : 0.31;
-  const minBc = lowLightMode ? 0.21 : 0.24;
+  const maxGc = lowLightMode ? 0.38 : 0.35;
+  const minRc = lowLightMode ? 0.26 : 0.29;
 
-  if (nem > thresh && gc < maxGc && rc > minRc && bc > minBc) {
+  if (nem > thresh && gc < maxGc && rc > minRc) {
     return true;
   }
 
-  // Also support shadowed / deep purple Lego blocks
-  if (rc > (lowLightMode ? 0.33 : 0.36) && bc > (lowLightMode ? 0.23 : 0.26) && gc < (lowLightMode ? 0.32 : 0.29)) {
+  // Shadowed / deep purple or hot-pink Lego blocks
+  if (rc > (lowLightMode ? 0.30 : 0.34) && gc < (lowLightMode ? 0.34 : 0.31)) {
     return true;
   }
 

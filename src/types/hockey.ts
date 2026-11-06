@@ -121,7 +121,10 @@ export type GameActionMessage = {
     | 'UPDATE_CAMERA_CORNERS'
     | 'CONFIRM_CALIBRATION'
     | 'TOGGLE_MIRROR'
-    | 'UPDATE_GOAL_SIZE';
+    | 'UPDATE_GOAL_SIZE'
+    | 'SET_LOW_LIGHT_MODE'
+    | 'UPDATE_COLOR_SETTINGS'
+    | 'SAMPLE_COLOR';
   seconds?: number;
   score?: MatchScore;
   mode?: MatchMode;
@@ -133,6 +136,8 @@ export type GameActionMessage = {
   cameraCorners?: CalibrationCorners;
   isCameraMirrored?: boolean;
   lowLightMode?: boolean;
+  colorSettings?: Partial<ColorSettings>;
+  customSample?: { r: number; g: number; b: number; hex: string } | null;
 };
 
 export const DEFAULT_NORMALIZED_CORNERS: FourCorners = [
@@ -218,6 +223,14 @@ export interface SyncStatePayload {
   cameraCorners?: CalibrationCorners;
   isCameraMirrored?: boolean;
   lowLightMode?: boolean;
+  colorSettings?: ColorSettings;
+  visionDiagnostics?: {
+    engine: VisionEngineType;
+    isOpenCVActive: boolean;
+    detectedBlobsCount: number;
+    blueConfidence: number;
+    redConfidence: number;
+  };
   puck?: { x: number; y: number; vx: number; vy: number };
   blueRobot?: { tableX: number; tableY: number; detected: boolean; confidence: number };
   redRobot?: { tableX: number; tableY: number; detected: boolean; confidence: number };
