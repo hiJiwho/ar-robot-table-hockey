@@ -152,6 +152,7 @@ export function stepPuckPhysics(
     }
 
     // 7. Striker / Paddle Collisions (Both Blue & Red robots)
+    // [REQ 4] "공이 콕에 맞고 자책골 되던데;; 이 엔진 좀 바꿔줘" -> 자책골 100% 방지 & 호쾌한 전방 튕김 엔진
     const checkStriker = (robot: RobotState, team: 'blue' | 'red') => {
       if (!robot.detected || robot.confidence < 0.35) return;
 
@@ -161,59 +162,66 @@ export function stepPuckPhysics(
       const dist = Math.hypot(dx, dy);
       const minDist = r + strikerRadius;
 
-      if (dist < minDist && dist > 0.0001) {
-        const nx = dx / dist;
-        const ny = dy / dist;
+      if (dist < minDist) {
+        // Safe normal calculation
+        let nx = dist > 0.0001 ? dx / dist : (team === 'blue' ? 1 : -1);
+        let ny = dist > 0.0001 ? dy / dist : 0;
 
-        // Position separation to completely prevent puck sticking inside paddle
-        px = robot.tableX + nx * (minDist + 0.5);
-        py = robot.tableY + ny * (minDist + 0.5);
-
-        // Relative velocity: V_puck - V_striker
-        const rvx = pvx - robot.vx;
-        const rvy = pvy - robot.vy;
-        const vDotN = rvx * nx + rvy * ny;
-
-        // Only reflect if approaching striker
-        if (vDotN < 0) {
-          // Dynamic air-hockey restitution (1.45 = snappy, energetic smash)
-          const restitution = 1.45;
-          const impulse = -(1 + restitution) * vDotN;
-
-          // Transfer momentum: normal reflection + fraction of paddle swing momentum
-          pvx += impulse * nx + robot.vx * 0.7;
-          pvy += impulse * ny + robot.vy * 0.7;
-
-          // [REQ] 좀만 쳐도 앞뒤(상대 골대 X축)로만 시원하게 잘 나가게 강력한 전방 추진력 보정
-          const forwardSpeed = 680;
-          if (team === 'blue') {
-            pvx = Math.max(forwardSpeed, Math.abs(pvx) + 420);
-          } else {
-            pvx = -Math.max(forwardSpeed, Math.abs(pvx) + 420);
+        // [Anti-Own-Goal Guarantee]
+        // 1P (Blue): 퍽이 절대 패들 뒤(왼쪽 골대)로 뚫고 들어가지 않도록 전방(오른쪽)으로 강제 분리 & 전진
+        // 2P (Red): 퍽이 절대 패들 뒤(오른쪽 골대)로 뚫고 들어가지 않도록 전방(왼쪽)으로 강제 분리 & 전진
+        if (team === 'blue') {
+          // Blue striker faces right (+X). If normal points backwards, flip to front
+          if (nx < 0.15) {
+            nx = Math.max(0.4, Math.abs(nx));
+            const reLen = Math.hypot(nx, ny) || 1;
+            nx /= reLen;
+            ny /= reLen;
           }
+          px = Math.max(robot.tableX + minDist * 0.5, robot.tableX + nx * (minDist + 1));
+          py = robot.tableY + ny * (minDist + 1);
 
-          // Off-center vertical deflection: 위아래 편향은 대폭 억제(0.2x)하여 퍽이 상하 벽에 처박히지 않고 앞뒤로 곧장 날아가게 함
-          const offsetRatio = Math.max(-1, Math.min(1, dy / minDist));
-          pvy = pvy * 0.2 + offsetRatio * 110;
-
-          // Ensure minimum lively hit speed (680 px/s) so even light touches produce a crisp shot
-          let curSpeed = Math.hypot(pvx, pvy);
-          if (curSpeed < forwardSpeed) {
-            const boost = forwardSpeed / (curSpeed || 1);
-            pvx *= boost;
-            pvy *= boost;
-            curSpeed = forwardSpeed;
+          // Force energetic forward propulsion (+X)
+          const swingBonus = Math.max(0, robot.vx * 0.8);
+          pvx = Math.max(620, Math.abs(pvx) * 1.1 + swingBonus + 380);
+        } else {
+          // Red striker faces left (-X). If normal points backwards, flip to front
+          if (nx > -0.15) {
+            nx = -Math.max(0.4, Math.abs(nx));
+            const reLen = Math.hypot(nx, ny) || 1;
+            nx /= reLen;
+            ny /= reLen;
           }
+          px = Math.min(robot.tableX - minDist * 0.5, robot.tableX + nx * (minDist + 1));
+          py = robot.tableY + ny * (minDist + 1);
 
-          lastHitTeam = team;
-          events.push({
-            type: 'ROBOT',
-            team,
-            x: px,
-            y: py,
-            speed: curSpeed,
-          });
+          // Force energetic forward propulsion (-X)
+          const swingBonus = Math.max(0, -robot.vx * 0.8);
+          pvx = -Math.max(620, Math.abs(pvx) * 1.1 + swingBonus + 380);
         }
+
+        // Controlled Y deflection based on impact height & paddle vertical velocity
+        const offsetRatio = Math.max(-1, Math.min(1, dy / minDist));
+        pvy = pvy * 0.25 + offsetRatio * 180 + robot.vy * 0.45;
+
+        // Ensure crisp total speed
+        let curSpeed = Math.hypot(pvx, pvy);
+        const minHitSpeed = 650;
+        if (curSpeed < minHitSpeed) {
+          const boost = minHitSpeed / (curSpeed || 1);
+          pvx *= boost;
+          pvy *= boost;
+          curSpeed = minHitSpeed;
+        }
+
+        lastHitTeam = team;
+        events.push({
+          type: 'ROBOT',
+          team,
+          x: px,
+          y: py,
+          speed: curSpeed,
+        });
       }
     };
 

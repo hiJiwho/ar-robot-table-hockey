@@ -270,6 +270,10 @@ export default function App() {
   gamePhaseRef.current = gamePhase;
   const matchModeRef = useRef(matchMode);
   matchModeRef.current = matchMode;
+  const scoreRef = useRef(score);
+  scoreRef.current = score;
+  const timeLeftRef = useRef(timeLeft);
+  timeLeftRef.current = timeLeft;
   const isVirtualModeRef = useRef(isVirtualMode);
   isVirtualModeRef.current = isVirtualMode;
   const colorSettingsRef = useRef(colorSettings);
@@ -342,6 +346,11 @@ export default function App() {
       localStorage.setItem('airhockey_sync', JSON.stringify(payload));
     } catch {}
   }, [score, timeLeft, gamePhase, matchMode, customDuration, targetPoints, goalSize, screenCorners, cameraCorners, isCameraMirrored, theme, stats, goalAnnouncement, colorSettings]);
+
+  // [REQ 1] 매인화면과 서브화면 점수/상태 실시간 완전 동기화: 상태 변경 시 즉시 전파
+  useEffect(() => {
+    sendFullSyncState();
+  }, [sendFullSyncState]);
 
   // Handle Mute
   const handleToggleMute = () => {
@@ -562,7 +571,21 @@ export default function App() {
       } else if (msg.action === 'ADD_TIME') {
         setTimeLeft((prev) => Math.max(1, prev + (msg.seconds || 30)));
       } else if (msg.action === 'SET_SCORE') {
-        if (msg.score) setScore(msg.score);
+        if (msg.score) {
+          scoreRef.current = msg.score;
+          setScore(msg.score);
+          try {
+            const syncPayload = {
+              type: 'SYNC_STATE' as const,
+              score: msg.score,
+              timeLeft: timeLeftRef.current,
+              gamePhase: gamePhaseRef.current,
+              matchMode: matchModeRef.current,
+            };
+            window.electronAPI?.sendSyncState(syncPayload as any);
+            broadcastRef.current?.postMessage(syncPayload);
+          } catch {}
+        }
       } else if (msg.action === 'CHANGE_MODE') {
         const modeKey = msg.mode as MatchMode;
         if (modeKey) {
@@ -684,16 +707,32 @@ export default function App() {
   const handleGoalScored = useCallback((scoringTeam: 'blue' | 'red') => {
     soundManager.playGoal();
     let isTargetReached = false;
+    let nextScoreObj: MatchScore = { blue: 0, red: 0 };
     setScore((prev) => {
       const nextScore = {
         ...prev,
         [scoringTeam]: prev[scoringTeam] + 1,
       };
+      nextScoreObj = nextScore;
+      scoreRef.current = nextScore;
       if (matchModeRef.current === 'TARGET_N' && nextScore[scoringTeam] >= (targetPoints || 5)) {
         isTargetReached = true;
       }
       return nextScore;
     });
+
+    try {
+      const goalSyncPayload = {
+        type: 'SYNC_STATE' as const,
+        score: nextScoreObj,
+        timeLeft: timeLeftRef.current,
+        gamePhase: 'GOAL' as GamePhase,
+        matchMode: matchModeRef.current,
+      };
+      window.electronAPI?.sendSyncState(goalSyncPayload as any);
+      broadcastRef.current?.postMessage(goalSyncPayload);
+    } catch {}
+
     setStats((prev) => ({
       ...prev,
       lastScoredTeam: scoringTeam,
@@ -1027,6 +1066,9 @@ export default function App() {
               const live = liveStateRef.current;
               const livePosPayload = {
                 type: 'UPDATE',
+                score: scoreRef.current,
+                timeLeft: timeLeftRef.current,
+                gamePhase: gamePhaseRef.current,
                 puck: { x: live.puck.x, y: live.puck.y, vx: live.puck.vx, vy: live.puck.vy },
                 blueRobot: { tableX: live.blueRobot.tableX, tableY: live.blueRobot.tableY, detected: live.blueRobot.detected, confidence: live.blueRobot.confidence },
                 redRobot: { tableX: live.redRobot.tableX, tableY: live.redRobot.tableY, detected: live.redRobot.detected, confidence: live.redRobot.confidence },

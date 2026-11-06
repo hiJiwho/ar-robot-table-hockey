@@ -20,6 +20,17 @@ function getAudioContext(): AudioContext | null {
   return audioCtx;
 }
 
+// Helper to create a brief burst of shaped white noise for physical impact texture
+function createNoiseBuffer(ctx: AudioContext, duration = 0.05): AudioBuffer {
+  const bufferSize = Math.floor(ctx.sampleRate * duration);
+  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+  const output = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) {
+    output[i] = Math.random() * 2 - 1;
+  }
+  return buffer;
+}
+
 export const soundManager = {
   setMuted(muted: boolean) {
     isMuted = muted;
@@ -29,66 +40,101 @@ export const soundManager = {
     return isMuted;
   },
 
-  // Puck hitting the perimeter cushion / desk rail
+  // [REQ 2] 벽면 바운스: 실제 에어하키 알루미늄/아크릴 레일에 퍽이 "딱- 탁!" 튕기는 소리
   playWallBounce(intensity = 1) {
     if (isMuted) return;
     const ctx = getAudioContext();
     if (!ctx) return;
 
     const now = ctx.currentTime;
+    const clampedIntensity = Math.min(1.8, Math.max(0.4, intensity));
+
+    // 1. High-frequency click/snap (Plastic rail contact)
     const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-
-    const clampedIntensity = Math.min(1.5, Math.max(0.3, intensity));
+    const oscGain = ctx.createGain();
     osc.type = 'triangle';
-    osc.frequency.setValueAtTime(320 * clampedIntensity, now);
-    osc.frequency.exponentialRampToValueAtTime(140, now + 0.08);
+    osc.frequency.setValueAtTime(480 * clampedIntensity, now);
+    osc.frequency.exponentialRampToValueAtTime(160, now + 0.05);
 
-    gain.gain.setValueAtTime(0.2 * clampedIntensity, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
+    oscGain.gain.setValueAtTime(0.35 * clampedIntensity, now);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+    osc.connect(oscGain);
+    oscGain.connect(ctx.destination);
     osc.start(now);
-    osc.stop(now + 0.08);
+    osc.stop(now + 0.05);
+
+    // 2. High-speed noise pop
+    try {
+      const noise = ctx.createBufferSource();
+      noise.buffer = createNoiseBuffer(ctx, 0.03);
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(1400, now);
+      filter.Q.setValueAtTime(3.0, now);
+
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.22 * clampedIntensity, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
+
+      noise.connect(filter);
+      filter.connect(noiseGain);
+      noiseGain.connect(ctx.destination);
+      noise.start(now);
+      noise.stop(now + 0.03);
+    } catch {}
   },
 
-  // Robot striking the puck
+  // [REQ 2] 패들(콕) 타격음: 묵직하고 시원한 에어하키 스트라이커 스매시 "퍽-딱!"
   playRobotHit(intensity = 1) {
     if (isMuted) return;
     const ctx = getAudioContext();
     if (!ctx) return;
 
     const now = ctx.currentTime;
-    const clampedIntensity = Math.min(2, Math.max(0.4, intensity));
+    const clampedIntensity = Math.min(2.0, Math.max(0.5, intensity));
 
-    // Impact punch (low kick)
-    const osc1 = ctx.createOscillator();
-    const gain1 = ctx.createGain();
-    osc1.type = 'sine';
-    osc1.frequency.setValueAtTime(260 * clampedIntensity, now);
-    osc1.frequency.exponentialRampToValueAtTime(60, now + 0.12);
-    gain1.gain.setValueAtTime(0.35 * clampedIntensity, now);
-    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
-    osc1.connect(gain1);
-    gain1.connect(ctx.destination);
+    // 1. Sub Bass Punch (몸으로 느껴지는 타격감)
+    const kick = ctx.createOscillator();
+    const kickGain = ctx.createGain();
+    kick.type = 'sine';
+    kick.frequency.setValueAtTime(320 * clampedIntensity, now);
+    kick.frequency.exponentialRampToValueAtTime(50, now + 0.11);
+    kickGain.gain.setValueAtTime(0.45 * clampedIntensity, now);
+    kickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
+    kick.connect(kickGain);
+    kickGain.connect(ctx.destination);
+    kick.start(now);
+    kick.stop(now + 0.11);
 
-    // Click / snap (high transient)
-    const osc2 = ctx.createOscillator();
-    const gain2 = ctx.createGain();
-    osc2.type = 'square';
-    osc2.frequency.setValueAtTime(750, now);
-    osc2.frequency.exponentialRampToValueAtTime(220, now + 0.04);
-    gain2.gain.setValueAtTime(0.15 * clampedIntensity, now);
-    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
-    osc2.connect(gain2);
-    gain2.connect(ctx.destination);
+    // 2. Crisp Plastic Knock (스트라이커 플라스틱 맞닿는 찰진 소리)
+    const snap = ctx.createOscillator();
+    const snapGain = ctx.createGain();
+    snap.type = 'sawtooth';
+    snap.frequency.setValueAtTime(920, now);
+    snap.frequency.exponentialRampToValueAtTime(280, now + 0.04);
+    snapGain.gain.setValueAtTime(0.3 * clampedIntensity, now);
+    snapGain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+    snap.connect(snapGain);
+    snapGain.connect(ctx.destination);
+    snap.start(now);
+    snap.stop(now + 0.04);
 
-    osc1.start(now);
-    osc2.start(now);
-    osc1.stop(now + 0.12);
-    osc2.stop(now + 0.04);
+    // 3. Slap noise transient
+    try {
+      const noise = ctx.createBufferSource();
+      noise.buffer = createNoiseBuffer(ctx, 0.035);
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'highpass';
+      filter.frequency.setValueAtTime(1800, now);
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.28 * clampedIntensity, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.035);
+      noise.connect(filter);
+      filter.connect(noiseGain);
+      noiseGain.connect(ctx.destination);
+      noise.start(now);
+      noise.stop(now + 0.035);
+    } catch {}
   },
 
   // Metallic post ping when hitting near goal post
@@ -100,14 +146,14 @@ export const soundManager = {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(1880, now);
-    osc.frequency.exponentialRampToValueAtTime(1750, now + 0.3);
-    gain.gain.setValueAtTime(0.28, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+    osc.frequency.setValueAtTime(2150, now);
+    osc.frequency.exponentialRampToValueAtTime(1920, now + 0.35);
+    gain.gain.setValueAtTime(0.35, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
     osc.connect(gain);
     gain.connect(ctx.destination);
     osc.start(now);
-    osc.stop(now + 0.3);
+    osc.stop(now + 0.35);
   },
 
   // High speed sonic smash sound
@@ -119,34 +165,51 @@ export const soundManager = {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(440, now);
-    osc.frequency.exponentialRampToValueAtTime(120, now + 0.18);
-    gain.gain.setValueAtTime(0.35, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+    osc.frequency.setValueAtTime(680, now);
+    osc.frequency.exponentialRampToValueAtTime(140, now + 0.22);
+    gain.gain.setValueAtTime(0.45, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
     osc.connect(gain);
     gain.connect(ctx.destination);
     osc.start(now);
-    osc.stop(now + 0.18);
+    osc.stop(now + 0.22);
   },
 
-  // Goal scored fanfare
+  // [REQ 2] 골인 효과음: 경기장 에어혼(Goal Horn) + 웅장한 아케이드 팡파르
   playGoal() {
     if (isMuted) return;
     const ctx = getAudioContext();
     if (!ctx) return;
 
     const now = ctx.currentTime;
-    const notes = [523.25, 659.25, 783.99, 1046.5]; // C5, E5, G5, C6
+
+    // 1. Stadium Goal Horn (경기장 에어혼 듀얼 톱니파 화음)
+    [233.08, 293.66, 349.23].forEach((freq) => {
+      const horn = ctx.createOscillator();
+      const hornGain = ctx.createGain();
+      horn.type = 'sawtooth';
+      horn.frequency.setValueAtTime(freq, now);
+      hornGain.gain.setValueAtTime(0.18, now);
+      hornGain.gain.setValueAtTime(0.18, now + 0.45);
+      hornGain.gain.exponentialRampToValueAtTime(0.001, now + 0.65);
+      horn.connect(hornGain);
+      hornGain.connect(ctx.destination);
+      horn.start(now);
+      horn.stop(now + 0.65);
+    });
+
+    // 2. Victory Arpeggio Chime
+    const notes = [523.25, 659.25, 783.99, 1046.5, 1318.5]; // C5, E5, G5, C6, E6
     notes.forEach((freq, idx) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      const startTime = now + idx * 0.08;
-      const duration = idx === notes.length - 1 ? 0.45 : 0.15;
+      const startTime = now + 0.15 + idx * 0.07;
+      const duration = 0.38;
 
       osc.type = 'triangle';
       osc.frequency.setValueAtTime(freq, startTime);
 
-      gain.gain.setValueAtTime(0.28, startTime);
+      gain.gain.setValueAtTime(0.24, startTime);
       gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
 
       osc.connect(gain);
@@ -157,7 +220,7 @@ export const soundManager = {
     });
   },
 
-  // Referee whistle for match start / goal reset
+  // [REQ 2] 심판 호각 소리: 리얼 폭스40(Fox 40) 스타일 스포츠 휘슬 (듀얼 FM 톤 + 공기 호흡음)
   playWhistle() {
     if (isMuted) return;
     const ctx = getAudioContext();
@@ -169,33 +232,51 @@ export const soundManager = {
     const gain = ctx.createGain();
 
     osc1.type = 'sine';
-    osc2.type = 'sine';
-    osc1.frequency.setValueAtTime(2200, now);
-    osc2.frequency.setValueAtTime(2450, now);
+    osc2.type = 'triangle';
+    osc1.frequency.setValueAtTime(2620, now);
+    osc2.frequency.setValueAtTime(2880, now);
 
-    // Modulation / trill
+    // Fast modulation / pea flutter
     const lfo = ctx.createOscillator();
     const lfoGain = ctx.createGain();
-    lfo.frequency.setValueAtTime(25, now);
-    lfoGain.gain.setValueAtTime(80, now);
+    lfo.frequency.setValueAtTime(32, now);
+    lfoGain.gain.setValueAtTime(140, now);
     lfo.connect(osc1.frequency);
     lfo.connect(osc2.frequency);
 
     gain.gain.setValueAtTime(0.001, now);
-    gain.gain.linearRampToValueAtTime(0.18, now + 0.03);
-    gain.gain.setValueAtTime(0.18, now + 0.22);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    gain.gain.linearRampToValueAtTime(0.26, now + 0.02);
+    gain.gain.setValueAtTime(0.26, now + 0.28);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.42);
 
     osc1.connect(gain);
     osc2.connect(gain);
     gain.connect(ctx.destination);
 
+    // Breath air noise
+    try {
+      const breath = ctx.createBufferSource();
+      breath.buffer = createNoiseBuffer(ctx, 0.4);
+      const bFilter = ctx.createBiquadFilter();
+      bFilter.type = 'bandpass';
+      bFilter.frequency.setValueAtTime(3000, now);
+      bFilter.Q.setValueAtTime(4.0, now);
+      const bGain = ctx.createGain();
+      bGain.gain.setValueAtTime(0.12, now);
+      bGain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+      breath.connect(bFilter);
+      bFilter.connect(bGain);
+      bGain.connect(ctx.destination);
+      breath.start(now);
+      breath.stop(now + 0.4);
+    } catch {}
+
     lfo.start(now);
     osc1.start(now);
     osc2.start(now);
-    lfo.stop(now + 0.35);
-    osc1.stop(now + 0.35);
-    osc2.stop(now + 0.35);
+    lfo.stop(now + 0.42);
+    osc1.stop(now + 0.42);
+    osc2.stop(now + 0.42);
   },
 
   // Countdown beep (3, 2, 1, GO)
@@ -208,11 +289,11 @@ export const soundManager = {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
 
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(isFinal ? 880 : 440, now);
+    osc.type = isFinal ? 'triangle' : 'sine';
+    osc.frequency.setValueAtTime(isFinal ? 920 : 520, now);
 
-    const duration = isFinal ? 0.35 : 0.15;
-    gain.gain.setValueAtTime(0.2, now);
+    const duration = isFinal ? 0.38 : 0.16;
+    gain.gain.setValueAtTime(0.25, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
 
     osc.connect(gain);
@@ -222,28 +303,29 @@ export const soundManager = {
     osc.stop(now + duration);
   },
 
-  // Match finished buzzer
+  // [REQ 2] 타임오버 / 게임종료 버저: 실제 스타디움 아레나 버저(Buzzer)
   playGameOver() {
     if (isMuted) return;
     const ctx = getAudioContext();
     if (!ctx) return;
 
     const now = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
+    // Dual Detuned Sawtooth for thick hockey arena buzzer sound
+    [164.81, 166.0].forEach((freq) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(freq, now);
 
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(220, now);
-    osc.frequency.linearRampToValueAtTime(160, now + 0.8);
+      gain.gain.setValueAtTime(0.28, now);
+      gain.gain.setValueAtTime(0.28, now + 0.7);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.9);
 
-    gain.gain.setValueAtTime(0.25, now);
-    gain.gain.setValueAtTime(0.25, now + 0.6);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.85);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
 
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    osc.start(now);
-    osc.stop(now + 0.85);
+      osc.start(now);
+      osc.stop(now + 0.9);
+    });
   },
 };

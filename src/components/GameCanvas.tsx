@@ -256,29 +256,49 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
       }
       ctx.stroke();
 
-      // [REQ] 그래도 경기창에 숫자(점수), 시간 띄우고!
-      // Center Digital Clock in Face-off Circle
+      // Center Spot Dot (중심점: 페이스오프 정중앙)
+      const centerPt = tf.tableToScreen(TABLE_WIDTH / 2, TABLE_HEIGHT / 2);
+      ctx.fillStyle = primaryLine;
+      ctx.beginPath();
+      ctx.arc(centerPt.x, centerPt.y, 8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // [REQ 3] 메인 시계위치 상단으로 올려!
+      // 경기장 상단 중앙 HUD 타이머 디스플레이
       const mins = Math.floor(timeLeft / 60);
       const secs = timeLeft % 60;
       const timeStr = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-      const centerClockPt = tf.tableToScreen(TABLE_WIDTH / 2, TABLE_HEIGHT / 2 - 24);
+      const topClockPt = tf.tableToScreen(TABLE_WIDTH / 2, 56);
+
       ctx.save();
-      ctx.translate(centerClockPt.x, centerClockPt.y);
-      ctx.font = '900 46px monospace, system-ui, sans-serif';
+      ctx.translate(topClockPt.x, topClockPt.y);
+
+      // 타이머 배경 캡슐 배지
+      ctx.fillStyle = isLight ? 'rgba(241, 245, 249, 0.85)' : 'rgba(15, 23, 42, 0.85)';
+      ctx.strokeStyle = isLight ? 'rgba(148, 163, 184, 0.6)' : 'rgba(56, 189, 248, 0.5)';
+      ctx.lineWidth = 2;
+      const badgeW = 160;
+      const badgeH = 48;
+      ctx.beginPath();
+      ctx.roundRect(-badgeW / 2, -badgeH / 2, badgeW, badgeH, 24);
+      ctx.fill();
+      ctx.stroke();
+
+      // 타이머 글자 (선명한 네온 디지털 폰트)
+      ctx.font = '900 34px monospace, "Courier New", system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
+      if (!isGameOver) {
+        ctx.shadowColor = isLight ? 'rgba(2, 132, 199, 0.4)' : 'rgba(56, 189, 248, 0.7)';
+        ctx.shadowBlur = 10;
+      }
       ctx.fillStyle = isGameOver
-        ? (isLight ? '#94a3b8' : '#52525b')
-        : (isLight ? 'rgba(15, 23, 42, 0.45)' : 'rgba(255, 255, 255, 0.55)');
-      ctx.fillText(timeStr, 0, 0);
+        ? (isLight ? '#94a3b8' : '#64748b')
+        : (timeLeft <= 10
+            ? (isLight ? '#dc2626' : '#f87171')
+            : (isLight ? '#0369a1' : '#38bdf8'));
+      ctx.fillText(timeStr, 0, 1);
       ctx.restore();
-
-      // Center Spot Dot (중심점)
-      const centerPt = tf.tableToScreen(TABLE_WIDTH / 2, TABLE_HEIGHT / 2 + 18);
-      ctx.fillStyle = primaryLine;
-      ctx.beginPath();
-      ctx.arc(centerPt.x, centerPt.y, 6, 0, Math.PI * 2);
-      ctx.fill();
 
       // [REQ] Left (1P) Score Number - 각자 진영(왼쪽)으로 더 내리고(이동), 90도 회전 (+90deg), 초대형 230px Ultra-Bold Cyan
       const p1ScorePt = tf.tableToScreen(TABLE_WIDTH / 2 - 270, TABLE_HEIGHT / 2);
