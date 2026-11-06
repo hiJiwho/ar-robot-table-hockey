@@ -15,3 +15,12 @@
 - **Windows 데스크톱 앱 실행**: `AR-Robot-air-hotkey-실행.bat` 더블클릭
 - **Electron 빌드**: `npm run build:win`
 - **웹 개발 서버**: `npm run dev`
+
+## 인식 엔진 (OpenCV)
+- 기본 엔진은 **OpenCV(opencv.js, WebAssembly)** 입니다: HSV 마스크 → 모폴로지 → 컨투어/모멘트로 마젠타 블록 2개를 추적합니다.
+- opencv.js는 Electron(Chromium/Node.js)과 순수 Node.js 모두에서 네이티브 빌드 없이 동작합니다.
+- Node.js 단독 검증: `npx tsx scripts/test-opencv-node.ts`
+- 로딩 전/오류 시에는 기존 JS 엔진(스마트 크로마틱)으로 자동 대체되며, 컬러 튜너에서 엔진을 직접 선택할 수 있습니다.
+
+## 웹 배포(github.io) 지원 종료
+- GitHub Pages(`github.io`) 웹 사이트는 **지원 종료**되었습니다. 이 앱은 **Windows 데스크톱 앱(Electron)** 으로만 배포됩니다 → [Releases](https://github.com/hiJiwho/ar-robot-table-hockey/releases)

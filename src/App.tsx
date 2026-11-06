@@ -26,6 +26,7 @@ import {
   createFilterFromSample,
   DetectedBlob,
 } from './utils/vision';
+import { detectTwoMagentaBlobsOpenCV, loadOpenCV } from './utils/opencvVision';
 import { stepPuckPhysics } from './utils/physics';
 import { soundManager } from './utils/audio';
 import { SettingsModal } from './components/SettingsModal';
@@ -315,6 +316,11 @@ export default function App() {
   useEffect(() => {
     sendFullSyncState();
   }, [sendFullSyncState]);
+
+  // Preload OpenCV (opencv.js WASM) in the background
+  useEffect(() => {
+    loadOpenCV();
+  }, []);
 
   // Handle Mute
   const handleToggleMute = () => {
@@ -869,16 +875,32 @@ export default function App() {
             : null;
 
           // Detect TWO Magenta Blocks using selected Vision Engine
-          const { blueBlob, redBlob } = detectTwoMagentaBlobs(
-            imageData,
-            curColorSettings,
-            curColorSettings.minBlobSize,
-            curColorSettings.maxBlobSize,
-            cameraQuadPixels,
-            debugMaskData,
-            lastBlueCam,
-            lastRedCam
-          );
+          // OpenCV engine (opencv.js WASM); falls back to the JS engine while loading / on error
+          const cvResult =
+            (curColorSettings.visionEngine || 'OPENCV') === 'OPENCV'
+              ? detectTwoMagentaBlobsOpenCV(
+                  imageData,
+                  curColorSettings,
+                  cameraQuadPixels,
+                  debugMaskData,
+                  lastBlueCam,
+                  lastRedCam
+                )
+              : null;
+          const { blueBlob, redBlob } =
+            cvResult ??
+            detectTwoMagentaBlobs(
+              imageData,
+              (curColorSettings.visionEngine || 'OPENCV') === 'OPENCV'
+                ? { ...curColorSettings, visionEngine: 'CHROMATIC' }
+                : curColorSettings,
+              curColorSettings.minBlobSize,
+              curColorSettings.maxBlobSize,
+              cameraQuadPixels,
+              debugMaskData,
+              lastBlueCam,
+              lastRedCam
+            );
 
           if (debugCtx && debugMaskData) {
             debugCtx.putImageData(debugMaskData, 0, 0);

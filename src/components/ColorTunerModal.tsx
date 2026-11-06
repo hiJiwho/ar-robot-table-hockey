@@ -104,12 +104,30 @@ export const ColorTunerModal: React.FC<ColorTunerModalProps> = ({
               <Zap className="w-4 h-4 text-amber-400" />
               인식 엔진 선택 (Vision Recognition Engine)
             </label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => handleEngineChange('OPENCV')}
+                className={`p-3 rounded-xl border text-left transition-all ${
+                  (settings.visionEngine || 'OPENCV') === 'OPENCV'
+                    ? 'bg-emerald-600/20 border-emerald-500 text-white shadow-md'
+                    : 'bg-slate-800/40 border-slate-700/70 text-slate-300 hover:border-slate-600 hover:bg-slate-800'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-semibold text-xs text-emerald-300">OpenCV (opencv.js)</span>
+                  <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-mono">기본</span>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-tight">
+                  진짜 OpenCV(WASM): HSV 마스크 + 모폴로지 + 컨투어. Node.js / Electron 모두 동작
+                </p>
+              </button>
+
               <button
                 type="button"
                 onClick={() => handleEngineChange('CHROMATIC')}
                 className={`p-3 rounded-xl border text-left transition-all ${
-                  (settings.visionEngine || 'CHROMATIC') === 'CHROMATIC'
+                  settings.visionEngine === 'CHROMATIC'
                     ? 'bg-pink-600/20 border-pink-500 text-white shadow-md'
                     : 'bg-slate-800/40 border-slate-700/70 text-slate-300 hover:border-slate-600 hover:bg-slate-800'
                 }`}

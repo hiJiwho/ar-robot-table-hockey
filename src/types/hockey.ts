@@ -63,7 +63,7 @@ export interface ColorFilter {
   vMax: number;
 }
 
-export type VisionEngineType = 'CHROMATIC' | 'YCRCB' | 'HSV';
+export type VisionEngineType = 'OPENCV' | 'CHROMATIC' | 'YCRCB' | 'HSV';
 
 export interface ColorSettings {
   magenta: ColorFilter;

@@ -21,7 +21,7 @@ export const DEFAULT_COLOR_SETTINGS: ColorSettings = {
   },
   minBlobSize: 8, // Support small physical Lego blocks (>= 8 pixels)
   maxBlobSize: 15000,
-  visionEngine: 'CHROMATIC', // Default to projector-invariant Chromatic engine
+  visionEngine: 'OPENCV', // Default to OpenCV (opencv.js WASM); falls back to JS Chromatic engine while loading
   sensitivity: 3, // 1 to 5 (3 is optimal standard)
   customSample: null,
 };
@@ -479,6 +479,27 @@ export function detectTwoMagentaBlobs(
   };
 
   const allBlobs: DetectedBlob[] = rawClusters.map(clusterToBlob);
+  return assignBlobs(allBlobs, width, lastBluePos, lastRedPos);
+}
+
+/**
+ * Pairs detected blobs with the Blue / Red robots (shared by the JS and OpenCV engines)
+ * using tracking continuity, falling back to left/right position.
+ */
+export function assignBlobs(
+  allBlobs: DetectedBlob[],
+  width: number,
+  lastBluePos?: Point2D | null,
+  lastRedPos?: Point2D | null
+): {
+  blueBlob: DetectedBlob | null;
+  redBlob: DetectedBlob | null;
+  allBlobs: DetectedBlob[];
+} {
+  if (allBlobs.length === 0) {
+    return { blueBlob: null, redBlob: null, allBlobs };
+  }
+
 
   // If 2 or more blobs detected:
   if (allBlobs.length >= 2) {

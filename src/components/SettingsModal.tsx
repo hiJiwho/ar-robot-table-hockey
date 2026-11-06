@@ -60,7 +60,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   timeLeft,
   blueRobot,
   redRobot,
-  visionEngine = 'CHROMATIC',
+  visionEngine = 'OPENCV',
   isMuted,
   isVirtualMode,
   isCameraMirrored,
@@ -206,7 +206,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 로봇 패들 트래킹 상태
               </span>
               <span className="text-[11px] text-pink-400 font-medium">
-                {visionEngine === 'CHROMATIC'
+                {visionEngine === 'OPENCV'
+                  ? 'OpenCV 엔진 (opencv.js)'
+                  : visionEngine === 'CHROMATIC'
                   ? '스마트 크로마틱 엔진 (추천)'
                   : visionEngine === 'YCRCB'
                   ? 'YCrCb 채도 분리 엔진 (OpenCV)'
