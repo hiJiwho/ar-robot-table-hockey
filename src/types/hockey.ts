@@ -63,6 +63,17 @@ export interface LiveGameState {
   redRobot: RobotState;
   puck: PuckState;
   particles: Particle[];
+  obstacles?: Obstacle[];
+}
+
+export interface Obstacle {
+  id: string;
+  x: number; // Virtual table coordinates (e.g. 0..1000)
+  y: number; // Virtual table coordinates (e.g. 0..600)
+  radius: number;
+  color: string;
+  hitCount: number;
+  lastHitTime: number;
 }
 
 export interface ColorFilter {
@@ -124,7 +135,9 @@ export type GameActionMessage = {
     | 'UPDATE_GOAL_SIZE'
     | 'SET_LOW_LIGHT_MODE'
     | 'UPDATE_COLOR_SETTINGS'
-    | 'SAMPLE_COLOR';
+    | 'SAMPLE_COLOR'
+    | 'TOGGLE_OBSTACLES'
+    | 'RANDOMIZE_OBSTACLES';
   seconds?: number;
   score?: MatchScore;
   mode?: MatchMode;
@@ -138,6 +151,8 @@ export type GameActionMessage = {
   lowLightMode?: boolean;
   colorSettings?: Partial<ColorSettings>;
   customSample?: { r: number; g: number; b: number; hex: string } | null;
+  obstaclesEnabled?: boolean;
+  obstacles?: Obstacle[];
 };
 
 export const DEFAULT_NORMALIZED_CORNERS: FourCorners = [
@@ -234,6 +249,8 @@ export interface SyncStatePayload {
   puck?: { x: number; y: number; vx: number; vy: number };
   blueRobot?: { tableX: number; tableY: number; detected: boolean; confidence: number };
   redRobot?: { tableX: number; tableY: number; detected: boolean; confidence: number };
+  obstacles?: Obstacle[];
+  obstaclesEnabled?: boolean;
 }
 
 export interface ElectronAPI {

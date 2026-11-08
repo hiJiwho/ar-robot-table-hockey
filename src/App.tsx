@@ -21,6 +21,7 @@ import {
   ROBOT_RADIUS,
   DEFAULT_NORMALIZED_CORNERS,
   LiveGameState,
+  Obstacle,
 } from './types/hockey';
 import { PerspectiveTransformer } from './utils/perspective';
 import {
@@ -52,6 +53,50 @@ import {
   Tv,
 } from 'lucide-react';
 
+// [REQ] 중간중간 튕기는 랜덤 장애물 (네온 핀볼 범퍼) 안전 위치 자동 생성기
+function generateRandomObstacles(): Obstacle[] {
+  const count = Math.random() > 0.45 ? 3 : 2; // 2~3개 랜덤 배치
+  const colors = ['#ec4899', '#a855f7', '#f97316', '#06b6d4', '#10b981'];
+  const newObs: Obstacle[] = [];
+  const radius = 28;
+
+  for (let i = 0; i < count; i++) {
+    let attempts = 0;
+    while (attempts < 60) {
+      attempts++;
+      // 안전 중앙 필드: X 340..660, Y 130..470
+      const x = Math.round(340 + Math.random() * 320);
+      const y = Math.round(130 + Math.random() * 340);
+
+      // 중앙 페이스오프 원(500, 300)과 최소 90px 이격
+      const distFromCenter = Math.hypot(x - TABLE_WIDTH / 2, y - TABLE_HEIGHT / 2);
+      if (distFromCenter < 90) continue;
+
+      // 다른 장애물과 최소 80px 이격
+      let overlap = false;
+      for (const other of newObs) {
+        if (Math.hypot(x - other.x, y - other.y) < radius * 2.8) {
+          overlap = true;
+          break;
+        }
+      }
+      if (overlap) continue;
+
+      newObs.push({
+        id: `obs-${Date.now()}-${i}`,
+        x,
+        y,
+        radius,
+        color: colors[i % colors.length],
+        hitCount: 0,
+        lastHitTime: 0,
+      });
+      break;
+    }
+  }
+  return newObs;
+}
+
 export default function App() {
   // Game & Match States (1MIN, CUSTOM_TIME, TARGET_N)
   const [matchMode, setMatchMode] = useState<MatchMode>('1MIN');
@@ -76,6 +121,8 @@ export default function App() {
     countdown: number;
   } | null>(null);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [obstaclesEnabled, setObstaclesEnabled] = useState<boolean>(true);
+  const [obstacles, setObstacles] = useState<Obstacle[]>(() => generateRandomObstacles());
 
   // Viewport Container Size
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -263,6 +310,7 @@ export default function App() {
     redRobot: initialRedRobot,
     puck: initialPuck,
     particles: [],
+    obstacles: obstacles,
   });
 
   // Keep references to frequently read configuration values to prevent useEffect rebuilds
@@ -288,6 +336,10 @@ export default function App() {
   isCameraMirroredRef.current = isCameraMirrored;
   const isColorTunerOpenRef = useRef(isColorTunerOpen);
   isColorTunerOpenRef.current = isColorTunerOpen;
+  const obstaclesRef = useRef(obstacles);
+  obstaclesRef.current = obstacles;
+  const obstaclesEnabledRef = useRef(obstaclesEnabled);
+  obstaclesEnabledRef.current = obstaclesEnabled;
 
   // Broadcast state to secondary scoreboard & admin console screens
   const broadcastRef = useRef<BroadcastChannel | null>(null);
@@ -329,6 +381,8 @@ export default function App() {
       goalAnnouncement,
       lowLightMode: !!colorSettings.lowLightMode,
       colorSettings,
+      obstaclesEnabled,
+      obstacles: obstaclesEnabled ? (live.obstacles || obstacles) : [],
       visionDiagnostics: {
         engine: colorSettings.visionEngine || 'OPENCV',
         isOpenCVActive: cvReadyRef.current,
@@ -345,7 +399,7 @@ export default function App() {
       broadcastRef.current?.postMessage(payload);
       localStorage.setItem('airhockey_sync', JSON.stringify(payload));
     } catch {}
-  }, [score, timeLeft, gamePhase, matchMode, customDuration, targetPoints, goalSize, screenCorners, cameraCorners, isCameraMirrored, theme, stats, goalAnnouncement, colorSettings]);
+  }, [score, timeLeft, gamePhase, matchMode, customDuration, targetPoints, goalSize, screenCorners, cameraCorners, isCameraMirrored, theme, stats, goalAnnouncement, colorSettings, obstaclesEnabled, obstacles]);
 
   // [REQ 1] 매인화면과 서브화면 점수/상태 실시간 완전 동기화: 상태 변경 시 즉시 전파
   useEffect(() => {
@@ -482,6 +536,13 @@ export default function App() {
     };
     liveStateRef.current.puck = nextPuck;
     setPuck(nextPuck);
+
+    // [REQ] 매 서브/판마다 중간중간 튕기는 장애물(네온 범퍼) 새롭게 랜덤 재배치!
+    if (obstaclesEnabledRef.current) {
+      const nextObs = generateRandomObstacles();
+      liveStateRef.current.obstacles = nextObs;
+      setObstacles(nextObs);
+    }
   }, []);
 
   // ----------------------------------------------------
@@ -655,6 +716,19 @@ export default function App() {
         }
       } else if (msg.action === 'TOGGLE_MIRROR') {
         setIsCameraMirrored((prev) => !prev);
+      } else if (msg.action === 'TOGGLE_OBSTACLES') {
+        const next = typeof msg.obstaclesEnabled === 'boolean' ? msg.obstaclesEnabled : !obstaclesEnabledRef.current;
+        setObstaclesEnabled(next);
+        obstaclesEnabledRef.current = next;
+        if (next && (!liveStateRef.current.obstacles || liveStateRef.current.obstacles.length === 0)) {
+          const nextObs = generateRandomObstacles();
+          liveStateRef.current.obstacles = nextObs;
+          setObstacles(nextObs);
+        }
+      } else if (msg.action === 'RANDOMIZE_OBSTACLES') {
+        const nextObs = generateRandomObstacles();
+        liveStateRef.current.obstacles = nextObs;
+        setObstacles(nextObs);
       }
     };
 
@@ -1069,6 +1143,8 @@ export default function App() {
                 score: scoreRef.current,
                 timeLeft: timeLeftRef.current,
                 gamePhase: gamePhaseRef.current,
+                obstacles: obstaclesEnabledRef.current ? (live.obstacles || obstaclesRef.current) : [],
+                obstaclesEnabled: obstaclesEnabledRef.current,
                 puck: { x: live.puck.x, y: live.puck.y, vx: live.puck.vx, vy: live.puck.vy },
                 blueRobot: { tableX: live.blueRobot.tableX, tableY: live.blueRobot.tableY, detected: live.blueRobot.detected, confidence: live.blueRobot.confidence },
                 redRobot: { tableX: live.redRobot.tableX, tableY: live.redRobot.tableY, detected: live.redRobot.detected, confidence: live.redRobot.confidence },
@@ -1115,7 +1191,8 @@ export default function App() {
           liveStateRef.current.blueRobot,
           liveStateRef.current.redRobot,
           curGoalSize,
-          dt
+          dt,
+          obstaclesEnabledRef.current ? (liveStateRef.current.obstacles || obstaclesRef.current) : []
         );
         liveStateRef.current.puck = nextPuck;
 
@@ -1144,6 +1221,11 @@ export default function App() {
                 maxPuckSpeed: Math.max(s.maxPuckSpeed, ev.speed),
               }));
             }
+          } else if (ev.type === 'OBSTACLE') {
+            // [REQ] 핀볼 범퍼/장애물 튕김 피드백 (사운드 + 쇼크웨이브)
+            soundManager.playBumperHit(Math.min(1.5, ev.speed / 450));
+            const screenHit = screenTf.tableToScreen(ev.x, ev.y);
+            spawnParticles(screenHit.x, screenHit.y, '#ec4899', 12);
           } else if (ev.type === 'POST') {
             soundManager.playGoalPost();
             const screenHit = screenTf.tableToScreen(ev.x, ev.y);
@@ -1264,6 +1346,7 @@ export default function App() {
           goalSize={goalSize}
           theme={theme}
           isVirtualMode={isVirtualMode}
+          obstacles={obstaclesEnabled ? obstacles : []}
         />
 
         {/* [REQ] 경기장은 깔끔한 4개 모서리 핀 캘리브레이션 */}

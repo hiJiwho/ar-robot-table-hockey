@@ -137,6 +137,46 @@ export const soundManager = {
     } catch {}
   },
 
+  // [REQ] 핀볼 범퍼/장애물 튕김음: 통통 튀는 경쾌한 핀볼 팝 "통-! 핑-!"
+  playBumperHit(intensity = 1) {
+    if (isMuted) return;
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const clampedIntensity = Math.min(2.0, Math.max(0.5, intensity));
+
+    // 1. High Pop Sine (Chirp)
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    const startFreq = 880 * clampedIntensity;
+    osc.frequency.setValueAtTime(startFreq, now);
+    osc.frequency.exponentialRampToValueAtTime(320, now + 0.12);
+
+    gain.gain.setValueAtTime(0.38, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.12);
+
+    // 2. Harmonic Ping Ring
+    const ping = ctx.createOscillator();
+    const pingGain = ctx.createGain();
+    ping.type = 'triangle';
+    ping.frequency.setValueAtTime(1760, now);
+    ping.frequency.exponentialRampToValueAtTime(1200, now + 0.2);
+    pingGain.gain.setValueAtTime(0.25, now);
+    pingGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+
+    ping.connect(pingGain);
+    pingGain.connect(ctx.destination);
+    ping.start(now);
+    ping.stop(now + 0.2);
+  },
+
   // Metallic post ping when hitting near goal post
   playGoalPost() {
     if (isMuted) return;

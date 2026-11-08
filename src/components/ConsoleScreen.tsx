@@ -15,6 +15,7 @@ import {
   GameActionMessage,
   ColorSettings,
   VisionEngineType,
+  Obstacle,
 } from '../types/hockey';
 import {
   Clock,
@@ -76,6 +77,8 @@ export const ConsoleScreen: React.FC = () => {
   });
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [lowLightMode, setLowLightMode] = useState<boolean>(false);
+  const [obstaclesEnabled, setObstaclesEnabled] = useState<boolean>(true);
+  const [obstacles, setObstacles] = useState<Obstacle[]>([]);
 
   // Vision Diagnostics & Settings
   const [colorSettings, setColorSettings] = useState<ColorSettings>({
@@ -168,6 +171,8 @@ export const ConsoleScreen: React.FC = () => {
       if (typeof data.lowLightMode === 'boolean') setLowLightMode(data.lowLightMode);
       if (data.colorSettings) setColorSettings(data.colorSettings);
       if (data.visionDiagnostics) setVisionDiagnostics(data.visionDiagnostics);
+      if (typeof data.obstaclesEnabled === 'boolean') setObstaclesEnabled(data.obstaclesEnabled);
+      if (data.obstacles) setObstacles(data.obstacles);
       if (typeof data.goalSize === 'number') setGoalSize(data.goalSize);
       if (typeof data.isCameraMirrored === 'boolean') setIsCameraMirrored(data.isCameraMirrored);
       if (typeof data.targetPoints === 'number') setTargetPointsInput(data.targetPoints);
@@ -411,6 +416,16 @@ export const ConsoleScreen: React.FC = () => {
     });
   };
 
+  const handleToggleObstacles = () => {
+    const next = !obstaclesEnabled;
+    setObstaclesEnabled(next);
+    sendAction({ type: 'GAME_ACTION', action: 'TOGGLE_OBSTACLES', obstaclesEnabled: next });
+  };
+
+  const handleRandomizeObstacles = () => {
+    sendAction({ type: 'GAME_ACTION', action: 'RANDOMIZE_OBSTACLES' });
+  };
+
   const handleApplyTargetPointsMode = (points?: number) => {
     const p = typeof points === 'number' ? points : targetPointsInput;
     const target = Math.max(1, p);
@@ -546,6 +561,30 @@ export const ConsoleScreen: React.FC = () => {
             <Cpu className="w-4 h-4 text-yellow-300" />
             <span>비전 인식 관리 스튜디오</span>
           </button>
+
+          {/* [REQ] 중간중간 튕기는 장애물 모드 (매번 랜덤배치) */}
+          <button
+            onClick={handleToggleObstacles}
+            className={`px-3 py-1.5 rounded-lg border text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm ${
+              obstaclesEnabled
+                ? 'bg-pink-600 hover:bg-pink-500 text-white border-pink-400 shadow-[0_0_12px_rgba(236,72,153,0.4)]'
+                : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-700'
+            }`}
+            title="경기장 중앙에 퍽이 통통 튀는 네온 핀볼 범퍼/장애물을 켜거나 끕니다"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
+            <span>장애물 모드: {obstaclesEnabled ? 'ON' : 'OFF'}</span>
+          </button>
+          {obstaclesEnabled && (
+            <button
+              onClick={handleRandomizeObstacles}
+              className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-bold text-pink-300 flex items-center gap-1 transition-all shadow-sm active:scale-95"
+              title="장애물 위치를 지금 즉시 새롭게 랜덤 재배치합니다"
+            >
+              <RotateCcw className="w-3 h-3 text-pink-400" />
+              <span>재배치</span>
+            </button>
+          )}
 
           {/* [REQ] 글고 불 꺼도 인식 잘 되게 해줘 (설정에 이거 인식용 하나 넣어주면 ㄱㅅ) */}
           <button
@@ -687,6 +726,26 @@ export const ConsoleScreen: React.FC = () => {
 
               {/* Puck */}
               <circle cx={puck.x} cy={puck.y} r="20" fill={theme === 'light' ? '#e11d48' : '#ffffff'} stroke="#64748b" strokeWidth="3" />
+
+              {/* Bumping Obstacles (네온 핀볼 범퍼 미러링) */}
+              {obstaclesEnabled && obstacles.map((obs) => (
+                <g key={obs.id}>
+                  <circle
+                    cx={obs.x}
+                    cy={obs.y}
+                    r={obs.radius || 28}
+                    fill="rgba(236, 72, 153, 0.25)"
+                    stroke={obs.color || '#ec4899'}
+                    strokeWidth="3.5"
+                  />
+                  <circle
+                    cx={obs.x}
+                    cy={obs.y}
+                    r={(obs.radius || 28) * 0.4}
+                    fill="#ffffff"
+                  />
+                </g>
+              ))}
             </svg>
           </div>
 

@@ -1,7 +1,7 @@
-import { TABLE_WIDTH, TABLE_HEIGHT, ROBOT_RADIUS, PUCK_RADIUS, PuckState, RobotState } from '../types/hockey';
+import { TABLE_WIDTH, TABLE_HEIGHT, ROBOT_RADIUS, PUCK_RADIUS, PuckState, RobotState, Obstacle } from '../types/hockey';
 
 export interface CollisionEvent {
-  type: 'WALL' | 'POST' | 'ROBOT' | 'GOAL';
+  type: 'WALL' | 'POST' | 'ROBOT' | 'GOAL' | 'OBSTACLE';
   x: number;
   y: number;
   team?: 'blue' | 'red';
@@ -25,7 +25,8 @@ export function stepPuckPhysics(
   blueRobot: RobotState,
   redRobot: RobotState,
   goalSize: number,
-  dt: number
+  dt: number,
+  obstacles: Obstacle[] = []
 ): PhysicsStepResult {
   const events: CollisionEvent[] = [];
 
@@ -228,6 +229,53 @@ export function stepPuckPhysics(
 
     checkStriker(blueRobot, 'blue');
     checkStriker(redRobot, 'red');
+
+    // 8. [REQ] Bumping Obstacles (중간중간 튕기는 랜덤 장애물 / 핀볼 네온 범퍼)
+    if (obstacles && obstacles.length > 0) {
+      for (const obs of obstacles) {
+        const dx = px - obs.x;
+        const dy = py - obs.y;
+        const dist = Math.hypot(dx, dy);
+        const minDist = r + obs.radius;
+
+        if (dist < minDist && dist > 0.0001) {
+          const nx = dx / dist;
+          const ny = dy / dist;
+
+          // Position separation
+          px = obs.x + nx * (minDist + 0.5);
+          py = obs.y + ny * (minDist + 0.5);
+
+          const vDotN = pvx * nx + pvy * ny;
+          if (vDotN < 0) {
+            // High-elasticity pinball bumper bounce (1.35x restitution)
+            const restitution = 1.35;
+            pvx -= (1 + restitution) * vDotN * nx;
+            pvy -= (1 + restitution) * vDotN * ny;
+
+            // Ensure crisp energetic ricochet speed (at least 600 px/s)
+            let curSpeed = Math.hypot(pvx, pvy);
+            const minBumperSpeed = 600;
+            if (curSpeed < minBumperSpeed) {
+              const boost = minBumperSpeed / (curSpeed || 1);
+              pvx *= boost;
+              pvy *= boost;
+              curSpeed = minBumperSpeed;
+            }
+
+            obs.hitCount = (obs.hitCount || 0) + 1;
+            obs.lastHitTime = Date.now();
+
+            events.push({
+              type: 'OBSTACLE',
+              x: px,
+              y: py,
+              speed: curSpeed,
+            });
+          }
+        }
+      }
+    }
   }
 
   // Speed clamping to terminal velocity (1450 px/s)

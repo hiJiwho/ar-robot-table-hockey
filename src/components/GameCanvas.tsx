@@ -8,6 +8,7 @@ import {
   TABLE_HEIGHT,
   TABLE_WIDTH,
   LiveGameState,
+  Obstacle,
 } from '../types/hockey';
 import { PerspectiveTransformer } from '../utils/perspective';
 
@@ -25,6 +26,7 @@ interface GameCanvasProps {
   goalSize?: number;
   theme?: 'dark' | 'light';
   isVirtualMode?: boolean;
+  obstacles?: Obstacle[];
 }
 
 export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
@@ -264,49 +266,21 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
       ctx.arc(centerPt.x, centerPt.y, 8, 0, Math.PI * 2);
       ctx.fill();
 
-      // [REQ 3] 메인 시계위치 상단으로 올려!
-      // 경기장 상단 중앙 HUD 타이머 디스플레이
+      // [REQ] "시계를 그리고 -90, 90도 돌리고 점수 아래, 골대에 서로 보이게 2개 넣는걸루 하자 (경기장에)"
       const mins = Math.floor(timeLeft / 60);
       const secs = timeLeft % 60;
       const timeStr = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-      const topClockPt = tf.tableToScreen(TABLE_WIDTH / 2, 56);
+      const isUrgent = timeLeft <= 10 && !isGameOver;
 
-      ctx.save();
-      ctx.translate(topClockPt.x, topClockPt.y);
-
-      // 타이머 배경 캡슐 배지
-      ctx.fillStyle = isLight ? 'rgba(241, 245, 249, 0.85)' : 'rgba(15, 23, 42, 0.85)';
-      ctx.strokeStyle = isLight ? 'rgba(148, 163, 184, 0.6)' : 'rgba(56, 189, 248, 0.5)';
-      ctx.lineWidth = 2;
-      const badgeW = 160;
-      const badgeH = 48;
-      ctx.beginPath();
-      ctx.roundRect(-badgeW / 2, -badgeH / 2, badgeW, badgeH, 24);
-      ctx.fill();
-      ctx.stroke();
-
-      // 타이머 글자 (선명한 네온 디지털 폰트)
-      ctx.font = '900 34px monospace, "Courier New", system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      if (!isGameOver) {
-        ctx.shadowColor = isLight ? 'rgba(2, 132, 199, 0.4)' : 'rgba(56, 189, 248, 0.7)';
-        ctx.shadowBlur = 10;
-      }
-      ctx.fillStyle = isGameOver
-        ? (isLight ? '#94a3b8' : '#64748b')
-        : (timeLeft <= 10
-            ? (isLight ? '#dc2626' : '#f87171')
-            : (isLight ? '#0369a1' : '#38bdf8'));
-      ctx.fillText(timeStr, 0, 1);
-      ctx.restore();
-
-      // [REQ] Left (1P) Score Number - 각자 진영(왼쪽)으로 더 내리고(이동), 90도 회전 (+90deg), 초대형 230px Ultra-Bold Cyan
-      const p1ScorePt = tf.tableToScreen(TABLE_WIDTH / 2 - 270, TABLE_HEIGHT / 2);
+      // =========================================================================
+      // 1P 진영 (왼쪽): 점수 (+90도) & 점수 아래/골대 쪽 시계 (+90도)
+      // =========================================================================
+      // 1P 초대형 점수 (+90도)
+      const p1ScorePt = tf.tableToScreen(TABLE_WIDTH / 2 - 230, TABLE_HEIGHT / 2);
       ctx.save();
       ctx.translate(p1ScorePt.x, p1ScorePt.y);
-      ctx.rotate(Math.PI / 2); // 1P 골대 쪽에 선 사람이 똑바로 보이도록 90도 회전
-      ctx.font = '900 230px "Arial Black", Impact, -apple-system, system-ui, sans-serif';
+      ctx.rotate(Math.PI / 2); // 1P 골대 쪽에 선 사람이 똑바로 보이도록 +90도 회전
+      ctx.font = '900 220px "Arial Black", Impact, -apple-system, system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       if (!isGameOver) {
@@ -319,12 +293,52 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
       ctx.fillText(String(score.blue), 0, 0);
       ctx.restore();
 
-      // [REQ] Right (2P) Score Number - 각자 진영(오른쪽)으로 더 내리고(이동), -90도 회전 (-90deg), 초대형 230px Ultra-Bold Yellow
-      const p2ScorePt = tf.tableToScreen(TABLE_WIDTH / 2 + 270, TABLE_HEIGHT / 2);
+      // 1P 시계 (점수 아래, 골대 쪽, +90도 회전)
+      const p1ClockPt = tf.tableToScreen(TABLE_WIDTH / 2 - 375, TABLE_HEIGHT / 2);
+      ctx.save();
+      ctx.translate(p1ClockPt.x, p1ClockPt.y);
+      ctx.rotate(Math.PI / 2); // 1P 플레이어 시선에 맞춰 +90도 회전
+
+      // 타이머 배경 HUD 캡슐
+      ctx.fillStyle = isLight ? 'rgba(241, 245, 249, 0.90)' : 'rgba(15, 23, 42, 0.88)';
+      ctx.strokeStyle = isGameOver
+        ? (isLight ? '#94a3b8' : '#475569')
+        : isUrgent
+        ? '#ef4444'
+        : (isLight ? '#06b6d4' : '#22d3ee');
+      ctx.lineWidth = 3;
+      const clockW = 150;
+      const clockH = 46;
+      ctx.beginPath();
+      ctx.roundRect(-clockW / 2, -clockH / 2, clockW, clockH, 23);
+      ctx.fill();
+      ctx.stroke();
+
+      // 타이머 글자 (선명한 네온 디지털 폰트)
+      ctx.font = '900 32px monospace, "Courier New", system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      if (!isGameOver) {
+        ctx.shadowColor = isUrgent ? '#ef4444' : (isLight ? '#0891b2' : '#22d3ee');
+        ctx.shadowBlur = 10;
+      }
+      ctx.fillStyle = isGameOver
+        ? (isLight ? '#94a3b8' : '#64748b')
+        : isUrgent
+        ? '#ef4444'
+        : (isLight ? '#0891b2' : '#22d3ee');
+      ctx.fillText(timeStr, 0, 1);
+      ctx.restore();
+
+      // =========================================================================
+      // 2P 진영 (오른쪽): 점수 (-90도) & 점수 아래/골대 쪽 시계 (-90도)
+      // =========================================================================
+      // 2P 초대형 점수 (-90도)
+      const p2ScorePt = tf.tableToScreen(TABLE_WIDTH / 2 + 230, TABLE_HEIGHT / 2);
       ctx.save();
       ctx.translate(p2ScorePt.x, p2ScorePt.y);
       ctx.rotate(-Math.PI / 2); // 2P 골대 쪽에 선 사람이 똑바로 보이도록 -90도 회전
-      ctx.font = '900 230px "Arial Black", Impact, -apple-system, system-ui, sans-serif';
+      ctx.font = '900 220px "Arial Black", Impact, -apple-system, system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       if (!isGameOver) {
@@ -335,6 +349,41 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
         ? (isLight ? '#cbd5e1' : '#3f3f46')
         : (isLight ? 'rgba(202, 138, 4, 0.92)' : 'rgba(250, 204, 21, 0.95)');
       ctx.fillText(String(score.red), 0, 0);
+      ctx.restore();
+
+      // 2P 시계 (점수 아래, 골대 쪽, -90도 회전)
+      const p2ClockPt = tf.tableToScreen(TABLE_WIDTH / 2 + 375, TABLE_HEIGHT / 2);
+      ctx.save();
+      ctx.translate(p2ClockPt.x, p2ClockPt.y);
+      ctx.rotate(-Math.PI / 2); // 2P 플레이어 시선에 맞춰 -90도 회전
+
+      // 타이머 배경 HUD 캡슐
+      ctx.fillStyle = isLight ? 'rgba(241, 245, 249, 0.90)' : 'rgba(15, 23, 42, 0.88)';
+      ctx.strokeStyle = isGameOver
+        ? (isLight ? '#94a3b8' : '#475569')
+        : isUrgent
+        ? '#ef4444'
+        : (isLight ? '#ca8a04' : '#facc15');
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.roundRect(-clockW / 2, -clockH / 2, clockW, clockH, 23);
+      ctx.fill();
+      ctx.stroke();
+
+      // 타이머 글자 (선명한 네온 디지털 폰트)
+      ctx.font = '900 32px monospace, "Courier New", system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      if (!isGameOver) {
+        ctx.shadowColor = isUrgent ? '#ef4444' : (isLight ? '#ca8a04' : '#facc15');
+        ctx.shadowBlur = 10;
+      }
+      ctx.fillStyle = isGameOver
+        ? (isLight ? '#94a3b8' : '#64748b')
+        : isUrgent
+        ? '#ef4444'
+        : (isLight ? '#ca8a04' : '#facc15');
+      ctx.fillText(timeStr, 0, 1);
       ctx.restore();
 
       // 6. Face-off Dots (양 진영 페이스오프 스팟: 좌측 Cyan, 우측 Yellow)
@@ -365,6 +414,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
       if (currentProps.isVirtualMode) {
         renderRealisticMal(ctx, tf, blueRobot, isLight, isGameOver);
         renderRealisticMal(ctx, tf, redRobot, isLight, isGameOver);
+      }
+
+      // 7.5. [REQ] 중간중간 튕기는 랜덤 장애물 (네온 핀볼 범퍼)
+      const obstacles = (live && live.obstacles) || currentProps.obstacles || [];
+      if (obstacles && obstacles.length > 0) {
+        for (const obs of obstacles) {
+          renderBumperObstacle(ctx, tf, obs, isLight, isGameOver);
+        }
       }
 
       // 8. [REQ] 공 (퍽) - 순수 원형 스포츠 퍽
@@ -518,6 +575,76 @@ function renderRealisticPuck(
   ctx.beginPath();
   ctx.arc(0, 0, screenRadius * 0.45, 0, Math.PI * 2);
   ctx.stroke();
+
+  ctx.restore();
+}
+
+// [REQ] 중간중간 튕기는 랜덤 장애물 (네온 핀볼 범퍼) 렌더러
+function renderBumperObstacle(
+  ctx: CanvasRenderingContext2D,
+  tf: PerspectiveTransformer,
+  obs: Obstacle,
+  isLight: boolean,
+  isGameOver: boolean
+) {
+  const screenPos = tf.tableToScreen(obs.x, obs.y);
+  const offsetPos = tf.tableToScreen(obs.x + (obs.radius || 28), obs.y);
+  const screenRadius = Math.max(16, Math.hypot(offsetPos.x - screenPos.x, offsetPos.y - screenPos.y));
+
+  ctx.save();
+  ctx.translate(screenPos.x, screenPos.y);
+
+  const now = Date.now();
+  const timeSinceHit = now - (obs.lastHitTime || 0);
+  const isRecentlyHit = timeSinceHit < 260;
+  const hitRatio = isRecentlyHit ? 1 - timeSinceHit / 260 : 0;
+
+  const baseColor = obs.color || '#ec4899'; // 네온 핫핑크 or 일렉트릭 퍼플
+
+  // 1. 타격 시 폭발적 펄스 링 (Shockwave Expand)
+  if (isRecentlyHit) {
+    const pulseR = screenRadius + hitRatio * 28;
+    ctx.strokeStyle = baseColor;
+    ctx.lineWidth = 3.5 * hitRatio;
+    ctx.shadowColor = baseColor;
+    ctx.shadowBlur = 18;
+    ctx.beginPath();
+    ctx.arc(0, 0, pulseR, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // 2. 범퍼 바깥 네온 링
+  ctx.strokeStyle = isGameOver ? '#52525b' : baseColor;
+  ctx.lineWidth = isRecentlyHit ? 5 : 3.5;
+  if (!isGameOver) {
+    ctx.shadowColor = baseColor;
+    ctx.shadowBlur = isRecentlyHit ? 24 : 12;
+  }
+  ctx.fillStyle = isGameOver
+    ? 'rgba(63, 63, 70, 0.3)'
+    : isRecentlyHit
+    ? 'rgba(236, 72, 153, 0.45)'
+    : isLight
+    ? 'rgba(244, 114, 182, 0.25)'
+    : 'rgba(236, 72, 153, 0.22)';
+  ctx.beginPath();
+  ctx.arc(0, 0, screenRadius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  // 3. 내부 기하학적 핀볼 코어 (다이아몬드 & 크로스 링)
+  ctx.strokeStyle = isGameOver ? '#71717a' : '#ffffff';
+  ctx.lineWidth = 2;
+  ctx.shadowBlur = 0;
+  ctx.beginPath();
+  ctx.arc(0, 0, screenRadius * 0.52, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // 중앙 발광 코어 닷
+  ctx.fillStyle = isGameOver ? '#71717a' : '#ffffff';
+  ctx.beginPath();
+  ctx.arc(0, 0, screenRadius * 0.22, 0, Math.PI * 2);
+  ctx.fill();
 
   ctx.restore();
 }
