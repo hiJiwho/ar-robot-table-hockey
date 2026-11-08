@@ -41,7 +41,7 @@ fs.cpSync(path.join(rootDir, 'electron'), path.join(resourcesAppDir, 'electron')
 const appPackageJson = {
   name: 'ar-robot-air-hotkey',
   productName: 'AR Robot air hotkey',
-  version: '1.0.0',
+  version: '1.6.1',
   main: 'electron/main.cjs',
 };
 fs.writeFileSync(
@@ -50,10 +50,17 @@ fs.writeFileSync(
   'utf-8'
 );
 
+// Create ./ar-data folder right next to the portable executable
+const portableArDataDir = path.join(releaseDir, 'ar-data');
+fs.mkdirSync(portableArDataDir, { recursive: true });
+const rootReleaseArDataDir = path.join(rootDir, 'release', 'ar-data');
+fs.mkdirSync(rootReleaseArDataDir, { recursive: true });
+
 // Create convenient 1-click launcher .bat in the project root
 const batContent = `@echo off\r\nstart "" "%~dp0release\\AR-Robot-air-hotkey-win32-x64\\AR-Robot-air-hotkey.exe"\r\n`;
 fs.writeFileSync(path.join(rootDir, 'AR-Robot-air-hotkey-실행.bat'), batContent, 'utf-8');
 fs.writeFileSync(path.join(rootDir, 'AR-Robot-Table-Hockey-실행.bat'), batContent, 'utf-8');
 
-console.log('✅ Windows App successfully built at:');
-console.log('   ' + targetExe);
+console.log('✅ Windows Portable App & ./ar-data folder ready at:');
+console.log('   Exe:     ' + targetExe);
+console.log('   ar-data: ' + portableArDataDir);

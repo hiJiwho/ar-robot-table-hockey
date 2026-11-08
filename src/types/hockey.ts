@@ -330,6 +330,9 @@ export interface ElectronAPI {
   onFullscreenChange: (callback: (isFullscreen: boolean) => void) => () => void;
   loadSavedConfig?: () => Promise<any>;
   saveConfig?: (config: any) => void;
+  saveSlotConfig?: (slot: 'A' | 'B' | 'C', data: any) => Promise<{ ok: boolean; path?: string }>;
+  loadSlotConfig?: (slot: 'A' | 'B' | 'C') => Promise<any>;
+  openAppDataFolder?: () => Promise<string>;
 }
 
 declare global {

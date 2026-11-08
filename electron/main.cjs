@@ -1,4 +1,4 @@
-const { app, BrowserWindow, screen, ipcMain, session } = require('electron');
+const { app, BrowserWindow, screen, ipcMain, session, shell } = require('electron');
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
@@ -9,8 +9,37 @@ let consoleWindow = null;
 let latestSyncState = null;
 let localServerUrl = null;
 
+// 포터블 .exe 바로 옆에 'ar-data' 폴더를 생성하여 모든 캘리브레이션·설정을 영구 저장합니다.
+// - electron-builder 단일 포터블 실행 시: process.env.PORTABLE_EXECUTABLE_DIR 기준 ./ar-data
+// - 폴더형 포터블(AR-Robot-air-hotkey.exe) 실행 시: 실행파일(process.execPath) 옆 ./ar-data
+function resolvePortableExeDir() {
+  if (process.env.PORTABLE_EXECUTABLE_DIR) {
+    return process.env.PORTABLE_EXECUTABLE_DIR;
+  }
+  if (app.isPackaged || !process.execPath.includes('node_modules')) {
+    return path.dirname(process.execPath);
+  }
+  return path.resolve(__dirname, '..');
+}
+
+const AR_DATA_DIR = path.join(resolvePortableExeDir(), 'ar-data');
+try {
+  fs.mkdirSync(AR_DATA_DIR, { recursive: true });
+  // Chromium 프로필/캐시 데이터도 ar-data 내부에 격리하여 완전한 포터블 동작 보장
+  const userDataDir = path.join(AR_DATA_DIR, 'user-profile');
+  fs.mkdirSync(userDataDir, { recursive: true });
+  app.setPath('userData', userDataDir);
+} catch (err) {
+  console.error('Failed to initialize ar-data directory:', err);
+}
+
 function getCalibrationConfigPath() {
-  return path.join(app.getPath('userData'), 'airhockey-calibration.json');
+  return path.join(AR_DATA_DIR, 'calibration-settings.json');
+}
+
+function getSlotConfigPath(slotKey) {
+  const safeSlot = ['A', 'B', 'C'].includes(String(slotKey)) ? String(slotKey) : 'A';
+  return path.join(AR_DATA_DIR, `calibration-slot-${safeSlot}.json`);
 }
 
 function readSavedConfig() {
@@ -20,7 +49,7 @@ function readSavedConfig() {
       return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
     }
   } catch (err) {
-    console.error('Failed to read saved calibration config:', err);
+    console.error('Failed to read saved calibration config from ar-data:', err);
   }
   return {};
 }
@@ -28,6 +57,7 @@ function readSavedConfig() {
 function writeSavedConfig(patch) {
   if (!patch || typeof patch !== 'object') return;
   try {
+    fs.mkdirSync(AR_DATA_DIR, { recursive: true });
     const current = readSavedConfig();
     const next = { ...current };
     let changed = false;
@@ -49,10 +79,11 @@ function writeSavedConfig(patch) {
       }
     }
     if (changed) {
+      next.updatedAt = new Date().toISOString();
       fs.writeFileSync(getCalibrationConfigPath(), JSON.stringify(next, null, 2), 'utf-8');
     }
   } catch (err) {
-    console.error('Failed to write saved calibration config:', err);
+    console.error('Failed to write saved calibration config to ar-data:', err);
   }
 }
 
@@ -452,13 +483,56 @@ app.whenReady().then(async () => {
     return win.isFullScreen();
   });
 
-  // IPC: Load & Save persistent calibration config
+  // IPC: Load & Save persistent calibration config in ./ar-data folder next to portable exe
   ipcMain.handle('airhockey:load-config', () => {
-    return readSavedConfig();
+    return {
+      ...readSavedConfig(),
+      appDataDir: AR_DATA_DIR,
+      appDataFile: getCalibrationConfigPath(),
+    };
   });
 
   ipcMain.on('airhockey:save-config', (_event, cfg) => {
     writeSavedConfig(cfg);
+  });
+
+  ipcMain.handle('airhockey:save-slot', (_event, { slot, data }) => {
+    try {
+      fs.mkdirSync(AR_DATA_DIR, { recursive: true });
+      const slotPath = getSlotConfigPath(slot);
+      fs.writeFileSync(slotPath, JSON.stringify(data, null, 2), 'utf-8');
+      writeSavedConfig(data);
+      return { ok: true, path: slotPath };
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
+  });
+
+  ipcMain.handle('airhockey:load-slot', (_event, slot) => {
+    try {
+      const slotPath = getSlotConfigPath(slot);
+      if (!fs.existsSync(slotPath)) return null;
+      const data = JSON.parse(fs.readFileSync(slotPath, 'utf-8'));
+      writeSavedConfig(data);
+      return data;
+    } catch {
+      return null;
+    }
+  });
+
+  ipcMain.handle('airhockey:open-appdata-folder', () => {
+    try {
+      fs.mkdirSync(AR_DATA_DIR, { recursive: true });
+      const cfgFile = getCalibrationConfigPath();
+      if (fs.existsSync(cfgFile)) {
+        shell.showItemInFolder(cfgFile);
+      } else {
+        shell.openPath(AR_DATA_DIR);
+      }
+      return AR_DATA_DIR;
+    } catch {
+      return AR_DATA_DIR;
+    }
   });
 
   // IPC: Forward sync-state to Sub Window and Console Window

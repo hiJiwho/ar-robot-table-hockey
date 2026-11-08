@@ -411,20 +411,27 @@ export const ConsoleScreen: React.FC = () => {
         savedAt: new Date().toLocaleTimeString(),
       };
       localStorage.setItem(`airhockey_preset_slot_${slotKey}`, JSON.stringify(payload));
-      setPresetNotice(`슬롯 ${slotKey}에 현재 세팅이 저장되었습니다 (${payload.savedAt})`);
+      void window.electronAPI?.saveSlotConfig?.(slotKey, payload);
+      setPresetNotice(`슬롯 ${slotKey}에 세팅이 ./ar-data 폴더에 저장되었습니다 (${payload.savedAt})`);
       setTimeout(() => setPresetNotice(null), 3000);
     } catch {}
   };
 
-  const handleLoadCalibrationSlot = (slotKey: 'A' | 'B' | 'C') => {
+  const handleLoadCalibrationSlot = async (slotKey: 'A' | 'B' | 'C') => {
     try {
-      const raw = localStorage.getItem(`airhockey_preset_slot_${slotKey}`);
-      if (!raw) {
+      let data: any = null;
+      if (window.electronAPI?.loadSlotConfig) {
+        data = await window.electronAPI.loadSlotConfig(slotKey);
+      }
+      if (!data) {
+        const raw = localStorage.getItem(`airhockey_preset_slot_${slotKey}`);
+        if (raw) data = JSON.parse(raw);
+      }
+      if (!data) {
         setPresetNotice(`슬롯 ${slotKey}에 저장된 데이터가 없습니다.`);
         setTimeout(() => setPresetNotice(null), 3000);
         return;
       }
-      const data = JSON.parse(raw);
       if (data.screenCorners) {
         setScreenCorners(data.screenCorners);
         localStorage.setItem('airhockey_screen_corners', JSON.stringify(data.screenCorners));
@@ -452,7 +459,7 @@ export const ConsoleScreen: React.FC = () => {
         setLowLightMode(data.lowLightMode);
         sendAction({ type: 'GAME_ACTION', action: 'SET_LOW_LIGHT_MODE', lowLightMode: data.lowLightMode });
       }
-      setPresetNotice(`슬롯 ${slotKey} 세팅을 성공적으로 불러왔습니다!`);
+      setPresetNotice(`슬롯 ${slotKey} 세팅을 ./ar-data에서 불러왔습니다!`);
       setTimeout(() => setPresetNotice(null), 3000);
     } catch {}
   };
@@ -1529,10 +1536,22 @@ export const ConsoleScreen: React.FC = () => {
 
             {/* Quick Calibration & Environment Slot Presets Bar */}
             <div className="px-4 py-2.5 bg-slate-950 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
-              <span className="font-bold text-slate-300 flex items-center gap-1.5">
-                <Save className="w-3.5 h-3.5 text-emerald-400" />
-                <span>캘리브레이션/조명 슬롯 프리셋:</span>
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-slate-300 flex items-center gap-1.5">
+                  <Save className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>./ar-data 자동저장 & 슬롯 프리셋:</span>
+                </span>
+                {window.electronAPI?.openAppDataFolder && (
+                  <button
+                    onClick={() => window.electronAPI?.openAppDataFolder?.()}
+                    className="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700 text-[10px] font-bold flex items-center gap-1 transition-colors"
+                    title="포터블 실행파일(.exe) 옆 ar-data 설정 저장 폴더 열기"
+                  >
+                    <FolderOpen className="w-3 h-3" />
+                    <span>ar-data 폴더 열기</span>
+                  </button>
+                )}
+              </div>
               <div className="flex items-center gap-1.5">
                 {(['A', 'B', 'C'] as const).map((slot) => (
                   <div key={slot} className="flex items-center rounded-lg overflow-hidden border border-slate-700">
