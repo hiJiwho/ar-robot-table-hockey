@@ -44,6 +44,10 @@ export interface PuckState {
   radius: number;
   trail: Array<{ x: number; y: number; alpha: number }>;
   lastHitTeam: 'blue' | 'red' | null;
+  spin?: number; // Angular velocity (rad/s) for Magnus curve shots
+  angle?: number; // Visual rotation angle (rad)
+  superCharged?: boolean; // When true, next goal scores 2 points!
+  rallyCount?: number; // Consecutive paddle/bumper hits in current rally
 }
 
 export interface Particle {
@@ -58,22 +62,54 @@ export interface Particle {
   maxLife: number;
 }
 
+export interface ImpactRipple {
+  id: string;
+  x: number; // Table coordinate X
+  y: number; // Table coordinate Y
+  color: string;
+  maxRadius: number;
+  createdAt: number;
+  duration: number; // ms
+  label?: string;
+}
+
 export interface LiveGameState {
   blueRobot: RobotState;
   redRobot: RobotState;
   puck: PuckState;
   particles: Particle[];
   obstacles?: Obstacle[];
+  ripples?: ImpactRipple[];
 }
+
+export type ObstacleType = 'BUMPER' | 'MOVING_BUMPER' | 'SPEED_BOOST' | 'BONUS_RING';
 
 export interface Obstacle {
   id: string;
+  type?: ObstacleType;
   x: number; // Virtual table coordinates (e.g. 0..1000)
   y: number; // Virtual table coordinates (e.g. 0..600)
+  vy?: number; // Vertical patrol velocity for MOVING_BUMPER
+  minY?: number;
+  maxY?: number;
   radius: number;
   color: string;
   hitCount: number;
   lastHitTime: number;
+}
+
+export type BotDifficulty = 'EASY' | 'NORMAL' | 'HARD' | 'PRO';
+export type BotTargetTeam = 'NONE' | 'RED' | 'BLUE' | 'BOTH';
+
+export interface GoalLogEntry {
+  id: string;
+  team: 'blue' | 'red';
+  points: number;
+  speed: number;
+  timeRemaining: number;
+  timestamp: number;
+  isSuperGoal?: boolean;
+  replayPath?: Array<{ x: number; y: number }>;
 }
 
 export interface ColorFilter {
@@ -89,7 +125,7 @@ export interface ColorFilter {
   vMax: number;
 }
 
-export type VisionEngineType = 'OPENCV' | 'CHROMATIC' | 'YCRCB' | 'HSV';
+export type VisionEngineType = 'OPENCV' | 'CHROMATIC' | 'YCRCB' | 'HSV' | 'ADAPTIVE_HSV';
 
 export interface ColorSettings {
   magenta: ColorFilter;
@@ -113,6 +149,9 @@ export interface MatchStats {
   redHits: number;
   maxPuckSpeed: number;
   lastScoredTeam: 'blue' | 'red' | null;
+  maxRally?: number;
+  currentRally?: number;
+  goalHistory?: GoalLogEntry[];
 }
 
 export type GameActionMessage = {
@@ -137,7 +176,12 @@ export type GameActionMessage = {
     | 'UPDATE_COLOR_SETTINGS'
     | 'SAMPLE_COLOR'
     | 'TOGGLE_OBSTACLES'
-    | 'RANDOMIZE_OBSTACLES';
+    | 'RANDOMIZE_OBSTACLES'
+    | 'SET_BOT_CONFIG'
+    | 'SET_AUDIO_CONFIG'
+    | 'PLAY_SOUND_EFFECT'
+    | 'SET_CAMERA_DEVICE'
+    | 'TRIGGER_SUPER_PUCK';
   seconds?: number;
   score?: MatchScore;
   mode?: MatchMode;
@@ -153,6 +197,12 @@ export type GameActionMessage = {
   customSample?: { r: number; g: number; b: number; hex: string } | null;
   obstaclesEnabled?: boolean;
   obstacles?: Obstacle[];
+  botTeam?: BotTargetTeam;
+  botDifficulty?: BotDifficulty;
+  isMuted?: boolean;
+  volume?: number;
+  soundEffect?: 'WHISTLE' | 'GOAL_HORN' | 'BUZZER' | 'BOOST';
+  cameraDeviceId?: string;
 };
 
 export const DEFAULT_NORMALIZED_CORNERS: FourCorners = [
@@ -233,7 +283,7 @@ export interface SyncStatePayload {
   goalSize?: number;
   theme?: 'dark' | 'light';
   stats: MatchStats;
-  goalAnnouncement?: { team: 'blue' | 'red'; countdown: number } | null;
+  goalAnnouncement?: { team: 'blue' | 'red'; countdown: number; points?: number } | null;
   screenCorners?: CalibrationCorners;
   cameraCorners?: CalibrationCorners;
   isCameraMirrored?: boolean;
@@ -246,11 +296,24 @@ export interface SyncStatePayload {
     blueConfidence: number;
     redConfidence: number;
   };
-  puck?: { x: number; y: number; vx: number; vy: number };
+  puck?: {
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    spin?: number;
+    superCharged?: boolean;
+    rallyCount?: number;
+  };
   blueRobot?: { tableX: number; tableY: number; detected: boolean; confidence: number };
   redRobot?: { tableX: number; tableY: number; detected: boolean; confidence: number };
   obstacles?: Obstacle[];
   obstaclesEnabled?: boolean;
+  botTeam?: BotTargetTeam;
+  botDifficulty?: BotDifficulty;
+  isMuted?: boolean;
+  volume?: number;
+  cameraDeviceId?: string;
 }
 
 export interface ElectronAPI {
@@ -265,6 +328,8 @@ export interface ElectronAPI {
   toggleFullscreen: () => Promise<boolean>;
   getFullscreenState: () => Promise<boolean>;
   onFullscreenChange: (callback: (isFullscreen: boolean) => void) => () => void;
+  loadSavedConfig?: () => Promise<any>;
+  saveConfig?: (config: any) => void;
 }
 
 declare global {

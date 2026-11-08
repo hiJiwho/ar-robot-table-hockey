@@ -45,4 +45,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('airhockey:fullscreen-changed', listener);
     };
   },
+  loadSavedConfig: () => {
+    return ipcRenderer.invoke('airhockey:load-config');
+  },
+  saveConfig: (config) => {
+    ipcRenderer.send('airhockey:save-config', config);
+  },
 });

@@ -9,6 +9,53 @@ let consoleWindow = null;
 let latestSyncState = null;
 let localServerUrl = null;
 
+function getCalibrationConfigPath() {
+  return path.join(app.getPath('userData'), 'airhockey-calibration.json');
+}
+
+function readSavedConfig() {
+  try {
+    const filePath = getCalibrationConfigPath();
+    if (fs.existsSync(filePath)) {
+      return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    }
+  } catch (err) {
+    console.error('Failed to read saved calibration config:', err);
+  }
+  return {};
+}
+
+function writeSavedConfig(patch) {
+  if (!patch || typeof patch !== 'object') return;
+  try {
+    const current = readSavedConfig();
+    const next = { ...current };
+    let changed = false;
+    const keys = [
+      'screenCorners',
+      'cameraCorners',
+      'goalSize',
+      'isCameraMirrored',
+      'colorSettings',
+      'lowLightMode',
+      'theme',
+      'obstaclesEnabled',
+      'cameraDeviceId',
+    ];
+    for (const k of keys) {
+      if (patch[k] !== undefined) {
+        next[k] = patch[k];
+        changed = true;
+      }
+    }
+    if (changed) {
+      fs.writeFileSync(getCalibrationConfigPath(), JSON.stringify(next, null, 2), 'utf-8');
+    }
+  } catch (err) {
+    console.error('Failed to write saved calibration config:', err);
+  }
+}
+
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -36,7 +83,7 @@ function startLocalStaticServer() {
     }
 
     const distDir = path.join(__dirname, '..', 'dist');
-    const server = http.createServer((req, res) => {
+    const createHttpHandler = (req, res) => {
       try {
         const parsedUrl = new URL(req.url || '/', 'http://127.0.0.1');
         let pathname = decodeURIComponent(parsedUrl.pathname);
@@ -67,17 +114,33 @@ function startLocalStaticServer() {
         res.writeHead(500);
         res.end('Internal Server Error');
       }
-    });
+    };
 
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      const url = `http://127.0.0.1:${address.port}`;
-      resolve(url);
-    });
+    // Use a fixed local port (38470) so Chromium's localStorage origin remains identical across app restarts
+    const candidatePorts = [38470, 38471, 38472, 0];
+    let portIdx = 0;
 
-    server.on('error', (err) => {
-      reject(err);
-    });
+    const tryListen = () => {
+      const server = http.createServer(createHttpHandler);
+      const port = candidatePorts[portIdx];
+
+      server.once('error', (err) => {
+        if (portIdx < candidatePorts.length - 1) {
+          portIdx++;
+          tryListen();
+        } else {
+          reject(err);
+        }
+      });
+
+      server.listen(port, '127.0.0.1', () => {
+        const address = server.address();
+        const url = `http://127.0.0.1:${address.port}`;
+        resolve(url);
+      });
+    };
+
+    tryListen();
   });
 }
 
@@ -389,9 +452,19 @@ app.whenReady().then(async () => {
     return win.isFullScreen();
   });
 
+  // IPC: Load & Save persistent calibration config
+  ipcMain.handle('airhockey:load-config', () => {
+    return readSavedConfig();
+  });
+
+  ipcMain.on('airhockey:save-config', (_event, cfg) => {
+    writeSavedConfig(cfg);
+  });
+
   // IPC: Forward sync-state to Sub Window and Console Window
   ipcMain.on('airhockey:sync-state', (_event, payload) => {
     latestSyncState = payload;
+    writeSavedConfig(payload);
     if (subWindow && !subWindow.isDestroyed()) {
       subWindow.webContents.send('airhockey:sync-state', payload);
     }
@@ -402,6 +475,7 @@ app.whenReady().then(async () => {
 
   // IPC: Forward action from Console/Sub to Main window
   ipcMain.on('airhockey:send-action', (_event, action) => {
+    writeSavedConfig(action);
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('airhockey:action', action);
     }

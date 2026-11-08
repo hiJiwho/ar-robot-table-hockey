@@ -1,11 +1,12 @@
 import { TABLE_WIDTH, TABLE_HEIGHT, ROBOT_RADIUS, PUCK_RADIUS, PuckState, RobotState, Obstacle } from '../types/hockey';
 
 export interface CollisionEvent {
-  type: 'WALL' | 'POST' | 'ROBOT' | 'GOAL' | 'OBSTACLE';
+  type: 'WALL' | 'POST' | 'ROBOT' | 'GOAL' | 'OBSTACLE' | 'BOOST' | 'POWERUP';
   x: number;
   y: number;
   team?: 'blue' | 'red';
   speed: number;
+  combo?: number;
 }
 
 export interface PhysicsStepResult {
@@ -14,11 +15,11 @@ export interface PhysicsStepResult {
 }
 
 /**
- * Professional Air Hockey Physics Engine
- * - Multi-substep continuous collision detection (CCD) to eliminate tunneling & sticking
- * - High-elasticity crisp rail bounces (e = 0.98) with rounded goal post corners
- * - Realistic momentum transfer & dynamic impulse from striker swing velocity
- * - Clean air cushion glide with zero unnatural vortex forces or phantom trembling
+ * Professional Air Hockey Physics Engine v2.0
+ * - 8-substep continuous collision detection (CCD) to eliminate tunneling & sticking at extreme speeds
+ * - Magnus effect spin & curve-shot physics + English spin rebound on rails
+ * - Realistic momentum transfer & dynamic impulse from striker swing velocity (Anti-own-goal guaranteed)
+ * - Dynamic obstacle gimmicks: Pinball Bumpers, Moving Patrol Bumpers, Turbo Speed Pads, and Super-Goal x2 Bonus Rings
  */
 export function stepPuckPhysics(
   currPuck: PuckState,
@@ -32,14 +33,18 @@ export function stepPuckPhysics(
 
   // Limit max dt to avoid simulation blowout
   const clampedDt = Math.min(0.04, Math.max(0.001, dt));
-  // 4 sub-steps per frame guarantees smooth continuous collision detection (CCD)
-  const SUB_STEPS = 4;
+  // 8 sub-steps per frame guarantees rock-solid continuous collision detection (CCD)
+  const SUB_STEPS = 8;
   const subDt = clampedDt / SUB_STEPS;
 
   let px = currPuck.x;
   let py = currPuck.y;
   let pvx = currPuck.vx;
   let pvy = currPuck.vy;
+  let spin = currPuck.spin || 0;
+  let angle = currPuck.angle || 0;
+  let superCharged = Boolean(currPuck.superCharged);
+  let rallyCount = currPuck.rallyCount || 0;
   let lastHitTeam = currPuck.lastHitTeam;
 
   const r = currPuck.radius || PUCK_RADIUS;
@@ -48,28 +53,58 @@ export function stepPuckPhysics(
   const postBottom = TABLE_HEIGHT / 2 + goalHalf;
   const postRadius = 10; // Rounded post caps
 
+  // Step moving obstacles once per frame
+  if (obstacles && obstacles.length > 0) {
+    for (const obs of obstacles) {
+      if (obs.type === 'MOVING_BUMPER' && obs.vy) {
+        obs.y += obs.vy * clampedDt;
+        const minY = obs.minY ?? 110;
+        const maxY = obs.maxY ?? TABLE_HEIGHT - 110;
+        if (obs.y < minY) {
+          obs.y = minY;
+          obs.vy = Math.abs(obs.vy);
+        } else if (obs.y > maxY) {
+          obs.y = maxY;
+          obs.vy = -Math.abs(obs.vy);
+        }
+      }
+    }
+  }
+
   for (let step = 0; step < SUB_STEPS; step++) {
-    // 1. Position Integration
+    // 1. Magnus Spin Curve Force (F_magnus perpendicular to velocity)
+    if (Math.abs(spin) > 0.05) {
+      const magnusFactor = 0.22;
+      const ax = -spin * pvy * magnusFactor;
+      const ay = spin * pvx * magnusFactor;
+      pvx += ax * subDt;
+      pvy += ay * subDt;
+      spin *= 0.9985; // Gradual spin decay
+      angle += spin * subDt;
+    }
+
+    // 2. Position Integration
     px += pvx * subDt;
     py += pvy * subDt;
 
-    // 2. Air Cushion Drag (Floating puck: very low drag so bank shots glide across the table)
-    // 0.9996 per sub-step (~0.9984 per frame)
-    pvx *= 0.9996;
-    pvy *= 0.9996;
+    // 3. Air Cushion Drag (Floating puck: very low drag so bank shots glide across the table)
+    pvx *= 0.9998;
+    pvy *= 0.9998;
 
-    // 3. Top and Bottom Cushion Rails (Crisp elastic rebound)
+    // 4. Top and Bottom Cushion Rails (Crisp elastic rebound + Spin English transfer)
     const RAIL_RESTITUTION = 0.99;
     if (py - r < 0) {
       py = r;
       pvy = Math.abs(pvy) * RAIL_RESTITUTION;
+      // Spin transfer on rail contact
+      pvx += spin * 14;
+      spin *= 0.65;
+
       // [REQ] 상하 벽면으로만 튕기며 공이 멈추는 현상(Dead Puck) 완전 제거:
-      // Y축 반사 시 항상 강력한 X축 전진 추진력(최소 360 px/s)을 주입
       const dir = pvx >= 0 ? 1 : -1;
       if (Math.abs(pvx) < 320) {
         pvx = dir * 360;
       }
-      // 수직 왕복 억제: Y속도가 너무 크면 일부를 X로 분산
       if (Math.abs(pvy) > Math.abs(pvx) * 1.5) {
         pvy *= 0.75;
         pvx = dir * Math.max(Math.abs(pvx), 340);
@@ -78,6 +113,9 @@ export function stepPuckPhysics(
     } else if (py + r > TABLE_HEIGHT) {
       py = TABLE_HEIGHT - r;
       pvy = -Math.abs(pvy) * RAIL_RESTITUTION;
+      pvx -= spin * 14;
+      spin *= 0.65;
+
       const dir = pvx >= 0 ? 1 : -1;
       if (Math.abs(pvx) < 320) {
         pvx = dir * 360;
@@ -89,7 +127,7 @@ export function stepPuckPhysics(
       events.push({ type: 'WALL', x: px, y: py, speed: Math.hypot(pvx, pvy) });
     }
 
-    // 4. Goal Posts (Rounded Corner Bounces)
+    // 5. Goal Posts (Rounded Corner Bounces)
     const checkPostBounce = (postX: number, postY: number) => {
       const dx = px - postX;
       const dy = py - postY;
@@ -98,7 +136,6 @@ export function stepPuckPhysics(
       if (dist < minD && dist > 0.001) {
         const nx = dx / dist;
         const ny = dy / dist;
-        // Position resolution
         px = postX + nx * minD;
         py = postY + ny * minD;
         const vDotN = pvx * nx + pvy * ny;
@@ -115,100 +152,97 @@ export function stepPuckPhysics(
     checkPostBounce(TABLE_WIDTH, postTop);
     checkPostBounce(TABLE_WIDTH, postBottom);
 
-    // 5. Left End Wall & Blue Goal Mouth
+    // 6. Left End Wall & Blue Goal Mouth
     const inGoalMouthY = py >= postTop && py <= postBottom;
     if (px - r < 0) {
       if (inGoalMouthY) {
-        // Entered goal opening
-        if (px < -r * 1.5) {
-          events.push({ type: 'GOAL', team: 'red', x: 0, y: py, speed: Math.hypot(pvx, pvy) });
+        if (px < -r * 1.35) {
+          events.push({ type: 'GOAL', team: 'red', x: 0, y: py, speed: Math.hypot(pvx, pvy), combo: rallyCount });
           pvx = 0;
           pvy = 0;
+          spin = 0;
           break;
         }
       } else {
-        // Hit left solid end rail
         px = r;
         pvx = Math.abs(pvx) * RAIL_RESTITUTION;
         events.push({ type: 'WALL', x: px, y: py, speed: Math.abs(pvx) });
       }
     }
 
-    // 6. Right End Wall & Red Goal Mouth
+    // 7. Right End Wall & Red Goal Mouth
     if (px + r > TABLE_WIDTH) {
       if (inGoalMouthY) {
-        // Entered goal opening
-        if (px > TABLE_WIDTH + r * 1.5) {
-          events.push({ type: 'GOAL', team: 'blue', x: TABLE_WIDTH, y: py, speed: Math.hypot(pvx, pvy) });
+        if (px > TABLE_WIDTH + r * 1.35) {
+          events.push({ type: 'GOAL', team: 'blue', x: TABLE_WIDTH, y: py, speed: Math.hypot(pvx, pvy), combo: rallyCount });
           pvx = 0;
           pvy = 0;
+          spin = 0;
           break;
         }
       } else {
-        // Hit right solid end rail
         px = TABLE_WIDTH - r;
         pvx = -Math.abs(pvx) * RAIL_RESTITUTION;
         events.push({ type: 'WALL', x: px, y: py, speed: Math.abs(pvx) });
       }
     }
 
-    // 7. Striker / Paddle Collisions (Both Blue & Red robots)
-    // [REQ 4] "공이 콕에 맞고 자책골 되던데;; 이 엔진 좀 바꿔줘" -> 자책골 100% 방지 & 호쾌한 전방 튕김 엔진
+    // 8. Striker / Paddle Collisions (Both Blue & Red robots)
+    // [REQ] 말만 양 옆으로 이동해도 수비·스매시·대각선 뱅크샷·기믹 타격이 100% 가능하도록 최적화 & 자책골 완벽 방지
     const checkStriker = (robot: RobotState, team: 'blue' | 'red') => {
       if (!robot.detected || robot.confidence < 0.35) return;
 
-      const strikerRadius = robot.radius || ROBOT_RADIUS;
+      const strikerRadius = (robot.radius || ROBOT_RADIUS) + 4; // 양 옆 이동 수비 시 4px 여유 히트박스 제공
       const dx = px - robot.tableX;
       const dy = py - robot.tableY;
       const dist = Math.hypot(dx, dy);
       const minDist = r + strikerRadius;
 
       if (dist < minDist) {
-        // Safe normal calculation
         let nx = dist > 0.0001 ? dx / dist : (team === 'blue' ? 1 : -1);
         let ny = dist > 0.0001 ? dy / dist : 0;
 
-        // [Anti-Own-Goal Guarantee]
-        // [REQ] "그냥 퍽 인식시 골대 반대로 밀어내게"
-        // 패들의 현재 위치(왼쪽 진영 / 오른쪽 진영)에 따라 뒤쪽 골대의 정반대 방향으로 100% 강력하게 퍽을 밀어냄!
+        // 양 옆(Y축)으로 빠르게 움직이며 깎아 칠 때도 강력한 스매시 보너스 부여!
+        const lateralSmashBonus = Math.abs(robot.vy) * 0.65;
+
         const isLeftSide = robot.tableX < TABLE_WIDTH / 2;
         if (isLeftSide) {
-          // 왼쪽 진영 패들: 왼쪽 골대(X=0) 반대편인 오른쪽(+X)으로 무조건 밀어냄!
-          if (nx < 0.2) {
-            nx = Math.max(0.4, Math.abs(nx));
+          if (nx < 0.25) {
+            nx = Math.max(0.45, Math.abs(nx));
             const reLen = Math.hypot(nx, ny) || 1;
             nx /= reLen;
             ny /= reLen;
           }
-          px = Math.max(robot.tableX + minDist * 0.5, robot.tableX + nx * (minDist + 1));
+          px = Math.max(robot.tableX + minDist * 0.55, robot.tableX + nx * (minDist + 1));
           py = robot.tableY + ny * (minDist + 1);
 
-          // Force energetic forward propulsion (+X, 오른쪽 골대 방향)
-          const swingBonus = Math.max(0, robot.vx * 0.85);
-          pvx = Math.max(680, Math.abs(pvx) * 1.15 + swingBonus + 420);
+          const swingBonus = Math.max(0, robot.vx * 0.9) + lateralSmashBonus;
+          pvx = Math.max(720, Math.abs(pvx) * 1.18 + swingBonus + 440);
         } else {
-          // 오른쪽 진영 패들: 오른쪽 골대(X=TABLE_WIDTH) 반대편인 왼쪽(-X)으로 무조건 밀어냄!
-          if (nx > -0.2) {
-            nx = -Math.max(0.4, Math.abs(nx));
+          if (nx > -0.25) {
+            nx = -Math.max(0.45, Math.abs(nx));
             const reLen = Math.hypot(nx, ny) || 1;
             nx /= reLen;
             ny /= reLen;
           }
-          px = Math.min(robot.tableX - minDist * 0.5, robot.tableX + nx * (minDist + 1));
+          px = Math.min(robot.tableX - minDist * 0.55, robot.tableX + nx * (minDist + 1));
           py = robot.tableY + ny * (minDist + 1);
 
-          // Force energetic forward propulsion (-X, 왼쪽 골대 방향)
-          const swingBonus = Math.max(0, -robot.vx * 0.85);
-          pvx = -Math.max(680, Math.abs(pvx) * 1.15 + swingBonus + 420);
+          const swingBonus = Math.max(0, -robot.vx * 0.9) + lateralSmashBonus;
+          pvx = -Math.max(720, Math.abs(pvx) * 1.18 + swingBonus + 440);
         }
 
-        // Controlled Y deflection based on impact height & paddle vertical velocity
+        // 양 옆 이동 위치(타점 오프셋)와 좌우 스와이프 속도(robot.vy)만으로 직선타/대각선 뱅크샷/커브샷 자유자재 조준
         const offsetRatio = Math.max(-1, Math.min(1, dy / minDist));
-        pvy = pvy * 0.25 + offsetRatio * 180 + robot.vy * 0.45;
+        pvy = pvy * 0.22 + offsetRatio * 240 + robot.vy * 0.55;
+
+        // Impart Magnus Spin from paddle lateral slice and off-center hit
+        const impartedSpin = (robot.vy * 0.0085 + offsetRatio * 3.8) * (isLeftSide ? 1 : -1);
+        spin = Math.max(-12, Math.min(12, spin * 0.3 + impartedSpin));
 
         // Ensure crisp total speed
         let curSpeed = Math.hypot(pvx, pvy);
-        const minHitSpeed = 650;
+        const minHitSpeed = 680;
         if (curSpeed < minHitSpeed) {
           const boost = minHitSpeed / (curSpeed || 1);
           pvx *= boost;
@@ -217,12 +251,14 @@ export function stepPuckPhysics(
         }
 
         lastHitTeam = team;
+        rallyCount += 1;
         events.push({
           type: 'ROBOT',
           team,
           x: px,
           y: py,
           speed: curSpeed,
+          combo: rallyCount,
         });
       }
     };
@@ -230,8 +266,9 @@ export function stepPuckPhysics(
     checkStriker(blueRobot, 'blue');
     checkStriker(redRobot, 'red');
 
-    // 8. [REQ] Bumping Obstacles (중간중간 튕기는 랜덤 장애물 / 핀볼 네온 범퍼)
+    // 9. Interactive Obstacles & Field Gimmicks
     if (obstacles && obstacles.length > 0) {
+      const now = Date.now();
       for (const obs of obstacles) {
         const dx = px - obs.x;
         const dy = py - obs.y;
@@ -239,48 +276,97 @@ export function stepPuckPhysics(
         const minDist = r + obs.radius;
 
         if (dist < minDist && dist > 0.0001) {
-          const nx = dx / dist;
-          const ny = dy / dist;
+          const obsType = obs.type || 'BUMPER';
 
-          // Position separation
-          px = obs.x + nx * (minDist + 0.5);
-          py = obs.y + ny * (minDist + 0.5);
-
-          const vDotN = pvx * nx + pvy * ny;
-          if (vDotN < 0) {
-            // High-elasticity pinball bumper bounce (1.35x restitution)
-            const restitution = 1.35;
-            pvx -= (1 + restitution) * vDotN * nx;
-            pvy -= (1 + restitution) * vDotN * ny;
-
-            // Ensure crisp energetic ricochet speed (at least 600 px/s)
-            let curSpeed = Math.hypot(pvx, pvy);
-            const minBumperSpeed = 600;
-            if (curSpeed < minBumperSpeed) {
-              const boost = minBumperSpeed / (curSpeed || 1);
-              pvx *= boost;
-              pvy *= boost;
-              curSpeed = minBumperSpeed;
+          if (obsType === 'SPEED_BOOST') {
+            // Pass-through Turbo Boost Pad (cooldown 400ms)
+            if (now - (obs.lastHitTime || 0) > 400) {
+              obs.lastHitTime = now;
+              obs.hitCount = (obs.hitCount || 0) + 1;
+              pvx *= 1.42;
+              pvy *= 1.42;
+              const boostedSpeed = Math.min(1600, Math.hypot(pvx, pvy));
+              events.push({
+                type: 'BOOST',
+                x: obs.x,
+                y: obs.y,
+                speed: boostedSpeed,
+                combo: rallyCount,
+              });
             }
+          } else if (obsType === 'BONUS_RING') {
+            // Pass-through Super Goal x2 Bonus Ring
+            if (!superCharged && now - (obs.lastHitTime || 0) > 600) {
+              obs.lastHitTime = now;
+              obs.hitCount = (obs.hitCount || 0) + 1;
+              superCharged = true;
+              pvx *= 1.15;
+              pvy *= 1.15;
+              events.push({
+                type: 'POWERUP',
+                x: obs.x,
+                y: obs.y,
+                speed: Math.hypot(pvx, pvy),
+                combo: rallyCount,
+              });
+            }
+          } else {
+            // Solid Bouncing Bumper ('BUMPER' or 'MOVING_BUMPER')
+            const nx = dx / dist;
+            const ny = dy / dist;
 
-            obs.hitCount = (obs.hitCount || 0) + 1;
-            obs.lastHitTime = Date.now();
+            px = obs.x + nx * (minDist + 0.5);
+            py = obs.y + ny * (minDist + 0.5);
 
-            events.push({
-              type: 'OBSTACLE',
-              x: px,
-              y: py,
-              speed: curSpeed,
-            });
+            const vDotN = pvx * nx + (pvy - (obs.vy || 0)) * ny;
+            if (vDotN < 0) {
+              const restitution = 1.36;
+              pvx -= (1 + restitution) * vDotN * nx;
+              pvy -= (1 + restitution) * vDotN * ny;
+              if (obs.vy) {
+                pvy += obs.vy * 0.45;
+              }
+
+              // [REQ] 말이 양 옆으로만 이동하므로, 장애물에 튕긴 공이 중앙에 갇히지 않고 반드시 양 끝 골대 라인까지 시원하게 도달하도록 보장!
+              const horizDir = lastHitTeam === 'blue' ? 1 : lastHitTeam === 'red' ? -1 : (pvx >= 0 ? 1 : -1);
+              if (Math.abs(pvx) < 440) {
+                pvx = (pvx >= 0 ? 1 : -1) * 460;
+              }
+              // 장애물끼리 연속 핑퐁 루프 방지: 최근 타격 팀의 상대 진영 방향으로 전진성 부여
+              if ((obs.hitCount || 0) >= 2 && Math.sign(pvx) !== horizDir) {
+                pvx = horizDir * Math.max(480, Math.abs(pvx));
+              }
+
+              let curSpeed = Math.hypot(pvx, pvy);
+              const minBumperSpeed = 640;
+              if (curSpeed < minBumperSpeed) {
+                const boost = minBumperSpeed / (curSpeed || 1);
+                pvx *= boost;
+                pvy *= boost;
+                curSpeed = minBumperSpeed;
+              }
+
+              obs.hitCount = (obs.hitCount || 0) + 1;
+              obs.lastHitTime = now;
+              rallyCount += 1;
+
+              events.push({
+                type: 'OBSTACLE',
+                x: px,
+                y: py,
+                speed: curSpeed,
+                combo: rallyCount,
+              });
+            }
           }
         }
       }
     }
   }
 
-  // Speed clamping to terminal velocity (1450 px/s)
+  // Speed clamping to terminal velocity (1600 px/s, or 1680 when superCharged)
   let speed = Math.hypot(pvx, pvy);
-  const MAX_SPEED = 1450;
+  const MAX_SPEED = superCharged ? 1680 : 1550;
   if (speed > MAX_SPEED) {
     const scale = MAX_SPEED / speed;
     pvx *= scale;
@@ -288,26 +374,22 @@ export function stepPuckPhysics(
     speed = MAX_SPEED;
   }
 
-  // [REQ] 공이 어정쩡하게 멈추는 현상(Dead Puck) 완전 방지:
-  // 1) X축 속도가 약해져 벽 사이에서만 맴돌면 전진 가속 부여
-  if (speed > 1 && Math.abs(pvx) < 260) {
+  // [REQ] 말만 양 옆으로 이동해도 항상 공이 플레이어 앞까지 도달하도록 최소 수평 속도(360 px/s) 완벽 보장:
+  if (speed > 1 && Math.abs(pvx) < 360) {
     const dir = pvx >= 0 ? 1 : -1;
-    pvx = dir * 280;
+    pvx = dir * 380;
     speed = Math.hypot(pvx, pvy);
   }
 
-  // 2) 움직이고 있는 상태라면 최소 260 px/s 이상의 활공 속도를 유지하여 랠리가 끊기지 않음
-  if (speed > 1 && speed < 260) {
-    const boost = 260 / speed;
+  if (speed > 1 && speed < 360) {
+    const boost = 360 / speed;
     pvx *= boost;
     pvy *= boost;
-    speed = 260;
+    speed = 360;
   }
 
-  // [REQ] 공 주변 효과 지우기: 트레일 완전 제거
   const newTrail: Array<{ x: number; y: number; alpha: number }> = [];
 
-  // If completely at rest, avoid floating-point state thrashing
   if (pvx === 0 && pvy === 0 && currPuck.vx === 0 && currPuck.vy === 0) {
     return {
       puck: currPuck,
@@ -322,6 +404,10 @@ export function stepPuckPhysics(
       y: py,
       vx: pvx,
       vy: pvy,
+      spin,
+      angle,
+      superCharged,
+      rallyCount,
       lastHitTeam,
       trail: newTrail,
     },

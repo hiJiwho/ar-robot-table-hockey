@@ -569,9 +569,8 @@ export function assignBlobs(
     }
 
     if (lastRedPos) {
-      const d0 = Math.hypot(b0.x - lastRedPos.x, d0_y => b0.y - lastRedPos.y, b0.y - lastRedPos.y);
-      const d1 = Math.hypot(b1.x - lastRedPos.x, b1.y - lastRedPos.y);
       const dist0 = Math.hypot(b0.x - lastRedPos.x, b0.y - lastRedPos.y);
+      const d1 = Math.hypot(b1.x - lastRedPos.x, b1.y - lastRedPos.y);
       return dist0 <= d1
         ? { blueBlob: b1, redBlob: b0, allBlobs }
         : { blueBlob: b0, redBlob: b1, allBlobs };
