@@ -107,6 +107,11 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
             <div className="text-xs font-black text-slate-200">
               {blueReport?.badge} {blueReport?.title}
             </div>
+            {blueReport?.growthBadge && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-950/80 border border-cyan-500/30 text-cyan-300 font-bold">
+                {blueReport.growthBadge}
+              </span>
+            )}
 
             {blueQr ? (
               <div className="p-2 bg-white rounded-xl shadow-md border-2 border-cyan-400/80">
@@ -148,6 +153,11 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
             <div className="text-xs font-black text-slate-200">
               {redReport?.badge} {redReport?.title}
             </div>
+            {redReport?.growthBadge && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-950/80 border border-yellow-500/30 text-yellow-300 font-bold">
+                {redReport.growthBadge}
+              </span>
+            )}
 
             {redQr ? (
               <div className="p-2 bg-white rounded-xl shadow-md border-2 border-yellow-400/80">
