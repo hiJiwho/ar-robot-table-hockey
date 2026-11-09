@@ -129,6 +129,7 @@ export interface MatchStats {
   redHits: number;
   maxPuckSpeed: number;
   lastScoredTeam: 'blue' | 'red' | null;
+  speakerHits?: number;
   maxRally?: number;
   currentRally?: number;
   goalHistory?: GoalLogEntry[];

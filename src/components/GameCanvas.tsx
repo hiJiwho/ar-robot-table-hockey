@@ -9,14 +9,17 @@ import {
   TABLE_WIDTH,
   CENTER_SPEAKER_RADIUS,
   LiveGameState,
+  MatchStats,
 } from '../types/hockey';
 import { PerspectiveTransformer } from '../utils/perspective';
+import { generateAIPlayerReport, generateQRCode } from '../utils/aiAnalytics';
 
 interface GameCanvasProps {
   normalizedCorners: FourCorners;
   gamePhase: GamePhase;
   score?: MatchScore;
   timeLeft?: number;
+  stats?: MatchStats;
   blueRobot: RobotState;
   redRobot: RobotState;
   puck: PuckState;
@@ -51,6 +54,35 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
 
   useEffect(() => {
     transformerRef.current.updateCorners(pixelCorners);
+  }, [normalizedCorners, containerWidth, containerHeight]);
+
+  const blueQrImgRef = useRef<HTMLImageElement | null>(null);
+  const redQrImgRef = useRef<HTMLImageElement | null>(null);
+
+  // [REQ] 경기 종료 시 1P/2P 양끝 AI 리포트 QR 코드 비동기 생성 및 캐싱
+  useEffect(() => {
+    if (props.gamePhase === 'TIME_UP') {
+      const score = props.score || { blue: 0, red: 0 };
+      const stats = props.stats || { blueHits: 0, redHits: 0, maxPuckSpeed: 0, lastScoredTeam: null };
+      const report1 = generateAIPlayerReport('blue', score, stats);
+      const report2 = generateAIPlayerReport('red', score, stats);
+
+      generateQRCode(report1.reportUrl, '#0284c7', '#ffffff').then((dataUrl) => {
+        if (dataUrl) {
+          const img = new Image();
+          img.src = dataUrl;
+          img.onload = () => { blueQrImgRef.current = img; };
+        }
+      });
+
+      generateQRCode(report2.reportUrl, '#d97706', '#ffffff').then((dataUrl) => {
+        if (dataUrl) {
+          const img = new Image();
+          img.src = dataUrl;
+          img.onload = () => { redQrImgRef.current = img; };
+        }
+      });
+    }
   }, [normalizedCorners, containerWidth, containerHeight]);
 
   // High-performance continuous render loop (60-144 FPS)
@@ -477,6 +509,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
         ctx.restore();
       }
 
+      // 10. [REQ] "1p 2p 양끝에 qr 다 보야줘" - 경기 종료 시 양쪽 골대 앞에 모바일 AI 리포트 QR 투사
+      if (gamePhase === 'TIME_UP') {
+        renderDualGoalQRCodes(ctx, tf, blueQrImgRef.current, redQrImgRef.current, isLight);
+      }
+
       ctx.restore();
 
       animId = requestAnimationFrame(render);
@@ -714,5 +751,69 @@ function renderCenterSpeakerZone(
   ctx.arc(0, 0, 3, 0, Math.PI * 2);
   ctx.fill();
 
+  ctx.restore();
+}
+
+// [REQ] "1p 2p 양끝에 qr 다 보야줘"
+// 경기 종료 시 1P 좌측 골대 앞(+90도 회전)과 2P 우측 골대 앞(-90도 회전)에 스마트폰 스캔용 QR 코드 투사
+function renderDualGoalQRCodes(
+  ctx: CanvasRenderingContext2D,
+  tf: PerspectiveTransformer,
+  blueImg: HTMLImageElement | null,
+  redImg: HTMLImageElement | null,
+  _isLight: boolean
+) {
+  const qrBox = 114;
+
+  // 1P QR 코드 (좌측 진영 골대 인근, +90도 회전으로 1P 시선 일치)
+  const p1Pos = tf.tableToScreen(200, 300);
+  ctx.save();
+  ctx.translate(p1Pos.x, p1Pos.y);
+  ctx.rotate(Math.PI / 2);
+
+  // White Background with Cyan Neon Border
+  ctx.fillStyle = '#ffffff';
+  ctx.shadowColor = '#06b6d4';
+  ctx.shadowBlur = 16;
+  ctx.beginPath();
+  ctx.roundRect(-qrBox / 2, -qrBox / 2, qrBox, qrBox, 10);
+  ctx.fill();
+
+  if (blueImg && blueImg.complete) {
+    ctx.drawImage(blueImg, -qrBox / 2 + 4, -qrBox / 2 + 4, qrBox - 8, qrBox - 8);
+  }
+
+  ctx.shadowBlur = 0;
+  ctx.font = '800 13px system-ui, sans-serif';
+  ctx.fillStyle = '#06b6d4';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillText('📱 1P AI 리포트', 0, qrBox / 2 + 8);
+  ctx.restore();
+
+  // 2P QR 코드 (우측 진영 골대 인근, -90도 회전으로 2P 시선 일치)
+  const p2Pos = tf.tableToScreen(800, 300);
+  ctx.save();
+  ctx.translate(p2Pos.x, p2Pos.y);
+  ctx.rotate(-Math.PI / 2);
+
+  // White Background with Yellow Neon Border
+  ctx.fillStyle = '#ffffff';
+  ctx.shadowColor = '#eab308';
+  ctx.shadowBlur = 16;
+  ctx.beginPath();
+  ctx.roundRect(-qrBox / 2, -qrBox / 2, qrBox, qrBox, 10);
+  ctx.fill();
+
+  if (redImg && redImg.complete) {
+    ctx.drawImage(redImg, -qrBox / 2 + 4, -qrBox / 2 + 4, qrBox - 8, qrBox - 8);
+  }
+
+  ctx.shadowBlur = 0;
+  ctx.font = '800 13px system-ui, sans-serif';
+  ctx.fillStyle = '#eab308';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillText('📱 2P AI 리포트', 0, qrBox / 2 + 8);
   ctx.restore();
 }

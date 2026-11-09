@@ -1446,6 +1446,7 @@ export default function App() {
             soundManager.playSpeakerHit(Math.min(1.2, ev.speed / 450));
             const screenHit = screenTf.tableToScreen(ev.x, ev.y);
             spawnParticles(screenHit.x, screenHit.y, '#38bdf8', 12);
+            setStats((s) => ({ ...s, speakerHits: (s.speakerHits || 0) + 1 }));
           } else if (ev.type === 'ROBOT') {
             if (ev.team === 'obstacle') {
               soundManager.playPaddleHit(Math.min(1.0, ev.speed / 450));
@@ -1601,6 +1602,7 @@ export default function App() {
           goalSize={goalSize}
           theme={theme}
           isVirtualMode={isVirtualMode}
+          stats={stats}
         />
 
         {/* [REQ] 경기장은 깔끔한 4개 모서리 핀 캘리브레이션 */}
