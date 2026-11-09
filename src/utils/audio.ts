@@ -137,6 +137,42 @@ export const soundManager = {
     } catch {}
   },
 
+  // [REQ] 정가운데 물리 스피커 충돌음: 묵직하고 단단한 스피커 인클로저 "쿵- 턱!"
+  playSpeakerHit(intensity = 1) {
+    if (isMuted) return;
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const clampedIntensity = Math.min(2.0, Math.max(0.5, intensity));
+
+    // 1. Heavy Subwoofer Kick (스피커 바이브레이션)
+    const sub = ctx.createOscillator();
+    const subGain = ctx.createGain();
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(140 * clampedIntensity, now);
+    sub.frequency.exponentialRampToValueAtTime(38, now + 0.16);
+    subGain.gain.setValueAtTime(0.55 * clampedIntensity, now);
+    subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+    sub.connect(subGain);
+    subGain.connect(ctx.destination);
+    sub.start(now);
+    sub.stop(now + 0.16);
+
+    // 2. Solid Enclosure Knock (스피커 본체 맞닿는 단단한 노크)
+    const knock = ctx.createOscillator();
+    const knockGain = ctx.createGain();
+    knock.type = 'triangle';
+    knock.frequency.setValueAtTime(540, now);
+    knock.frequency.exponentialRampToValueAtTime(120, now + 0.06);
+    knockGain.gain.setValueAtTime(0.35 * clampedIntensity, now);
+    knockGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+    knock.connect(knockGain);
+    knockGain.connect(ctx.destination);
+    knock.start(now);
+    knock.stop(now + 0.06);
+  },
+
   // [REQ] 핀볼 범퍼/장애물 튕김음: 통통 튀는 경쾌한 핀볼 팝 "통-! 핑-!"
   playBumperHit(intensity = 1) {
     if (isMuted) return;

@@ -515,16 +515,17 @@ export function detectTwoMagentaBlobs(
     };
   };
 
-  const allBlobs: DetectedBlob[] = rawClusters.map(clusterToBlob);
+  // Keep up to 10 detected clusters (2 players + up to 8 obstacle blocks/robots)
+  const allBlobs: DetectedBlob[] = rawClusters.slice(0, 10).map(clusterToBlob);
   return assignBlobs(allBlobs, width, lastBluePos, lastRedPos);
 }
 
 /**
- * Pairs detected blobs with the Blue / Red robots (shared by the JS and OpenCV engines)
- * using tracking continuity and spatial priors, strictly preventing teleportation and jitter.
+ * Pairs detected blobs with Blue (1P) and Red (2P) robots, and retains all intermediate
+ * blobs (2..10 total) for dynamic physical obstacle robots.
  */
 export function assignBlobs(
-  allBlobs: DetectedBlob[],
+  blobsInput: DetectedBlob[],
   width: number,
   lastBluePos?: Point2D | null,
   lastRedPos?: Point2D | null
@@ -533,100 +534,72 @@ export function assignBlobs(
   redBlob: DetectedBlob | null;
   allBlobs: DetectedBlob[];
 } {
+  const allBlobs = blobsInput.slice(0, 10);
   if (allBlobs.length === 0) {
-    return { blueBlob: null, redBlob: null, allBlobs };
+    return { blueBlob: null, redBlob: null, allBlobs: [] };
   }
 
-  const MAX_TELEPORT_DIST = 220; // Maximum allowed position shift per frame in camera pixels
+  const MAX_TELEPORT_DIST = 260;
   const midX = width / 2;
 
-  // If 2 or more blobs detected:
-  if (allBlobs.length >= 2) {
-    const b0 = allBlobs[0];
-    const b1 = allBlobs[1];
-
+  // 1 blob detected:
+  if (allBlobs.length === 1) {
+    const single = allBlobs[0];
+    if (lastBluePos && !lastRedPos) {
+      return { blueBlob: single, redBlob: null, allBlobs };
+    }
+    if (lastRedPos && !lastBluePos) {
+      return { blueBlob: null, redBlob: single, allBlobs };
+    }
     if (lastBluePos && lastRedPos) {
-      const distDirect =
-        Math.hypot(b0.x - lastBluePos.x, b0.y - lastBluePos.y) +
-        Math.hypot(b1.x - lastRedPos.x, b1.y - lastRedPos.y);
-      const distCrossed =
-        Math.hypot(b1.x - lastBluePos.x, b1.y - lastBluePos.y) +
-        Math.hypot(b0.x - lastRedPos.x, b0.y - lastRedPos.y);
-
-      if (distDirect <= distCrossed) {
-        return { blueBlob: b0, redBlob: b1, allBlobs };
-      } else {
-        return { blueBlob: b1, redBlob: b0, allBlobs };
-      }
+      const dBlue = Math.hypot(single.x - lastBluePos.x, single.y - lastBluePos.y);
+      const dRed = Math.hypot(single.x - lastRedPos.x, single.y - lastRedPos.y);
+      return dBlue <= dRed
+        ? { blueBlob: single, redBlob: null, allBlobs }
+        : { blueBlob: null, redBlob: single, allBlobs };
     }
-
-    if (lastBluePos) {
-      const d0 = Math.hypot(b0.x - lastBluePos.x, b0.y - lastBluePos.y);
-      const d1 = Math.hypot(b1.x - lastBluePos.x, b1.y - lastBluePos.y);
-      return d0 <= d1
-        ? { blueBlob: b0, redBlob: b1, allBlobs }
-        : { blueBlob: b1, redBlob: b0, allBlobs };
-    }
-
-    if (lastRedPos) {
-      const d0 = Math.hypot(b0.x - lastRedPos.x, d0_y => b0.y - lastRedPos.y, b0.y - lastRedPos.y);
-      const d1 = Math.hypot(b1.x - lastRedPos.x, b1.y - lastRedPos.y);
-      const dist0 = Math.hypot(b0.x - lastRedPos.x, b0.y - lastRedPos.y);
-      return dist0 <= d1
-        ? { blueBlob: b1, redBlob: b0, allBlobs }
-        : { blueBlob: b0, redBlob: b1, allBlobs };
-    }
-
-    if (b0.x <= b1.x) {
-      return { blueBlob: b0, redBlob: b1, allBlobs };
-    } else {
-      return { blueBlob: b1, redBlob: b0, allBlobs };
-    }
+    return single.x < midX
+      ? { blueBlob: single, redBlob: null, allBlobs }
+      : { blueBlob: null, redBlob: single, allBlobs };
   }
 
-  // Exactly 1 blob detected:
-  const singleBlob = allBlobs[0];
+  // 2 or more blobs detected (2 ~ 10):
+  let blueBlob: DetectedBlob | null = null;
+  let redBlob: DetectedBlob | null = null;
 
   if (lastBluePos && lastRedPos) {
-    const dBlue = Math.hypot(singleBlob.x - lastBluePos.x, singleBlob.y - lastBluePos.y);
-    const dRed = Math.hypot(singleBlob.x - lastRedPos.x, singleBlob.y - lastRedPos.y);
+    // Find best pair matching historical positions
+    let bestDist = Infinity;
+    let bestPair: [number, number] = [0, 1];
 
-    if (dBlue < dRed) {
-      if (dBlue < MAX_TELEPORT_DIST || singleBlob.x < midX + 30) {
-        return { blueBlob: singleBlob, redBlob: null, allBlobs };
-      }
-    } else {
-      if (dRed < MAX_TELEPORT_DIST || singleBlob.x > midX - 30) {
-        return { blueBlob: null, redBlob: singleBlob, allBlobs };
+    for (let i = 0; i < allBlobs.length; i++) {
+      for (let j = 0; j < allBlobs.length; j++) {
+        if (i === j) continue;
+        const dB = Math.hypot(allBlobs[i].x - lastBluePos.x, allBlobs[i].y - lastBluePos.y);
+        const dR = Math.hypot(allBlobs[j].x - lastRedPos.x, allBlobs[j].y - lastRedPos.y);
+        const total = dB + dR;
+        if (total < bestDist) {
+          bestDist = total;
+          bestPair = [i, j];
+        }
       }
     }
 
-    if (singleBlob.x < midX) {
-      return { blueBlob: singleBlob, redBlob: null, allBlobs };
-    } else {
-      return { blueBlob: null, redBlob: singleBlob, allBlobs };
-    }
-  } else if (lastBluePos) {
-    const dBlue = Math.hypot(singleBlob.x - lastBluePos.x, singleBlob.y - lastBluePos.y);
-    if (dBlue < MAX_TELEPORT_DIST || singleBlob.x < midX) {
-      return { blueBlob: singleBlob, redBlob: null, allBlobs };
-    } else {
-      return { blueBlob: null, redBlob: singleBlob, allBlobs };
-    }
-  } else if (lastRedPos) {
-    const dRed = Math.hypot(singleBlob.x - lastRedPos.x, singleBlob.y - lastRedPos.y);
-    if (dRed < MAX_TELEPORT_DIST || singleBlob.x > midX) {
-      return { blueBlob: null, redBlob: singleBlob, allBlobs };
-    } else {
-      return { blueBlob: singleBlob, redBlob: null, allBlobs };
+    if (bestDist < MAX_TELEPORT_DIST * 2) {
+      blueBlob = allBlobs[bestPair[0]];
+      redBlob = allBlobs[bestPair[1]];
     }
   }
 
-  if (singleBlob.x < midX) {
-    return { blueBlob: singleBlob, redBlob: null, allBlobs };
-  } else {
-    return { blueBlob: null, redBlob: singleBlob, allBlobs };
+  // Fallback / spatial prior: leftmost is Blue (1P), rightmost is Red (2P)
+  if (!blueBlob || !redBlob) {
+    // Sort copy by x coordinate
+    const sortedByX = [...allBlobs].sort((a, b) => a.x - b.x);
+    blueBlob = sortedByX[0];
+    redBlob = sortedByX[sortedByX.length - 1];
   }
+
+  return { blueBlob, redBlob, allBlobs };
 }
 
 /**

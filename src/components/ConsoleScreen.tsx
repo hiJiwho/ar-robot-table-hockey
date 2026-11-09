@@ -15,7 +15,8 @@ import {
   GameActionMessage,
   ColorSettings,
   VisionEngineType,
-  Obstacle,
+  RobotState,
+  CENTER_SPEAKER_RADIUS,
 } from '../types/hockey';
 import {
   Clock,
@@ -77,8 +78,7 @@ export const ConsoleScreen: React.FC = () => {
   });
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [lowLightMode, setLowLightMode] = useState<boolean>(false);
-  const [obstaclesEnabled, setObstaclesEnabled] = useState<boolean>(true);
-  const [obstacles, setObstacles] = useState<Obstacle[]>([]);
+  const [allRobots, setAllRobots] = useState<RobotState[]>([]);
 
   // Vision Diagnostics & Settings
   const [colorSettings, setColorSettings] = useState<ColorSettings>({
@@ -171,8 +171,7 @@ export const ConsoleScreen: React.FC = () => {
       if (typeof data.lowLightMode === 'boolean') setLowLightMode(data.lowLightMode);
       if (data.colorSettings) setColorSettings(data.colorSettings);
       if (data.visionDiagnostics) setVisionDiagnostics(data.visionDiagnostics);
-      if (typeof data.obstaclesEnabled === 'boolean') setObstaclesEnabled(data.obstaclesEnabled);
-      if (data.obstacles) setObstacles(data.obstacles);
+      if (data.allRobots) setAllRobots(data.allRobots);
       if (typeof data.goalSize === 'number') setGoalSize(data.goalSize);
       if (typeof data.isCameraMirrored === 'boolean') setIsCameraMirrored(data.isCameraMirrored);
       if (typeof data.targetPoints === 'number') setTargetPointsInput(data.targetPoints);
@@ -416,16 +415,6 @@ export const ConsoleScreen: React.FC = () => {
     });
   };
 
-  const handleToggleObstacles = () => {
-    const next = !obstaclesEnabled;
-    setObstaclesEnabled(next);
-    sendAction({ type: 'GAME_ACTION', action: 'TOGGLE_OBSTACLES', obstaclesEnabled: next });
-  };
-
-  const handleRandomizeObstacles = () => {
-    sendAction({ type: 'GAME_ACTION', action: 'RANDOMIZE_OBSTACLES' });
-  };
-
   const handleApplyTargetPointsMode = (points?: number) => {
     const p = typeof points === 'number' ? points : targetPointsInput;
     const target = Math.max(1, p);
@@ -563,28 +552,22 @@ export const ConsoleScreen: React.FC = () => {
           </button>
 
           {/* [REQ] 중간중간 튕기는 장애물 모드 (매번 랜덤배치) */}
-          <button
-            onClick={handleToggleObstacles}
-            className={`px-3 py-1.5 rounded-lg border text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm ${
-              obstaclesEnabled
-                ? 'bg-pink-600 hover:bg-pink-500 text-white border-pink-400 shadow-[0_0_12px_rgba(236,72,153,0.4)]'
-                : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-700'
-            }`}
-            title="경기장 중앙에 퍽이 통통 튀는 네온 핀볼 범퍼/장애물을 켜거나 끕니다"
+          {/* [REQ] 정가운데 물리 스피커 존 및 2~10개 마젠타 로봇 상태 인디케이터 */}
+          <div
+            className="px-3 py-1.5 rounded-lg border border-sky-500/40 bg-sky-950/40 text-sky-300 text-xs font-bold flex items-center gap-1.5 shadow-sm"
+            title="테이블 정가운데 물리 스피커(반경 44px) 충돌 반사 활성화됨"
           >
-            <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
-            <span>장애물 모드: {obstaclesEnabled ? 'ON' : 'OFF'}</span>
-          </button>
-          {obstaclesEnabled && (
-            <button
-              onClick={handleRandomizeObstacles}
-              className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-bold text-pink-300 flex items-center gap-1 transition-all shadow-sm active:scale-95"
-              title="장애물 위치를 지금 즉시 새롭게 랜덤 재배치합니다"
-            >
-              <RotateCcw className="w-3 h-3 text-pink-400" />
-              <span>재배치</span>
-            </button>
-          )}
+            <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
+            <span>중앙 스피커 존: ON</span>
+          </div>
+
+          <div
+            className="px-3 py-1.5 rounded-lg border border-pink-500/40 bg-pink-950/40 text-pink-300 text-xs font-bold flex items-center gap-1.5 shadow-sm"
+            title="마젠타 센서 블록 2~10개 유동 실시간 추적 중 (1P, 2P 및 장애물 로봇)"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-pink-300" />
+            <span>마젠타 센서: {allRobots.length > 0 ? allRobots.length : (blueRobot.detected ? 1 : 0) + (redRobot.detected ? 1 : 0)}개</span>
+          </div>
 
           {/* [REQ] 글고 불 꺼도 인식 잘 되게 해줘 (설정에 이거 인식용 하나 넣어주면 ㄱㅅ) */}
           <button
@@ -727,23 +710,33 @@ export const ConsoleScreen: React.FC = () => {
               {/* Puck */}
               <circle cx={puck.x} cy={puck.y} r="20" fill={theme === 'light' ? '#e11d48' : '#ffffff'} stroke="#64748b" strokeWidth="3" />
 
-              {/* Bumping Obstacles (네온 핀볼 범퍼 미러링) */}
-              {obstaclesEnabled && obstacles.map((obs) => (
-                <g key={obs.id}>
+              {/* Center Speaker Physical Zone */}
+              <g>
+                <circle
+                  cx="500"
+                  cy="300"
+                  r={CENTER_SPEAKER_RADIUS}
+                  fill="rgba(56, 189, 248, 0.15)"
+                  stroke="#38bdf8"
+                  strokeWidth="2.5"
+                  strokeDasharray="5 3"
+                />
+                <circle cx="500" cy="300" r="16" fill="rgba(56, 189, 248, 0.3)" stroke="#38bdf8" strokeWidth="1.5" />
+                <circle cx="500" cy="300" r="4" fill="#38bdf8" />
+              </g>
+
+              {/* Dynamic 2..10 Magenta Obstacle Robots */}
+              {allRobots.filter((r) => r.team === 'obstacle').map((obs, idx) => (
+                <g key={obs.id || `obs-${idx}`}>
                   <circle
-                    cx={obs.x}
-                    cy={obs.y}
-                    r={obs.radius || 28}
+                    cx={obs.tableX}
+                    cy={obs.tableY}
+                    r="40"
                     fill="rgba(236, 72, 153, 0.25)"
-                    stroke={obs.color || '#ec4899'}
-                    strokeWidth="3.5"
+                    stroke="#ec4899"
+                    strokeWidth="3"
                   />
-                  <circle
-                    cx={obs.x}
-                    cy={obs.y}
-                    r={(obs.radius || 28) * 0.4}
-                    fill="#ffffff"
-                  />
+                  <circle cx={obs.tableX} cy={obs.tableY} r="14" fill="#ec4899" />
                 </g>
               ))}
             </svg>

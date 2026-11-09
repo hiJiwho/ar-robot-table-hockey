@@ -234,7 +234,8 @@ export function detectTwoMagentaBlobsOpenCV(
     }
 
     scored.sort((a, b) => b.score - a.score);
-    const allBlobs = scored.map((s) => s.blob);
+    // Keep up to 10 detected blobs (2 player paddles + up to 8 obstacle robots)
+    const allBlobs = scored.slice(0, 10).map((s) => s.blob);
 
     return assignBlobs(allBlobs, width, lastBluePos, lastRedPos);
   } catch (err) {

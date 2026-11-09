@@ -7,8 +7,8 @@ import {
   RobotState,
   TABLE_HEIGHT,
   TABLE_WIDTH,
+  CENTER_SPEAKER_RADIUS,
   LiveGameState,
-  Obstacle,
 } from '../types/hockey';
 import { PerspectiveTransformer } from '../utils/perspective';
 
@@ -26,7 +26,6 @@ interface GameCanvasProps {
   goalSize?: number;
   theme?: 'dark' | 'light';
   isVirtualMode?: boolean;
-  obstacles?: Obstacle[];
 }
 
 export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
@@ -416,13 +415,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
         renderRealisticMal(ctx, tf, redRobot, isLight, isGameOver);
       }
 
-      // 7.5. [REQ] 중간중간 튕기는 랜덤 장애물 (네온 핀볼 범퍼)
-      const obstacles = (live && live.obstacles) || currentProps.obstacles || [];
-      if (obstacles && obstacles.length > 0) {
-        for (const obs of obstacles) {
-          renderBumperObstacle(ctx, tf, obs, isLight, isGameOver);
-        }
-      }
+      // 7.5. [REQ] 경기장 정가운데 실제 물리 스피커 존 (Acoustic Speaker Dock & Shockwave)
+      renderCenterSpeakerZone(ctx, tf, isLight, isGameOver);
 
       // 8. [REQ] 공 (퍽) - 순수 원형 스포츠 퍽
       renderRealisticPuck(ctx, tf, puck, isLight, isGameOver);
@@ -579,71 +573,64 @@ function renderRealisticPuck(
   ctx.restore();
 }
 
-// [REQ] 중간중간 튕기는 랜덤 장애물 (네온 핀볼 범퍼) 렌더러
-function renderBumperObstacle(
+// [REQ] 경기장 정가운데 실제 물리 스피커 안착 링 & 음파 파동 렌더러
+function renderCenterSpeakerZone(
   ctx: CanvasRenderingContext2D,
   tf: PerspectiveTransformer,
-  obs: Obstacle,
   isLight: boolean,
   isGameOver: boolean
 ) {
-  const screenPos = tf.tableToScreen(obs.x, obs.y);
-  const offsetPos = tf.tableToScreen(obs.x + (obs.radius || 28), obs.y);
-  const screenRadius = Math.max(16, Math.hypot(offsetPos.x - screenPos.x, offsetPos.y - screenPos.y));
+  const cx = TABLE_WIDTH / 2;
+  const cy = TABLE_HEIGHT / 2;
+  const centerPos = tf.tableToScreen(cx, cy);
+  const edgePos = tf.tableToScreen(cx + CENTER_SPEAKER_RADIUS, cy);
+  const screenRadius = Math.max(22, Math.hypot(edgePos.x - centerPos.x, edgePos.y - centerPos.y));
 
   ctx.save();
-  ctx.translate(screenPos.x, screenPos.y);
+  ctx.translate(centerPos.x, centerPos.y);
 
-  const now = Date.now();
-  const timeSinceHit = now - (obs.lastHitTime || 0);
-  const isRecentlyHit = timeSinceHit < 260;
-  const hitRatio = isRecentlyHit ? 1 - timeSinceHit / 260 : 0;
+  // 1. 은은한 사운드 웨이브 펄스 링 (서브우퍼 베이스 진동 효과)
+  const time = Date.now() / 1000;
+  const pulse = Math.sin(time * 3.5) * 0.5 + 0.5;
+  const outerPulseR = screenRadius + 4 + pulse * 6;
 
-  const baseColor = obs.color || '#ec4899'; // 네온 핫핑크 or 일렉트릭 퍼플
-
-  // 1. 타격 시 폭발적 펄스 링 (Shockwave Expand)
-  if (isRecentlyHit) {
-    const pulseR = screenRadius + hitRatio * 28;
-    ctx.strokeStyle = baseColor;
-    ctx.lineWidth = 3.5 * hitRatio;
-    ctx.shadowColor = baseColor;
-    ctx.shadowBlur = 18;
-    ctx.beginPath();
-    ctx.arc(0, 0, pulseR, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-
-  // 2. 범퍼 바깥 네온 링
-  ctx.strokeStyle = isGameOver ? '#52525b' : baseColor;
-  ctx.lineWidth = isRecentlyHit ? 5 : 3.5;
-  if (!isGameOver) {
-    ctx.shadowColor = baseColor;
-    ctx.shadowBlur = isRecentlyHit ? 24 : 12;
-  }
-  ctx.fillStyle = isGameOver
-    ? 'rgba(63, 63, 70, 0.3)'
-    : isRecentlyHit
-    ? 'rgba(236, 72, 153, 0.45)'
+  ctx.strokeStyle = isGameOver
+    ? 'rgba(100, 116, 139, 0.25)'
     : isLight
-    ? 'rgba(244, 114, 182, 0.25)'
-    : 'rgba(236, 72, 153, 0.22)';
+    ? 'rgba(14, 165, 233, 0.35)'
+    : 'rgba(56, 189, 248, 0.35)';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.arc(0, 0, outerPulseR, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // 2. 스피커 안착 원형 가이드 라인 (Speaker Dock Guide Ring)
+  ctx.strokeStyle = isGameOver
+    ? '#475569'
+    : isLight
+    ? '#0284c7'
+    : '#38bdf8';
+  ctx.lineWidth = 2.5;
+  ctx.shadowColor = isLight ? '#38bdf8' : '#0ea5e9';
+  ctx.shadowBlur = isGameOver ? 0 : 8;
+
   ctx.beginPath();
   ctx.arc(0, 0, screenRadius, 0, Math.PI * 2);
-  ctx.fill();
   ctx.stroke();
 
-  // 3. 내부 기하학적 핀볼 코어 (다이아몬드 & 크로스 링)
-  ctx.strokeStyle = isGameOver ? '#71717a' : '#ffffff';
-  ctx.lineWidth = 2;
+  // 3. 중심 스피커 마크 (음파 코어 아이콘)
   ctx.shadowBlur = 0;
+  ctx.strokeStyle = isGameOver ? '#64748b' : (isLight ? '#0369a1' : '#7dd3fc');
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.arc(0, 0, screenRadius * 0.52, 0, Math.PI * 2);
+  ctx.arc(0, 0, screenRadius * 0.45, 0, Math.PI * 2);
   ctx.stroke();
 
-  // 중앙 발광 코어 닷
-  ctx.fillStyle = isGameOver ? '#71717a' : '#ffffff';
+  ctx.fillStyle = isGameOver ? '#64748b' : (isLight ? '#0284c7' : '#38bdf8');
   ctx.beginPath();
-  ctx.arc(0, 0, screenRadius * 0.22, 0, Math.PI * 2);
+  ctx.arc(0, 0, 3, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.restore();

@@ -21,7 +21,8 @@ export type EightPoints = [
 export type CalibrationCorners = FourCorners | EightPoints;
 
 export interface RobotState {
-  team: 'blue' | 'red';
+  id?: string;
+  team: 'blue' | 'red' | 'obstacle'; // 1P(blue), 2P(red), 또는 경기장 내 물리 장애물 로봇(obstacle)
   // Position in virtual table coordinates (e.g. 0..1000 x 0..600)
   tableX: number;
   tableY: number;
@@ -43,7 +44,7 @@ export interface PuckState {
   vy: number;
   radius: number;
   trail: Array<{ x: number; y: number; alpha: number }>;
-  lastHitTeam: 'blue' | 'red' | null;
+  lastHitTeam: 'blue' | 'red' | 'obstacle' | null;
 }
 
 export interface Particle {
@@ -61,19 +62,9 @@ export interface Particle {
 export interface LiveGameState {
   blueRobot: RobotState;
   redRobot: RobotState;
+  allRobots: RobotState[]; // [REQ] 2개에서 10개 사이로 유동적 인식된 모든 마젠타 로봇/블록 (장애물 로봇 포함)
   puck: PuckState;
   particles: Particle[];
-  obstacles?: Obstacle[];
-}
-
-export interface Obstacle {
-  id: string;
-  x: number; // Virtual table coordinates (e.g. 0..1000)
-  y: number; // Virtual table coordinates (e.g. 0..600)
-  radius: number;
-  color: string;
-  hitCount: number;
-  lastHitTime: number;
 }
 
 export interface ColorFilter {
@@ -135,9 +126,7 @@ export type GameActionMessage = {
     | 'UPDATE_GOAL_SIZE'
     | 'SET_LOW_LIGHT_MODE'
     | 'UPDATE_COLOR_SETTINGS'
-    | 'SAMPLE_COLOR'
-    | 'TOGGLE_OBSTACLES'
-    | 'RANDOMIZE_OBSTACLES';
+    | 'SAMPLE_COLOR';
   seconds?: number;
   score?: MatchScore;
   mode?: MatchMode;
@@ -151,8 +140,6 @@ export type GameActionMessage = {
   lowLightMode?: boolean;
   colorSettings?: Partial<ColorSettings>;
   customSample?: { r: number; g: number; b: number; hex: string } | null;
-  obstaclesEnabled?: boolean;
-  obstacles?: Obstacle[];
 };
 
 export const DEFAULT_NORMALIZED_CORNERS: FourCorners = [
@@ -213,6 +200,7 @@ export const MIN_GOAL_SIZE = 140;
 export const MAX_GOAL_SIZE = 420;
 export const PUCK_RADIUS = 20;
 export const ROBOT_RADIUS = 38;
+export const CENTER_SPEAKER_RADIUS = 44; // [REQ] 정가운데 물리 스피커 반경 (공 오면 튕김)
 export type MatchMode = '1MIN' | 'CUSTOM_TIME' | 'TARGET_N';
 
 export const MATCH_DURATION_SECONDS = 60;
@@ -249,8 +237,8 @@ export interface SyncStatePayload {
   puck?: { x: number; y: number; vx: number; vy: number };
   blueRobot?: { tableX: number; tableY: number; detected: boolean; confidence: number };
   redRobot?: { tableX: number; tableY: number; detected: boolean; confidence: number };
-  obstacles?: Obstacle[];
-  obstaclesEnabled?: boolean;
+  allRobots?: Array<{ id?: string; team: 'blue' | 'red' | 'obstacle'; tableX: number; tableY: number; detected: boolean; confidence: number }>;
+  centerSpeaker?: { x: number; y: number; radius: number };
 }
 
 export interface ElectronAPI {

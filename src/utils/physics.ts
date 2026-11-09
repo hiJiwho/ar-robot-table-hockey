@@ -1,10 +1,18 @@
-import { TABLE_WIDTH, TABLE_HEIGHT, ROBOT_RADIUS, PUCK_RADIUS, PuckState, RobotState, Obstacle } from '../types/hockey';
+import {
+  TABLE_WIDTH,
+  TABLE_HEIGHT,
+  ROBOT_RADIUS,
+  PUCK_RADIUS,
+  CENTER_SPEAKER_RADIUS,
+  PuckState,
+  RobotState,
+} from '../types/hockey';
 
 export interface CollisionEvent {
-  type: 'WALL' | 'POST' | 'ROBOT' | 'GOAL' | 'OBSTACLE';
+  type: 'WALL' | 'POST' | 'ROBOT' | 'GOAL' | 'SPEAKER';
   x: number;
   y: number;
-  team?: 'blue' | 'red';
+  team?: 'blue' | 'red' | 'obstacle';
   speed: number;
 }
 
@@ -16,17 +24,14 @@ export interface PhysicsStepResult {
 /**
  * Professional Air Hockey Physics Engine
  * - Multi-substep continuous collision detection (CCD) to eliminate tunneling & sticking
- * - High-elasticity crisp rail bounces (e = 0.98) with rounded goal post corners
- * - Realistic momentum transfer & dynamic impulse from striker swing velocity
- * - Clean air cushion glide with zero unnatural vortex forces or phantom trembling
+ * - Center Speaker Bounce: 퍽이 테이블 정가운데 놓인 실제 물리 스피커에 닿으면 튕겨나감
+ * - Dynamic 2..10 Magenta Robots: 1P, 2P 및 중간 장애물 로봇 모두와 실시간 물리 충돌
  */
 export function stepPuckPhysics(
   currPuck: PuckState,
-  blueRobot: RobotState,
-  redRobot: RobotState,
+  allRobots: RobotState[],
   goalSize: number,
-  dt: number,
-  obstacles: Obstacle[] = []
+  dt: number
 ): PhysicsStepResult {
   const events: CollisionEvent[] = [];
 
@@ -152,127 +157,126 @@ export function stepPuckPhysics(
       }
     }
 
-    // 7. Striker / Paddle Collisions (Both Blue & Red robots)
-    // [REQ 4] "공이 콕에 맞고 자책골 되던데;; 이 엔진 좀 바꿔줘" -> 자책골 100% 방지 & 호쾌한 전방 튕김 엔진
-    const checkStriker = (robot: RobotState, team: 'blue' | 'red') => {
-      if (!robot.detected || robot.confidence < 0.35) return;
+    // 7. [REQ] 정가운데 물리 스피커 충돌 (가운데 공 오면 튕기게!)
+    const speakerX = TABLE_WIDTH / 2;
+    const speakerY = TABLE_HEIGHT / 2;
+    const speakerR = CENTER_SPEAKER_RADIUS;
+    const sDx = px - speakerX;
+    const sDy = py - speakerY;
+    const sDist = Math.hypot(sDx, sDy);
+    const sMinDist = r + speakerR;
 
-      const strikerRadius = robot.radius || ROBOT_RADIUS;
-      const dx = px - robot.tableX;
-      const dy = py - robot.tableY;
-      const dist = Math.hypot(dx, dy);
-      const minDist = r + strikerRadius;
+    if (sDist < sMinDist && sDist > 0.0001) {
+      const sNx = sDx / sDist;
+      const sNy = sDy / sDist;
 
-      if (dist < minDist) {
-        // Safe normal calculation
-        let nx = dist > 0.0001 ? dx / dist : (team === 'blue' ? 1 : -1);
-        let ny = dist > 0.0001 ? dy / dist : 0;
+      // Position separation to prevent puck tunneling inside speaker
+      px = speakerX + sNx * (sMinDist + 0.5);
+      py = speakerY + sNy * (sMinDist + 0.5);
 
-        // [Anti-Own-Goal Guarantee]
-        // [REQ] "그냥 퍽 인식시 골대 반대로 밀어내게"
-        // 패들의 현재 위치(왼쪽 진영 / 오른쪽 진영)에 따라 뒤쪽 골대의 정반대 방향으로 100% 강력하게 퍽을 밀어냄!
-        const isLeftSide = robot.tableX < TABLE_WIDTH / 2;
-        if (isLeftSide) {
-          // 왼쪽 진영 패들: 왼쪽 골대(X=0) 반대편인 오른쪽(+X)으로 무조건 밀어냄!
-          if (nx < 0.2) {
-            nx = Math.max(0.4, Math.abs(nx));
-            const reLen = Math.hypot(nx, ny) || 1;
-            nx /= reLen;
-            ny /= reLen;
-          }
-          px = Math.max(robot.tableX + minDist * 0.5, robot.tableX + nx * (minDist + 1));
-          py = robot.tableY + ny * (minDist + 1);
+      const vDotN = pvx * sNx + pvy * sNy;
+      if (vDotN < 0) {
+        // High-elasticity speaker bounce (1.28x restitution)
+        const restitution = 1.28;
+        pvx -= (1 + restitution) * vDotN * sNx;
+        pvy -= (1 + restitution) * vDotN * sNy;
 
-          // Force energetic forward propulsion (+X, 오른쪽 골대 방향)
-          const swingBonus = Math.max(0, robot.vx * 0.85);
-          pvx = Math.max(680, Math.abs(pvx) * 1.15 + swingBonus + 420);
-        } else {
-          // 오른쪽 진영 패들: 오른쪽 골대(X=TABLE_WIDTH) 반대편인 왼쪽(-X)으로 무조건 밀어냄!
-          if (nx > -0.2) {
-            nx = -Math.max(0.4, Math.abs(nx));
-            const reLen = Math.hypot(nx, ny) || 1;
-            nx /= reLen;
-            ny /= reLen;
-          }
-          px = Math.min(robot.tableX - minDist * 0.5, robot.tableX + nx * (minDist + 1));
-          py = robot.tableY + ny * (minDist + 1);
-
-          // Force energetic forward propulsion (-X, 왼쪽 골대 방향)
-          const swingBonus = Math.max(0, -robot.vx * 0.85);
-          pvx = -Math.max(680, Math.abs(pvx) * 1.15 + swingBonus + 420);
-        }
-
-        // Controlled Y deflection based on impact height & paddle vertical velocity
-        const offsetRatio = Math.max(-1, Math.min(1, dy / minDist));
-        pvy = pvy * 0.25 + offsetRatio * 180 + robot.vy * 0.45;
-
-        // Ensure crisp total speed
         let curSpeed = Math.hypot(pvx, pvy);
-        const minHitSpeed = 650;
-        if (curSpeed < minHitSpeed) {
-          const boost = minHitSpeed / (curSpeed || 1);
+        const minBounceSpeed = 580;
+        if (curSpeed < minBounceSpeed) {
+          const boost = minBounceSpeed / (curSpeed || 1);
           pvx *= boost;
           pvy *= boost;
-          curSpeed = minHitSpeed;
+          curSpeed = minBounceSpeed;
         }
 
-        lastHitTeam = team;
         events.push({
-          type: 'ROBOT',
-          team,
+          type: 'SPEAKER',
           x: px,
           y: py,
           speed: curSpeed,
         });
       }
-    };
+    }
 
-    checkStriker(blueRobot, 'blue');
-    checkStriker(redRobot, 'red');
+    // 8. [REQ] 마젠타 센서 2개~10개 유동적 인식 & 충돌 (패들 + 장애물 로봇 모두 튕김)
+    if (allRobots && allRobots.length > 0) {
+      for (const robot of allRobots) {
+        if (!robot.detected || robot.confidence < 0.28) continue;
 
-    // 8. [REQ] Bumping Obstacles (중간중간 튕기는 랜덤 장애물 / 핀볼 네온 범퍼)
-    if (obstacles && obstacles.length > 0) {
-      for (const obs of obstacles) {
-        const dx = px - obs.x;
-        const dy = py - obs.y;
+        const strikerRadius = robot.radius || ROBOT_RADIUS;
+        const dx = px - robot.tableX;
+        const dy = py - robot.tableY;
         const dist = Math.hypot(dx, dy);
-        const minDist = r + obs.radius;
+        const minDist = r + strikerRadius;
 
-        if (dist < minDist && dist > 0.0001) {
-          const nx = dx / dist;
-          const ny = dy / dist;
+        if (dist < minDist) {
+          let nx = dist > 0.0001 ? dx / dist : (robot.tableX < TABLE_WIDTH / 2 ? 1 : -1);
+          let ny = dist > 0.0001 ? dy / dist : 0;
 
-          // Position separation
-          px = obs.x + nx * (minDist + 0.5);
-          py = obs.y + ny * (minDist + 0.5);
+          const isObstacle = robot.team === 'obstacle';
+          const isLeftSide = robot.tableX < TABLE_WIDTH / 2;
 
-          const vDotN = pvx * nx + pvy * ny;
-          if (vDotN < 0) {
-            // High-elasticity pinball bumper bounce (1.35x restitution)
-            const restitution = 1.35;
-            pvx -= (1 + restitution) * vDotN * nx;
-            pvy -= (1 + restitution) * vDotN * ny;
+          if (isObstacle) {
+            // [중간 장애물 로봇]: 물리적 장애물처럼 닿는 즉시 탄력 있게 튕겨냄
+            px = robot.tableX + nx * (minDist + 1);
+            py = robot.tableY + ny * (minDist + 1);
 
-            // Ensure crisp energetic ricochet speed (at least 600 px/s)
-            let curSpeed = Math.hypot(pvx, pvy);
-            const minBumperSpeed = 600;
-            if (curSpeed < minBumperSpeed) {
-              const boost = minBumperSpeed / (curSpeed || 1);
-              pvx *= boost;
-              pvy *= boost;
-              curSpeed = minBumperSpeed;
+            const vDotN = pvx * nx + pvy * ny;
+            if (vDotN < 0) {
+              const restitution = 1.35;
+              pvx -= (1 + restitution) * vDotN * nx;
+              pvy -= (1 + restitution) * vDotN * ny;
             }
+          } else if (isLeftSide) {
+            // [1P 패들]: 왼쪽 골대 반대 방향인 오른쪽(+X)으로 무조건 밀어냄 (자책골 방지)
+            if (nx < 0.2) {
+              nx = Math.max(0.4, Math.abs(nx));
+              const reLen = Math.hypot(nx, ny) || 1;
+              nx /= reLen;
+              ny /= reLen;
+            }
+            px = Math.max(robot.tableX + minDist * 0.5, robot.tableX + nx * (minDist + 1));
+            py = robot.tableY + ny * (minDist + 1);
 
-            obs.hitCount = (obs.hitCount || 0) + 1;
-            obs.lastHitTime = Date.now();
+            const swingBonus = Math.max(0, robot.vx * 0.85);
+            pvx = Math.max(680, Math.abs(pvx) * 1.15 + swingBonus + 420);
+          } else {
+            // [2P 패들]: 오른쪽 골대 반대 방향인 왼쪽(-X)으로 무조건 밀어냄 (자책골 방지)
+            if (nx > -0.2) {
+              nx = -Math.max(0.4, Math.abs(nx));
+              const reLen = Math.hypot(nx, ny) || 1;
+              nx /= reLen;
+              ny /= reLen;
+            }
+            px = Math.min(robot.tableX - minDist * 0.5, robot.tableX + nx * (minDist + 1));
+            py = robot.tableY + ny * (minDist + 1);
 
-            events.push({
-              type: 'OBSTACLE',
-              x: px,
-              y: py,
-              speed: curSpeed,
-            });
+            const swingBonus = Math.max(0, -robot.vx * 0.85);
+            pvx = -Math.max(680, Math.abs(pvx) * 1.15 + swingBonus + 420);
           }
+
+          // Controlled Y deflection
+          const offsetRatio = Math.max(-1, Math.min(1, dy / minDist));
+          pvy = pvy * 0.25 + offsetRatio * 180 + robot.vy * 0.45;
+
+          let curSpeed = Math.hypot(pvx, pvy);
+          const minHitSpeed = 620;
+          if (curSpeed < minHitSpeed) {
+            const boost = minHitSpeed / (curSpeed || 1);
+            pvx *= boost;
+            pvy *= boost;
+            curSpeed = minHitSpeed;
+          }
+
+          lastHitTeam = robot.team;
+          events.push({
+            type: 'ROBOT',
+            team: robot.team,
+            x: px,
+            y: py,
+            speed: curSpeed,
+          });
         }
       }
     }
