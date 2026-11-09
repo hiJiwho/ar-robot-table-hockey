@@ -192,7 +192,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 >
                   <div className="text-xs font-bold">{MATCH_MODES[mode].label}</div>
                   <div className="text-[11px] text-slate-400 mt-1">
-                    {mode === 'TARGET_5' ? '5골 먼저 넣으면 승리' : `${MATCH_MODES[mode].duration}초 제한`}
+                    {mode === 'TARGET_N' ? '목표 점수 선승제' : `${MATCH_MODES[mode].duration}초 제한`}
                   </div>
                 </button>
               ))}

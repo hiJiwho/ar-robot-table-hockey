@@ -9,12 +9,34 @@
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
     "build:win": "vite build && node scripts/build-win.mjs",
+    "build:portable": "vite build && electron-builder --win portable --x64",
     "electron": "vite build && electron .",
     "electron:dev": "concurrently -k \"vite --port=3000\" \"wait-on tcp:3000 && cross-env ELECTRON_START_URL=http://localhost:3000 electron .\"",
     "start": "node server.ts",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"
+  },
+  "build": {
+    "appId": "com.arrobot.airhockey",
+    "productName": "AR-Robot-air-hotkey",
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "portable",
+        "dir"
+      ]
+    },
+    "portable": {
+      "artifactName": "AR-Robot-air-hotkey-Portable.exe"
+    },
+    "directories": {
+      "output": "release"
+    }
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -38,6 +60,7 @@
     "concurrently": "^9.1.2",
     "cross-env": "^7.0.3",
     "electron": "^35.0.0",
+    "electron-builder": "^26.18.0",
     "esbuild": "^0.28.0",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.21.0",

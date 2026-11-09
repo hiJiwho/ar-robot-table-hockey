@@ -144,7 +144,7 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
               {gamePhase === 'READY' && '시작 대기'}
               {gamePhase === 'GOAL' && '득점! 리셋 중'}
               {gamePhase === 'TIME_UP' && '경기 종료'}
-              {gamePhase === 'CALIBRATION' && '경기장 설정 중'}
+              {(gamePhase === 'CALIBRATION_SCREEN' || gamePhase === 'CALIBRATION_CAMERA') && '경기장 설정 중'}
             </span>
           </div>
 
@@ -205,7 +205,7 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
             onClick={onOpenCalibration}
             title="화면 경기장 선택 및 카메라 매핑"
             className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center gap-1 whitespace-nowrap ${
-              gamePhase === 'CALIBRATION'
+              gamePhase === 'CALIBRATION_SCREEN' || gamePhase === 'CALIBRATION_CAMERA'
                 ? 'bg-sky-600 text-white shadow-sm'
                 : 'text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700'
             }`}

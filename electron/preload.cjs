@@ -45,4 +45,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('airhockey:fullscreen-changed', listener);
     };
   },
+  loadSavedConfig: () => {
+    return ipcRenderer.invoke('airhockey:load-config');
+  },
+  saveConfig: (config) => {
+    ipcRenderer.send('airhockey:save-config', config);
+  },
+  saveSlotConfig: (slot, data) => {
+    return ipcRenderer.invoke('airhockey:save-slot', { slot, data });
+  },
+  loadSlotConfig: (slot) => {
+    return ipcRenderer.invoke('airhockey:load-slot', slot);
+  },
+  openAppDataFolder: () => {
+    return ipcRenderer.invoke('airhockey:open-appdata-folder');
+  },
 });

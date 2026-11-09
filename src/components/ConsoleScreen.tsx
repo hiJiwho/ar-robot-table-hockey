@@ -44,6 +44,13 @@ import {
   Pipette,
   Zap,
   SlidersHorizontal,
+  Bot,
+  Volume2,
+  VolumeX,
+  Save,
+  FolderOpen,
+  Flame,
+  Star,
 } from 'lucide-react';
 
 export const ConsoleScreen: React.FC = () => {
@@ -57,12 +64,26 @@ export const ConsoleScreen: React.FC = () => {
     redHits: 0,
     maxPuckSpeed: 0,
     lastScoredTeam: null,
+    maxRally: 0,
+    currentRally: 0,
+    goalHistory: [],
   });
-  const [puck, setPuck] = useState<{ x: number; y: number; vx: number; vy: number }>({
+  const [puck, setPuck] = useState<{
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    spin?: number;
+    superCharged?: boolean;
+    rallyCount?: number;
+  }>({
     x: TABLE_WIDTH / 2,
     y: TABLE_HEIGHT / 2,
     vx: 0,
     vy: 0,
+    spin: 0,
+    superCharged: false,
+    rallyCount: 0,
   });
   const [blueRobot, setBlueRobot] = useState<{ tableX: number; tableY: number; detected: boolean; confidence: number }>({
     tableX: 180,
@@ -79,6 +100,18 @@ export const ConsoleScreen: React.FC = () => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [lowLightMode, setLowLightMode] = useState<boolean>(false);
   const [allRobots, setAllRobots] = useState<RobotState[]>([]);
+
+  // AI Bot & Audio Controls
+  const [botTeam, setBotTeam] = useState<BotTargetTeam>('NONE');
+  const [botDifficulty, setBotDifficulty] = useState<BotDifficulty>('NORMAL');
+  const [isMuted, setIsMuted] = useState<boolean>(false);
+  const [volume, setVolume] = useState<number>(0.8);
+
+  // Camera Device Selection & Calibration Presets
+  const [cameraDeviceId, setCameraDeviceId] = useState<string>('');
+  const [cameraDevices, setCameraDevices] = useState<MediaDeviceInfo[]>([]);
+  const [presetNotice, setPresetNotice] = useState<string | null>(null);
+  const [selectedGoalReplayIndex, setSelectedGoalReplayIndex] = useState<number | null>(null);
 
   // Vision Diagnostics & Settings
   const [colorSettings, setColorSettings] = useState<ColorSettings>({
@@ -179,6 +212,11 @@ export const ConsoleScreen: React.FC = () => {
         setCustomMinutes(Math.floor(data.customDuration / 60));
         setCustomSeconds(data.customDuration % 60);
       }
+      if (data.botTeam) setBotTeam(data.botTeam);
+      if (data.botDifficulty) setBotDifficulty(data.botDifficulty);
+      if (typeof data.isMuted === 'boolean') setIsMuted(data.isMuted);
+      if (typeof data.volume === 'number') setVolume(data.volume);
+      if (typeof data.cameraDeviceId === 'string') setCameraDeviceId(data.cameraDeviceId);
     };
 
     let unsubscribeElectron: (() => void) | undefined;
@@ -225,6 +263,15 @@ export const ConsoleScreen: React.FC = () => {
       if (stored) applyState(JSON.parse(stored));
     } catch {}
 
+    if (window.electronAPI?.loadSavedConfig) {
+      window.electronAPI
+        .loadSavedConfig()
+        .then((cfg) => {
+          if (cfg) applyState(cfg);
+        })
+        .catch(() => {});
+    }
+
     return () => {
       if (unsubscribeElectron) unsubscribeElectron();
       if (channel) channel.close();
@@ -251,14 +298,27 @@ export const ConsoleScreen: React.FC = () => {
   useEffect(() => {
     let stream: MediaStream | null = null;
     if (isSettingsOpen && (settingsTab === 'CAMERA' || settingsTab === 'VISION')) {
+      const videoConstraints: MediaTrackConstraints = {
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+      };
+      if (cameraDeviceId) {
+        videoConstraints.deviceId = { exact: cameraDeviceId };
+      }
       navigator.mediaDevices
-        ?.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false })
+        ?.getUserMedia({ video: videoConstraints, audio: false })
         .then((s) => {
           stream = s;
           if (consoleVideoRef.current) {
             consoleVideoRef.current.srcObject = s;
             consoleVideoRef.current.play();
             setIsCameraStreaming(true);
+          }
+          return navigator.mediaDevices.enumerateDevices();
+        })
+        .then((devices) => {
+          if (devices) {
+            setCameraDevices(devices.filter((d) => d.kind === 'videoinput'));
           }
         })
         .catch(() => {
@@ -277,7 +337,129 @@ export const ConsoleScreen: React.FC = () => {
         stream.getTracks().forEach((t) => t.stop());
       }
     };
-  }, [isSettingsOpen, settingsTab]);
+  }, [isSettingsOpen, settingsTab, cameraDeviceId]);
+
+  const handleSetBotConfig = (nextTeam: BotTargetTeam, nextDiff: BotDifficulty) => {
+    setBotTeam(nextTeam);
+    setBotDifficulty(nextDiff);
+    sendAction({
+      type: 'GAME_ACTION',
+      action: 'SET_BOT_CONFIG',
+      botTeam: nextTeam,
+      botDifficulty: nextDiff,
+    });
+  };
+
+  const handleToggleMute = () => {
+    const nextMuted = !isMuted;
+    setIsMuted(nextMuted);
+    sendAction({
+      type: 'GAME_ACTION',
+      action: 'SET_AUDIO_CONFIG',
+      isMuted: nextMuted,
+      volume,
+    });
+  };
+
+  const handleVolumeChange = (nextVol: number) => {
+    setVolume(nextVol);
+    if (nextVol > 0 && isMuted) setIsMuted(false);
+    sendAction({
+      type: 'GAME_ACTION',
+      action: 'SET_AUDIO_CONFIG',
+      isMuted: nextVol === 0 ? true : false,
+      volume: nextVol,
+    });
+  };
+
+  const handlePlaySoundEffect = (sfx: 'WHISTLE' | 'GOAL_HORN' | 'BUZZER' | 'BOOST') => {
+    sendAction({
+      type: 'GAME_ACTION',
+      action: 'PLAY_SOUND_EFFECT',
+      soundEffect: sfx,
+    });
+  };
+
+  const handleTriggerSuperPuck = () => {
+    sendAction({
+      type: 'GAME_ACTION',
+      action: 'TRIGGER_SUPER_PUCK',
+    });
+  };
+
+  const handleSelectCameraDevice = (deviceId: string) => {
+    setCameraDeviceId(deviceId);
+    sendAction({
+      type: 'GAME_ACTION',
+      action: 'SET_CAMERA_DEVICE',
+      cameraDeviceId: deviceId,
+    });
+  };
+
+  const handleSaveCalibrationSlot = (slotKey: 'A' | 'B' | 'C') => {
+    try {
+      const payload = {
+        screenCorners,
+        cameraCorners,
+        goalSize,
+        colorSettings,
+        isCameraMirrored,
+        lowLightMode,
+        savedAt: new Date().toLocaleTimeString(),
+      };
+      localStorage.setItem(`airhockey_preset_slot_${slotKey}`, JSON.stringify(payload));
+      void window.electronAPI?.saveSlotConfig?.(slotKey, payload);
+      setPresetNotice(`슬롯 ${slotKey}에 세팅이 ./ar-data 폴더에 저장되었습니다 (${payload.savedAt})`);
+      setTimeout(() => setPresetNotice(null), 3000);
+    } catch {}
+  };
+
+  const handleLoadCalibrationSlot = async (slotKey: 'A' | 'B' | 'C') => {
+    try {
+      let data: any = null;
+      if (window.electronAPI?.loadSlotConfig) {
+        data = await window.electronAPI.loadSlotConfig(slotKey);
+      }
+      if (!data) {
+        const raw = localStorage.getItem(`airhockey_preset_slot_${slotKey}`);
+        if (raw) data = JSON.parse(raw);
+      }
+      if (!data) {
+        setPresetNotice(`슬롯 ${slotKey}에 저장된 데이터가 없습니다.`);
+        setTimeout(() => setPresetNotice(null), 3000);
+        return;
+      }
+      if (data.screenCorners) {
+        setScreenCorners(data.screenCorners);
+        localStorage.setItem('airhockey_screen_corners', JSON.stringify(data.screenCorners));
+        sendAction({ type: 'GAME_ACTION', action: 'UPDATE_SCREEN_CORNERS', screenCorners: data.screenCorners });
+      }
+      if (data.cameraCorners) {
+        const cc = toEightPoints(data.cameraCorners);
+        setCameraCorners(cc);
+        localStorage.setItem('airhockey_camera_corners', JSON.stringify(cc));
+        sendAction({ type: 'GAME_ACTION', action: 'UPDATE_CAMERA_CORNERS', cameraCorners: cc });
+      }
+      if (typeof data.goalSize === 'number') {
+        setGoalSize(data.goalSize);
+        sendAction({ type: 'GAME_ACTION', action: 'UPDATE_GOAL_SIZE', goalSize: data.goalSize });
+      }
+      if (data.colorSettings) {
+        setColorSettings(data.colorSettings);
+        sendAction({ type: 'GAME_ACTION', action: 'UPDATE_COLOR_SETTINGS', colorSettings: data.colorSettings });
+      }
+      if (typeof data.isCameraMirrored === 'boolean') {
+        setIsCameraMirrored(data.isCameraMirrored);
+        sendAction({ type: 'GAME_ACTION', action: 'TOGGLE_MIRROR', isCameraMirrored: data.isCameraMirrored });
+      }
+      if (typeof data.lowLightMode === 'boolean') {
+        setLowLightMode(data.lowLightMode);
+        sendAction({ type: 'GAME_ACTION', action: 'SET_LOW_LIGHT_MODE', lowLightMode: data.lowLightMode });
+      }
+      setPresetNotice(`슬롯 ${slotKey} 세팅을 ./ar-data에서 불러왔습니다!`);
+      setTimeout(() => setPresetNotice(null), 3000);
+    } catch {}
+  };
 
   // Eyedropper Color Sampler on Webcam Feed
   const handleEyedropperSample = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -629,13 +811,36 @@ export const ConsoleScreen: React.FC = () => {
         {/* Left: Live Game Mirror & Vision Status (Col 6) */}
         <div className="lg:col-span-6 flex flex-col gap-2 bg-slate-900/70 border border-slate-800 rounded-2xl p-3 overflow-hidden">
           <div className="flex items-center justify-between text-xs">
-            <span className="font-bold text-slate-200 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              실시간 경기장 미러링
-            </span>
-            <span className="text-[11px] font-mono text-slate-400">
-              퍽 속도: {Math.round(stats.maxPuckSpeed)} px/s
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-slate-200 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                실시간 경기장 미러링
+              </span>
+              {puck.superCharged && (
+                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400 text-amber-300 font-black text-[10px] animate-pulse">
+                  ★ 슈퍼 퍽 (x2점) 활성!
+                </span>
+              )}
+              {(puck.rallyCount || 0) >= 3 && (
+                <span className="px-2 py-0.5 rounded-full bg-orange-500/20 border border-orange-400 text-orange-300 font-black text-[10px] flex items-center gap-1">
+                  <Flame className="w-3 h-3" />
+                  {puck.rallyCount} 콤보
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleTriggerSuperPuck}
+                className="px-2 py-0.5 rounded-md bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/60 text-amber-300 text-[10px] font-black flex items-center gap-1 transition-all active:scale-95"
+                title="퍽을 즉시 황금 슈퍼 퍽(골 득점 시 2점)으로 충전합니다"
+              >
+                <Star className="w-3 h-3 fill-amber-400" />
+                <span>슈퍼퍽 충전</span>
+              </button>
+              <span className="text-[11px] font-mono text-slate-400">
+                최고: {Math.round(stats.maxPuckSpeed * 0.08)} km/h ({Math.round(stats.maxPuckSpeed)} px/s)
+              </span>
+            </div>
           </div>
 
           {/* Mini Field SVG Representation */}
@@ -681,18 +886,38 @@ export const ConsoleScreen: React.FC = () => {
               {/* Goal Openings (Only when playing) */}
               {!isReady && (
                 <>
-                  <rect x="0" y={TABLE_HEIGHT / 2 - 130} width="12" height="260" fill="#94a3b8" />
-                  <rect x={TABLE_WIDTH - 12} y={TABLE_HEIGHT / 2 - 130} width="12" height="260" fill="#94a3b8" />
+                  <rect x="0" y={TABLE_HEIGHT / 2 - goalSize / 2} width="12" height={goalSize} fill="#06b6d4" />
+                  <rect x={TABLE_WIDTH - 12} y={TABLE_HEIGHT / 2 - goalSize / 2} width="12" height={goalSize} fill="#facc15" />
                 </>
               )}
 
-              {/* [REQ] 패들 1, 패들 2 단정하고 중립적인 화이트 링 디자인 */}
+              {/* Selected Goal Replay Trajectory Overlay */}
+              {selectedGoalReplayIndex !== null &&
+                stats.goalHistory &&
+                stats.goalHistory[selectedGoalReplayIndex]?.replayPath &&
+                stats.goalHistory[selectedGoalReplayIndex].replayPath!.length > 1 && (
+                  <g>
+                    <polyline
+                      fill="none"
+                      stroke={stats.goalHistory[selectedGoalReplayIndex].team === 'blue' ? '#22d3ee' : '#facc15'}
+                      strokeWidth="6"
+                      strokeDasharray="10 6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      points={stats.goalHistory[selectedGoalReplayIndex]
+                        .replayPath!.map((pt) => `${pt.x},${pt.y}`)
+                        .join(' ')}
+                    />
+                  </g>
+                )}
+
+              {/* [REQ] 패들 1, 패들 2 미러링 (AI 봇 활성 시 표시) */}
               <circle
                 cx={blueRobot.tableX}
                 cy={blueRobot.tableY}
                 r="34"
                 fill="none"
-                stroke="#ffffff"
+                stroke={botTeam === 'BLUE' || botTeam === 'BOTH' ? '#22d3ee' : '#ffffff'}
                 strokeWidth="4"
               />
               <circle cx={blueRobot.tableX} cy={blueRobot.tableY} r="12" fill="#ffffff" />
@@ -702,13 +927,31 @@ export const ConsoleScreen: React.FC = () => {
                 cy={redRobot.tableY}
                 r="34"
                 fill="none"
-                stroke="#ffffff"
+                stroke={botTeam === 'RED' || botTeam === 'BOTH' ? '#facc15' : '#ffffff'}
                 strokeWidth="4"
               />
               <circle cx={redRobot.tableX} cy={redRobot.tableY} r="12" fill="#ffffff" />
 
               {/* Puck */}
-              <circle cx={puck.x} cy={puck.y} r="20" fill={theme === 'light' ? '#e11d48' : '#ffffff'} stroke="#64748b" strokeWidth="3" />
+              {puck.superCharged && (
+                <circle
+                  cx={puck.x}
+                  cy={puck.y}
+                  r="30"
+                  fill="none"
+                  stroke="#fbbf24"
+                  strokeWidth="3.5"
+                  strokeDasharray="6 4"
+                />
+              )}
+              <circle
+                cx={puck.x}
+                cy={puck.y}
+                r="20"
+                fill={puck.superCharged ? '#fbbf24' : theme === 'light' ? '#e11d48' : '#ffffff'}
+                stroke="#64748b"
+                strokeWidth="3"
+              />
 
               {/* Center Speaker Physical Zone */}
               <g>
@@ -742,12 +985,46 @@ export const ConsoleScreen: React.FC = () => {
             </svg>
           </div>
 
+          {/* 최근 득점 리플레이 타임라인 바 */}
+          {stats.goalHistory && stats.goalHistory.length > 0 && (
+            <div className="flex items-center gap-1.5 overflow-x-auto py-1">
+              <span className="text-[10px] font-bold text-slate-400 shrink-0">득점 궤적 보기:</span>
+              {stats.goalHistory.slice(-5).map((g, idx) => {
+                const realIdx = stats.goalHistory!.length - Math.min(5, stats.goalHistory!.length) + idx;
+                const isSelected = selectedGoalReplayIndex === realIdx;
+                return (
+                  <button
+                    key={g.id}
+                    onClick={() => setSelectedGoalReplayIndex(isSelected ? null : realIdx)}
+                    className={`px-2 py-0.5 rounded-md text-[10px] font-bold border transition-all shrink-0 ${
+                      isSelected
+                        ? 'bg-indigo-600 text-white border-indigo-400'
+                        : g.team === 'blue'
+                        ? 'bg-cyan-950/60 text-cyan-300 border-cyan-500/40 hover:bg-cyan-900/60'
+                        : 'bg-yellow-950/60 text-yellow-300 border-yellow-500/40 hover:bg-yellow-900/60'
+                    }`}
+                  >
+                    {g.team === 'blue' ? 'Cyan' : 'Yellow'} +{g.points}점 ({Math.round(g.speed * 0.08)}km/h)
+                  </button>
+                );
+              })}
+              {selectedGoalReplayIndex !== null && (
+                <button
+                  onClick={() => setSelectedGoalReplayIndex(null)}
+                  className="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 hover:bg-slate-700"
+                >
+                  궤적 끄기
+                </button>
+              )}
+            </div>
+          )}
+
           {/* 패들 1 (Cyan), 패들 2 (Yellow) 상태창 */}
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div className="bg-slate-950/80 border border-cyan-500/30 rounded-lg p-2.5 flex items-center justify-between">
               <span className="font-bold text-cyan-300 flex items-center gap-2">
                 <span className={`w-2.5 h-2.5 rounded-full ${blueRobot.detected ? 'bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]' : 'bg-slate-600'}`} />
-                Cyan 팀 (1P)
+                Cyan 팀 (1P) {botTeam === 'BLUE' || botTeam === 'BOTH' ? `[AI:${botDifficulty}]` : ''}
               </span>
               <span className="font-mono text-slate-400">
                 {blueRobot.detected ? `${Math.round(blueRobot.tableX)}, ${Math.round(blueRobot.tableY)}` : '미감지'}
@@ -757,7 +1034,7 @@ export const ConsoleScreen: React.FC = () => {
             <div className="bg-slate-950/80 border border-yellow-500/30 rounded-lg p-2.5 flex items-center justify-between">
               <span className="font-bold text-yellow-300 flex items-center gap-2">
                 <span className={`w-2.5 h-2.5 rounded-full ${redRobot.detected ? 'bg-yellow-400 shadow-[0_0_8px_rgba(250,204,21,0.8)]' : 'bg-slate-600'}`} />
-                Yellow 팀 (2P)
+                Yellow 팀 (2P) {botTeam === 'RED' || botTeam === 'BOTH' ? `[AI:${botDifficulty}]` : ''}
               </span>
               <span className="font-mono text-slate-400">
                 {redRobot.detected ? `${Math.round(redRobot.tableX)}, ${Math.round(redRobot.tableY)}` : '미감지'}
@@ -767,7 +1044,7 @@ export const ConsoleScreen: React.FC = () => {
         </div>
 
         {/* Right: Controller Section (Col 6) */}
-        <div className="lg:col-span-6 flex flex-col gap-2.5 overflow-y-auto">
+        <div className="lg:col-span-6 flex flex-col gap-2.5 overflow-y-auto pr-1">
           {/* Sports Scoreboard */}
           <div className="grid grid-cols-3 gap-2 bg-slate-900 border border-slate-800 rounded-2xl p-3 text-center">
             {/* Player 1 Score (Cyan) */}
@@ -884,6 +1161,114 @@ export const ConsoleScreen: React.FC = () => {
             </div>
           )}
 
+          {/* AI 로봇 대전 모드 & 사운드보드 컨트롤 */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {/* AI Bot Match Mode */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
+                  <Bot className="w-4 h-4 text-indigo-400" />
+                  AI 로봇 대전 모드 (1인 플레이/시범)
+                </span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-700 font-bold">
+                  {botTeam === 'NONE' ? '2인 수동' : `${botTeam} AI`}
+                </span>
+              </div>
+              <div className="grid grid-cols-4 gap-1">
+                {(
+                  [
+                    { id: 'NONE', label: 'OFF (2인)' },
+                    { id: 'RED', label: '2P AI' },
+                    { id: 'BLUE', label: '1P AI' },
+                    { id: 'BOTH', label: 'AI 시범' },
+                  ] as { id: BotTargetTeam; label: string }[]
+                ).map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => handleSetBotConfig(item.id, botDifficulty)}
+                    className={`py-1.5 px-1 rounded-lg text-[11px] font-bold border transition-all ${
+                      botTeam === item.id
+                        ? 'bg-indigo-600 text-white border-indigo-400 shadow'
+                        : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              {botTeam !== 'NONE' && (
+                <div className="grid grid-cols-4 gap-1 pt-0.5">
+                  {(['EASY', 'NORMAL', 'HARD', 'PRO'] as BotDifficulty[]).map((diff) => (
+                    <button
+                      key={diff}
+                      onClick={() => handleSetBotConfig(botTeam, diff)}
+                      className={`py-1 rounded text-[10px] font-black border transition-all ${
+                        botDifficulty === diff
+                          ? 'bg-pink-600 text-white border-pink-400'
+                          : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                      }`}
+                    >
+                      {diff}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Audio Volume & Referee Soundboard */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 flex flex-col justify-between gap-2">
+              <div className="flex items-center justify-between gap-2">
+                <button
+                  onClick={handleToggleMute}
+                  className={`px-2 py-1 rounded-lg border text-xs font-bold flex items-center gap-1 transition-colors ${
+                    isMuted
+                      ? 'bg-rose-950/70 text-rose-300 border-rose-700/60'
+                      : 'bg-slate-950 text-emerald-300 border-slate-800'
+                  }`}
+                >
+                  {isMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+                  <span>{isMuted ? '음소거됨' : `볼륨 ${Math.round(volume * 100)}%`}</span>
+                </button>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={isMuted ? 0 : volume}
+                  onChange={(e) => handleVolumeChange( parseFloat(e.target.value) )}
+                  className="flex-1 accent-indigo-500 cursor-pointer"
+                />
+              </div>
+
+              <div className="grid grid-cols-4 gap-1">
+                <button
+                  onClick={() => handlePlaySoundEffect('WHISTLE')}
+                  className="py-1.5 px-1 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-[10px] font-bold text-slate-200 transition-all active:scale-95"
+                >
+                  📣 호각
+                </button>
+                <button
+                  onClick={() => handlePlaySoundEffect('GOAL_HORN')}
+                  className="py-1.5 px-1 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-[10px] font-bold text-amber-300 transition-all active:scale-95"
+                >
+                  🎺 골혼
+                </button>
+                <button
+                  onClick={() => handlePlaySoundEffect('BUZZER')}
+                  className="py-1.5 px-1 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-[10px] font-bold text-rose-300 transition-all active:scale-95"
+                >
+                  🚨 버저
+                </button>
+                <button
+                  onClick={handleTriggerSuperPuck}
+                  className="py-1.5 px-1 rounded-lg bg-amber-950/60 hover:bg-amber-900/60 border border-amber-600/50 text-[10px] font-bold text-amber-300 transition-all active:scale-95"
+                >
+                  ★ 슈퍼퍽
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* [REQ] 10. 경기 시간 추가: 콘설에서 시간을 30초 단위로 추가 (+30초, -30초) */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3">
             <span className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
@@ -892,14 +1277,14 @@ export const ConsoleScreen: React.FC = () => {
             <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={() => handleAddTime(30)}
-                className="py-3 px-4 rounded-xl bg-indigo-600/80 hover:bg-indigo-600 border border-indigo-500/60 text-white text-sm font-black transition-all flex items-center justify-center gap-2 shadow-sm active:scale-98"
+                className="py-2.5 px-4 rounded-xl bg-indigo-600/80 hover:bg-indigo-600 border border-indigo-500/60 text-white text-sm font-black transition-all flex items-center justify-center gap-2 shadow-sm active:scale-98"
               >
                 <Plus className="w-4 h-4" />
                 <span>+30초 추가</span>
               </button>
               <button
                 onClick={() => handleAddTime(-30)}
-                className="py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-sm font-black transition-all flex items-center justify-center gap-2 shadow-sm active:scale-98"
+                className="py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-sm font-black transition-all flex items-center justify-center gap-2 shadow-sm active:scale-98"
               >
                 <Minus className="w-4 h-4" />
                 <span>-30초 차감</span>
@@ -1122,6 +1507,53 @@ export const ConsoleScreen: React.FC = () => {
               </button>
             </div>
 
+            {/* Quick Calibration & Environment Slot Presets Bar */}
+            <div className="px-4 py-2.5 bg-slate-950 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-slate-300 flex items-center gap-1.5">
+                  <Save className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>./ar-data 자동저장 & 슬롯 프리셋:</span>
+                </span>
+                {window.electronAPI?.openAppDataFolder && (
+                  <button
+                    onClick={() => window.electronAPI?.openAppDataFolder?.()}
+                    className="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700 text-[10px] font-bold flex items-center gap-1 transition-colors"
+                    title="포터블 실행파일(.exe) 옆 ar-data 설정 저장 폴더 열기"
+                  >
+                    <FolderOpen className="w-3 h-3" />
+                    <span>ar-data 폴더 열기</span>
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5">
+                {(['A', 'B', 'C'] as const).map((slot) => (
+                  <div key={slot} className="flex items-center rounded-lg overflow-hidden border border-slate-700">
+                    <button
+                      onClick={() => handleSaveCalibrationSlot(slot)}
+                      className="px-2 py-1 bg-slate-800 hover:bg-indigo-600 text-slate-200 hover:text-white font-bold text-[11px] flex items-center gap-1 transition-colors"
+                      title={`현재 캘리브레이션 및 색상 세팅을 슬롯 ${slot}에 저장`}
+                    >
+                      <Save className="w-3 h-3" />
+                      <span>{slot} 저장</span>
+                    </button>
+                    <button
+                      onClick={() => handleLoadCalibrationSlot(slot)}
+                      className="px-2 py-1 bg-slate-900 hover:bg-emerald-600 text-slate-300 hover:text-white font-bold text-[11px] flex items-center gap-1 border-l border-slate-700 transition-colors"
+                      title={`슬롯 ${slot}에 저장된 세팅 불러오기`}
+                    >
+                      <FolderOpen className="w-3 h-3" />
+                      <span>불러오기</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+              {presetNotice && (
+                <div className="w-full text-[11px] font-bold text-emerald-400 bg-emerald-950/50 border border-emerald-700/50 rounded-lg px-2.5 py-1">
+                  ✓ {presetNotice}
+                </div>
+              )}
+            </div>
+
             {/* Modal Navigation Tabs */}
             <div className="flex border-b border-slate-800 bg-slate-950/60 p-2 gap-2">
               <button
@@ -1208,6 +1640,26 @@ export const ConsoleScreen: React.FC = () => {
               {/* Tab 2: Camera Calibration (Live Webcam in Console) */}
               {settingsTab === 'CAMERA' && (
                 <div className="flex flex-col gap-3">
+                  {/* 웹캠 장치 선택기 */}
+                  <div className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800 flex items-center justify-between gap-3">
+                    <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5 shrink-0">
+                      <Camera className="w-4 h-4 text-indigo-400" />
+                      연결된 웹캠 선택:
+                    </span>
+                    <select
+                      value={cameraDeviceId}
+                      onChange={(e) => handleSelectCameraDevice(e.target.value)}
+                      className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white font-semibold focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value="">기본 카메라 (자동 선택)</option>
+                      {cameraDevices.map((dev, idx) => (
+                        <option key={dev.deviceId || idx} value={dev.deviceId}>
+                          {dev.label || `카메라 장치 #${idx + 1}`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   <div className="p-3 rounded-2xl bg-indigo-950/40 border border-indigo-800/60 flex items-center justify-between">
                     <div>
                       <span className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">

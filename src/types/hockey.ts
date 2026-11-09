@@ -59,12 +59,37 @@ export interface Particle {
   maxLife: number;
 }
 
+export interface ImpactRipple {
+  id: string;
+  x: number; // Table coordinate X
+  y: number; // Table coordinate Y
+  color: string;
+  maxRadius: number;
+  createdAt: number;
+  duration: number; // ms
+  label?: string;
+}
+
 export interface LiveGameState {
   blueRobot: RobotState;
   redRobot: RobotState;
   allRobots: RobotState[]; // [REQ] 2개에서 10개 사이로 유동적 인식된 모든 마젠타 로봇/블록 (장애물 로봇 포함)
   puck: PuckState;
   particles: Particle[];
+}
+
+export type BotDifficulty = 'EASY' | 'NORMAL' | 'HARD' | 'PRO';
+export type BotTargetTeam = 'NONE' | 'RED' | 'BLUE' | 'BOTH';
+
+export interface GoalLogEntry {
+  id: string;
+  team: 'blue' | 'red';
+  points: number;
+  speed: number;
+  timeRemaining: number;
+  timestamp: number;
+  isSuperGoal?: boolean;
+  replayPath?: Array<{ x: number; y: number }>;
 }
 
 export interface ColorFilter {
@@ -80,7 +105,7 @@ export interface ColorFilter {
   vMax: number;
 }
 
-export type VisionEngineType = 'OPENCV' | 'CHROMATIC' | 'YCRCB' | 'HSV';
+export type VisionEngineType = 'OPENCV' | 'CHROMATIC' | 'YCRCB' | 'HSV' | 'ADAPTIVE_HSV';
 
 export interface ColorSettings {
   magenta: ColorFilter;
@@ -104,6 +129,9 @@ export interface MatchStats {
   redHits: number;
   maxPuckSpeed: number;
   lastScoredTeam: 'blue' | 'red' | null;
+  maxRally?: number;
+  currentRally?: number;
+  goalHistory?: GoalLogEntry[];
 }
 
 export type GameActionMessage = {
@@ -221,7 +249,7 @@ export interface SyncStatePayload {
   goalSize?: number;
   theme?: 'dark' | 'light';
   stats: MatchStats;
-  goalAnnouncement?: { team: 'blue' | 'red'; countdown: number } | null;
+  goalAnnouncement?: { team: 'blue' | 'red'; countdown: number; points?: number } | null;
   screenCorners?: CalibrationCorners;
   cameraCorners?: CalibrationCorners;
   isCameraMirrored?: boolean;
@@ -234,7 +262,15 @@ export interface SyncStatePayload {
     blueConfidence: number;
     redConfidence: number;
   };
-  puck?: { x: number; y: number; vx: number; vy: number };
+  puck?: {
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    spin?: number;
+    superCharged?: boolean;
+    rallyCount?: number;
+  };
   blueRobot?: { tableX: number; tableY: number; detected: boolean; confidence: number };
   redRobot?: { tableX: number; tableY: number; detected: boolean; confidence: number };
   allRobots?: Array<{ id?: string; team: 'blue' | 'red' | 'obstacle'; tableX: number; tableY: number; detected: boolean; confidence: number }>;
@@ -253,6 +289,11 @@ export interface ElectronAPI {
   toggleFullscreen: () => Promise<boolean>;
   getFullscreenState: () => Promise<boolean>;
   onFullscreenChange: (callback: (isFullscreen: boolean) => void) => () => void;
+  loadSavedConfig?: () => Promise<any>;
+  saveConfig?: (config: any) => void;
+  saveSlotConfig?: (slot: 'A' | 'B' | 'C', data: any) => Promise<{ ok: boolean; path?: string }>;
+  loadSlotConfig?: (slot: 'A' | 'B' | 'C') => Promise<any>;
+  openAppDataFolder?: () => Promise<string>;
 }
 
 declare global {

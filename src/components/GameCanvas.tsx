@@ -74,6 +74,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
         theme = 'dark',
         score = { blue: 0, red: 0 },
         timeLeft = 60,
+        botTeam = 'NONE',
       } = currentProps;
 
       const width = canvas.width;
@@ -82,18 +83,27 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
 
       const isLight = theme === 'light';
       const isGameOver = gamePhase === 'TIME_UP';
-      const isReadyPhase = gamePhase === 'READY' || gamePhase === 'CALIBRATION_SCREEN' || gamePhase === 'CALIBRATION_CAMERA';
+      const isReadyPhase =
+        gamePhase === 'READY' || gamePhase === 'CALIBRATION_SCREEN' || gamePhase === 'CALIBRATION_CAMERA';
       const showGoals = !isReadyPhase; // 대기 중에는 골대 없음 (벽면만 닫힌 경기장 모습)
 
       // Theme color palette
       const bgColor = isLight ? '#ffffff' : '#000000';
       const tableFill = isLight ? '#f8fafc' : '#020408';
       const primaryLine = isGameOver
-        ? (isLight ? '#94a3b8' : '#3f3f46')
-        : (isLight ? '#0f172a' : '#ffffff');
+        ? isLight
+          ? '#94a3b8'
+          : '#3f3f46'
+        : isLight
+        ? '#0f172a'
+        : '#ffffff';
       const secondaryLine = isGameOver
-        ? (isLight ? '#cbd5e1' : '#27272a')
-        : (isLight ? 'rgba(15, 23, 42, 0.45)' : 'rgba(255, 255, 255, 0.55)');
+        ? isLight
+          ? '#cbd5e1'
+          : '#27272a'
+        : isLight
+        ? 'rgba(15, 23, 42, 0.45)'
+        : 'rgba(255, 255, 255, 0.55)';
 
       // 1. Clear Viewport Background
       ctx.fillStyle = bgColor;
@@ -274,11 +284,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
       // =========================================================================
       // 1P 진영 (왼쪽): 점수 (+90도) & 점수 아래/골대 쪽 시계 (+90도)
       // =========================================================================
-      // 1P 초대형 점수 (+90도)
       const p1ScorePt = tf.tableToScreen(TABLE_WIDTH / 2 - 230, TABLE_HEIGHT / 2);
       ctx.save();
       ctx.translate(p1ScorePt.x, p1ScorePt.y);
-      ctx.rotate(Math.PI / 2); // 1P 골대 쪽에 선 사람이 똑바로 보이도록 +90도 회전
+      ctx.rotate(Math.PI / 2);
       ctx.font = '900 220px "Arial Black", Impact, -apple-system, system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -287,8 +296,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
         ctx.shadowBlur = 18;
       }
       ctx.fillStyle = isGameOver
-        ? (isLight ? '#cbd5e1' : '#3f3f46')
-        : (isLight ? 'rgba(6, 182, 212, 0.90)' : 'rgba(34, 211, 238, 0.95)');
+        ? isLight
+          ? '#cbd5e1'
+          : '#3f3f46'
+        : isLight
+        ? 'rgba(6, 182, 212, 0.90)'
+        : 'rgba(34, 211, 238, 0.95)';
       ctx.fillText(String(score.blue), 0, 0);
       ctx.restore();
 
@@ -296,15 +309,18 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
       const p1ClockPt = tf.tableToScreen(TABLE_WIDTH / 2 - 375, TABLE_HEIGHT / 2);
       ctx.save();
       ctx.translate(p1ClockPt.x, p1ClockPt.y);
-      ctx.rotate(Math.PI / 2); // 1P 플레이어 시선에 맞춰 +90도 회전
+      ctx.rotate(Math.PI / 2);
 
-      // 타이머 배경 HUD 캡슐
       ctx.fillStyle = isLight ? 'rgba(241, 245, 249, 0.90)' : 'rgba(15, 23, 42, 0.88)';
       ctx.strokeStyle = isGameOver
-        ? (isLight ? '#94a3b8' : '#475569')
+        ? isLight
+          ? '#94a3b8'
+          : '#475569'
         : isUrgent
         ? '#ef4444'
-        : (isLight ? '#06b6d4' : '#22d3ee');
+        : isLight
+        ? '#06b6d4'
+        : '#22d3ee';
       ctx.lineWidth = 3;
       const clockW = 150;
       const clockH = 46;
@@ -313,30 +329,32 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
       ctx.fill();
       ctx.stroke();
 
-      // 타이머 글자 (선명한 네온 디지털 폰트)
       ctx.font = '900 32px monospace, "Courier New", system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       if (!isGameOver) {
-        ctx.shadowColor = isUrgent ? '#ef4444' : (isLight ? '#0891b2' : '#22d3ee');
+        ctx.shadowColor = isUrgent ? '#ef4444' : isLight ? '#0891b2' : '#22d3ee';
         ctx.shadowBlur = 10;
       }
       ctx.fillStyle = isGameOver
-        ? (isLight ? '#94a3b8' : '#64748b')
+        ? isLight
+          ? '#94a3b8'
+          : '#64748b'
         : isUrgent
         ? '#ef4444'
-        : (isLight ? '#0891b2' : '#22d3ee');
+        : isLight
+        ? '#0891b2'
+        : '#22d3ee';
       ctx.fillText(timeStr, 0, 1);
       ctx.restore();
 
       // =========================================================================
       // 2P 진영 (오른쪽): 점수 (-90도) & 점수 아래/골대 쪽 시계 (-90도)
       // =========================================================================
-      // 2P 초대형 점수 (-90도)
       const p2ScorePt = tf.tableToScreen(TABLE_WIDTH / 2 + 230, TABLE_HEIGHT / 2);
       ctx.save();
       ctx.translate(p2ScorePt.x, p2ScorePt.y);
-      ctx.rotate(-Math.PI / 2); // 2P 골대 쪽에 선 사람이 똑바로 보이도록 -90도 회전
+      ctx.rotate(-Math.PI / 2);
       ctx.font = '900 220px "Arial Black", Impact, -apple-system, system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -345,8 +363,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
         ctx.shadowBlur = 18;
       }
       ctx.fillStyle = isGameOver
-        ? (isLight ? '#cbd5e1' : '#3f3f46')
-        : (isLight ? 'rgba(202, 138, 4, 0.92)' : 'rgba(250, 204, 21, 0.95)');
+        ? isLight
+          ? '#cbd5e1'
+          : '#3f3f46'
+        : isLight
+        ? 'rgba(202, 138, 4, 0.92)'
+        : 'rgba(250, 204, 21, 0.95)';
       ctx.fillText(String(score.red), 0, 0);
       ctx.restore();
 
@@ -354,34 +376,40 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
       const p2ClockPt = tf.tableToScreen(TABLE_WIDTH / 2 + 375, TABLE_HEIGHT / 2);
       ctx.save();
       ctx.translate(p2ClockPt.x, p2ClockPt.y);
-      ctx.rotate(-Math.PI / 2); // 2P 플레이어 시선에 맞춰 -90도 회전
+      ctx.rotate(-Math.PI / 2);
 
-      // 타이머 배경 HUD 캡슐
       ctx.fillStyle = isLight ? 'rgba(241, 245, 249, 0.90)' : 'rgba(15, 23, 42, 0.88)';
       ctx.strokeStyle = isGameOver
-        ? (isLight ? '#94a3b8' : '#475569')
+        ? isLight
+          ? '#94a3b8'
+          : '#475569'
         : isUrgent
         ? '#ef4444'
-        : (isLight ? '#ca8a04' : '#facc15');
+        : isLight
+        ? '#ca8a04'
+        : '#facc15';
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.roundRect(-clockW / 2, -clockH / 2, clockW, clockH, 23);
       ctx.fill();
       ctx.stroke();
 
-      // 타이머 글자 (선명한 네온 디지털 폰트)
       ctx.font = '900 32px monospace, "Courier New", system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       if (!isGameOver) {
-        ctx.shadowColor = isUrgent ? '#ef4444' : (isLight ? '#ca8a04' : '#facc15');
+        ctx.shadowColor = isUrgent ? '#ef4444' : isLight ? '#ca8a04' : '#facc15';
         ctx.shadowBlur = 10;
       }
       ctx.fillStyle = isGameOver
-        ? (isLight ? '#94a3b8' : '#64748b')
+        ? isLight
+          ? '#94a3b8'
+          : '#64748b'
         : isUrgent
         ? '#ef4444'
-        : (isLight ? '#ca8a04' : '#facc15');
+        : isLight
+        ? '#ca8a04'
+        : '#facc15';
       ctx.fillText(timeStr, 0, 1);
       ctx.restore();
 
@@ -407,30 +435,45 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
         ctx.stroke();
       }
 
-      // 7. [REQ] "그 패들에 는 색 붙이지 말아줘!"
-      // 실제 손에 든 패들/레고블록 위에 프로젝터 빛이 덮어씌워지지 않도록 메인 경기장에서 패들 색상 원형 투사를 완전 비활성화.
-      // (가상 봇 모드일 때만 마우스 위치 확인용으로 은은하게 표시)
-      if (currentProps.isVirtualMode) {
-        renderRealisticMal(ctx, tf, blueRobot, isLight, isGameOver);
-        renderRealisticMal(ctx, tf, redRobot, isLight, isGameOver);
+      // 7. [REQ] 실제 손에 든 패들에는 프로젝터 빛을 쏘지 않되, AI 봇이 조작 중인 팀이나 가상 모드일 때는 패들을 경기장에 투사
+      const showBlueMal = currentProps.isVirtualMode || botTeam === 'BLUE' || botTeam === 'BOTH';
+      const showRedMal = currentProps.isVirtualMode || botTeam === 'RED' || botTeam === 'BOTH';
+      if (showBlueMal) {
+        renderRealisticMal(ctx, tf, blueRobot, isLight, isGameOver, botTeam === 'BLUE' || botTeam === 'BOTH');
+      }
+      if (showRedMal) {
+        renderRealisticMal(ctx, tf, redRobot, isLight, isGameOver, botTeam === 'RED' || botTeam === 'BOTH');
       }
 
       // 7.5. [REQ] 경기장 정가운데 실제 물리 스피커 존 (Acoustic Speaker Dock & Shockwave)
       renderCenterSpeakerZone(ctx, tf, isLight, isGameOver);
 
-      // 8. [REQ] 공 (퍽) - 순수 원형 스포츠 퍽
+      // 7.8. 충격파 링 (Clean Projector-Safe Impact Shockwaves)
+      const ripples = (live && live.ripples) || [];
+      if (ripples.length > 0) {
+        renderImpactRipples(ctx, tf, ripples);
+      }
+
+      // 8. [REQ] 공 (퍽) - 순수 원형 스포츠 퍽 (스핀 & 슈퍼골 x2 오라 지원)
       renderRealisticPuck(ctx, tf, puck, isLight, isGameOver);
 
-      // 9. GOAL Text Overlay (득점 시 심플한 투사)
+      // 9. GOAL Ceremony Overlay (득점 시 양쪽 플레이어 시선 + 중앙 배너)
       if (gamePhase === 'GOAL') {
-        const goalBannerPt = tf.tableToScreen(TABLE_WIDTH / 2, TABLE_HEIGHT / 2 + 75);
+        const isSuper = Boolean(puck.superCharged);
+        const bannerText = isSuper ? 'SUPER GOAL +2!!' : 'GOAL!!';
+        const bannerColor = isSuper ? '#f59e0b' : isLight ? '#e11d48' : '#38bdf8';
+
+        // Center Banner
+        const goalBannerPt = tf.tableToScreen(TABLE_WIDTH / 2, TABLE_HEIGHT / 2 + 80);
         ctx.save();
         ctx.translate(goalBannerPt.x, goalBannerPt.y);
-        ctx.font = '900 36px system-ui, sans-serif';
+        ctx.font = '900 40px system-ui, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillStyle = isLight ? '#e11d48' : '#38bdf8';
-        ctx.fillText('GOAL!!', 0, 0);
+        ctx.shadowColor = bannerColor;
+        ctx.shadowBlur = 20;
+        ctx.fillStyle = bannerColor;
+        ctx.fillText(bannerText, 0, 0);
         ctx.restore();
       }
 
@@ -455,13 +498,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
   );
 };
 
-// [REQ] 실제 에어하키 "말 (Striker/Mal)" 디자인: 중앙 기준 좌측 Cyan, 우측 Yellow
+// [REQ] 실제 에어하키 "말 (Striker/Mal)" 디자인: 중앙 기준 좌측 Cyan, 우측 Yellow (AI 봇 표시 지원)
 function renderRealisticMal(
   ctx: CanvasRenderingContext2D,
   tf: PerspectiveTransformer,
   robot: RobotState,
-  isLight: boolean,
-  isGameOver: boolean
+  _isLight: boolean,
+  isGameOver: boolean,
+  isAiBot = false
 ) {
   if (!robot.detected && Date.now() - robot.lastSeenTime > 500) return;
   const screenPos = tf.tableToScreen(robot.tableX, robot.tableY);
@@ -471,7 +515,6 @@ function renderRealisticMal(
   ctx.save();
   ctx.translate(screenPos.x, screenPos.y);
 
-  // [REQ] 경기장에서도 Cyan, Yellow 표시 (게임 종료 시에는 무채색 회색으로 비활성화)
   const primary = isGameOver
     ? '#52525b'
     : isCyan
@@ -496,6 +539,11 @@ function renderRealisticMal(
     ? '#67e8f9'
     : '#fde047';
 
+  if (!isGameOver && isAiBot) {
+    ctx.shadowColor = primary;
+    ctx.shadowBlur = 16;
+  }
+
   // 1. Base Outer Flange (말 밑판)
   ctx.fillStyle = rimFill;
   ctx.beginPath();
@@ -516,17 +564,26 @@ function renderRealisticMal(
   // 3. Center Handle Knob (말 손잡이)
   ctx.fillStyle = knobFill;
   ctx.beginPath();
-  ctx.arc(0, 0, outerRadius * 0.40, 0, Math.PI * 2);
+  ctx.arc(0, 0, outerRadius * 0.4, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.strokeStyle = '#ffffff';
   ctx.lineWidth = 2;
   ctx.stroke();
 
+  if (isAiBot && !isGameOver) {
+    ctx.rotate(isCyan ? Math.PI / 2 : -Math.PI / 2);
+    ctx.font = '900 10px system-ui, sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('AI', 0, 0);
+  }
+
   ctx.restore();
 }
 
-// [REQ] 실제 에어하키 "공 (Puck)" 디자인
+// [REQ] 실제 에어하키 "공 (Puck)" 디자인 (회전 스핀 마크 & 슈퍼골 x2 충전 오라 포함)
 function renderRealisticPuck(
   ctx: CanvasRenderingContext2D,
   tf: PerspectiveTransformer,
@@ -537,18 +594,34 @@ function renderRealisticPuck(
   const screenPos = tf.tableToScreen(puck.x, puck.y);
   const offsetPos = tf.tableToScreen(puck.x + (puck.radius || 20), puck.y);
   const screenRadius = Math.max(14, Math.hypot(offsetPos.x - screenPos.x, offsetPos.y - screenPos.y));
+  const isSuper = Boolean(puck.superCharged) && !isGameOver;
 
   ctx.save();
   ctx.translate(screenPos.x, screenPos.y);
 
+  // Super-charged x2 Golden Ring
+  if (isSuper) {
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 3.5;
+    ctx.shadowColor = '#f59e0b';
+    ctx.shadowBlur = 18;
+    ctx.beginPath();
+    ctx.arc(0, 0, screenRadius + 6, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
   const puckBody = isGameOver
     ? '#3f3f46'
+    : isSuper
+    ? '#fef08a'
     : isLight
     ? '#e11d48'
     : '#ffffff';
 
   const puckBorder = isGameOver
     ? '#27272a'
+    : isSuper
+    ? '#f59e0b'
     : isLight
     ? '#9f1239'
     : '#cbd5e1';
@@ -563,12 +636,20 @@ function renderRealisticPuck(
   ctx.lineWidth = 3;
   ctx.stroke();
 
-  // Center Dimple Ring
-  ctx.strokeStyle = isLight ? '#ffffff' : '#0f172a';
+  // Center Dimple Ring + Spin Indicator
+  ctx.rotate(puck.angle || 0);
+  ctx.strokeStyle = isSuper ? '#b45309' : isLight ? '#ffffff' : '#0f172a';
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.arc(0, 0, screenRadius * 0.45, 0, Math.PI * 2);
+  ctx.arc(0, 0, screenRadius * 0.48, 0, Math.PI * 2);
   ctx.stroke();
+
+  if (Math.abs(puck.spin || 0) > 1.2 && !isGameOver) {
+    ctx.beginPath();
+    ctx.moveTo(-screenRadius * 0.48, 0);
+    ctx.lineTo(screenRadius * 0.48, 0);
+    ctx.stroke();
+  }
 
   ctx.restore();
 }
