@@ -463,18 +463,39 @@ export const ConsoleScreen: React.FC = () => {
     } catch {}
   };
 
-  // Eyedropper Color Sampler on Webcam Feed
+  // [REQ] "스포이드로 클릭 가능하게": 좌우반전 보정 + 화면 비율 보정 + 5x5 평균 샘플링
   const handleEyedropperSample = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!consoleVideoRef.current || !camContainerRef.current) return;
     const video = consoleVideoRef.current;
     if (video.videoWidth === 0 || video.videoHeight === 0) return;
 
     const rect = camContainerRef.current.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
+    let clickX = e.clientX - rect.left;
     const clickY = e.clientY - rect.top;
 
-    const normX = Math.max(0, Math.min(1, clickX / rect.width));
-    const normY = Math.max(0, Math.min(1, clickY / rect.height));
+    // 카메라 좌우반전 보정
+    if (isCameraMirrored) {
+      clickX = rect.width - clickX;
+    }
+
+    // Video object-contain aspect ratio letterbox 보정
+    const videoRatio = video.videoWidth / video.videoHeight;
+    const containerRatio = rect.width / rect.height;
+    let dispW = rect.width;
+    let dispH = rect.height;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    if (containerRatio > videoRatio) {
+      dispW = rect.height * videoRatio;
+      offsetX = (rect.width - dispW) / 2;
+    } else {
+      dispH = rect.width / videoRatio;
+      offsetY = (rect.height - dispH) / 2;
+    }
+
+    const normX = Math.max(0, Math.min(1, (clickX - offsetX) / dispW));
+    const normY = Math.max(0, Math.min(1, (clickY - offsetY) / dispH));
 
     const canvas = document.createElement('canvas');
     canvas.width = video.videoWidth;
@@ -483,13 +504,29 @@ export const ConsoleScreen: React.FC = () => {
     if (!ctx) return;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    const px = Math.floor(normX * canvas.width);
-    const py = Math.floor(normY * canvas.height);
-    const pixel = ctx.getImageData(px, py, 1, 1).data;
-    const r = pixel[0];
-    const g = pixel[1];
-    const b = pixel[2];
-    const hex = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+    const cx = Math.floor(normX * canvas.width);
+    const cy = Math.floor(normY * canvas.height);
+
+    // 5x5 반경 주변 픽셀 평균 색상 추출 (노이즈 방지)
+    const radius = 2;
+    const sx = Math.max(0, cx - radius);
+    const sy = Math.max(0, cy - radius);
+    const sw = Math.min(canvas.width - sx, radius * 2 + 1);
+    const sh = Math.min(canvas.height - sy, radius * 2 + 1);
+    const patch = ctx.getImageData(sx, sy, sw, sh).data;
+
+    let sumR = 0, sumG = 0, sumB = 0, count = 0;
+    for (let i = 0; i < patch.length; i += 4) {
+      sumR += patch[i];
+      sumG += patch[i + 1];
+      sumB += patch[i + 2];
+      count++;
+    }
+
+    const r = Math.round(sumR / count);
+    const g = Math.round(sumG / count);
+    const b = Math.round(sumB / count);
+    const hex = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`.toUpperCase();
 
     const sample = { r, g, b, hex };
     setColorSettings((prev) => ({ ...prev, customSample: sample }));
@@ -498,6 +535,7 @@ export const ConsoleScreen: React.FC = () => {
       action: 'SAMPLE_COLOR',
       customSample: sample,
     });
+    console.log('[Eyedropper] Successfully sampled color:', hex, 'RGB:', r, g, b);
   };
 
   const handleClearSample = () => {

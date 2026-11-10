@@ -518,23 +518,10 @@ export default function App() {
         throw new Error('이 브라우저는 웹캠 접근을 지원하지 않습니다.');
       }
 
-      // [REQ] OBS 시뮬레이션 지원: OBS Virtual Camera 자동 우선 선택
-      let targetDeviceId = deviceId;
-      if (!targetDeviceId && navigator.mediaDevices.enumerateDevices) {
-        try {
-          const devices = await navigator.mediaDevices.enumerateDevices();
-          const videoDevs = devices.filter((d) => d.kind === 'videoinput');
-          const obsDev = videoDevs.find((d) => /obs|virtual|가상/i.test(d.label));
-          if (obsDev && obsDev.deviceId) {
-            targetDeviceId = obsDev.deviceId;
-            console.log('[Camera] Auto-selected OBS Virtual Camera:', obsDev.label);
-          }
-        } catch {}
-      }
-
-      const videoConstraints: MediaTrackConstraints = targetDeviceId
+      // [REQ] "아 그 OBS 우선하지 말고": 사용자가 선택한 카메라(또는 기본 카메라) 우선 사용
+      const videoConstraints: MediaTrackConstraints = deviceId
         ? {
-            deviceId: { exact: targetDeviceId },
+            deviceId: { exact: deviceId },
             width: { ideal: 1280 },
             height: { ideal: 720 },
           }
