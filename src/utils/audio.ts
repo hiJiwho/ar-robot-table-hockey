@@ -164,8 +164,9 @@ export const soundManager = {
   // [REQ] 정가운데 물리 스피커 충돌음: 묵직하고 단단한 스피커 인클로저 "쿵- 턱!"
   playSpeakerHit(intensity = 1) {
     if (isMuted) return;
-    const ctx = getAudioContext();
-    if (!ctx) return;
+    const audio = getAudioContext();
+    if (!audio) return;
+    const { ctx, destination } = audio;
 
     const now = ctx.currentTime;
     const clampedIntensity = Math.min(2.0, Math.max(0.5, intensity));
@@ -179,7 +180,7 @@ export const soundManager = {
     subGain.gain.setValueAtTime(0.55 * clampedIntensity, now);
     subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
     sub.connect(subGain);
-    subGain.connect(ctx.destination);
+    subGain.connect(destination);
     sub.start(now);
     sub.stop(now + 0.16);
 
@@ -192,9 +193,13 @@ export const soundManager = {
     knockGain.gain.setValueAtTime(0.35 * clampedIntensity, now);
     knockGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
     knock.connect(knockGain);
-    knockGain.connect(ctx.destination);
+    knockGain.connect(destination);
     knock.start(now);
     knock.stop(now + 0.06);
+  },
+
+  playPaddleHit(intensity = 1) {
+    this.playRobotHit(intensity);
   },
 
   // [REQ] 핀볼 범퍼/장애물 튕김음: 통통 튀는 경쾌한 핀볼 팝 "통-! 핑-!"

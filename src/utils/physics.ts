@@ -58,24 +58,6 @@ export function stepPuckPhysics(
   const postBottom = TABLE_HEIGHT / 2 + goalHalf;
   const postRadius = 10; // Rounded post caps
 
-  // Step moving obstacles once per frame
-  if (obstacles && obstacles.length > 0) {
-    for (const obs of obstacles) {
-      if (obs.type === 'MOVING_BUMPER' && obs.vy) {
-        obs.y += obs.vy * clampedDt;
-        const minY = obs.minY ?? 110;
-        const maxY = obs.maxY ?? TABLE_HEIGHT - 110;
-        if (obs.y < minY) {
-          obs.y = minY;
-          obs.vy = Math.abs(obs.vy);
-        } else if (obs.y > maxY) {
-          obs.y = maxY;
-          obs.vy = -Math.abs(obs.vy);
-        }
-      }
-    }
-  }
-
   for (let step = 0; step < SUB_STEPS; step++) {
     // 1. Magnus Spin Curve Force (F_magnus perpendicular to velocity)
     if (Math.abs(spin) > 0.05) {

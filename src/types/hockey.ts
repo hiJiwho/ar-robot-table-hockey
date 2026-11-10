@@ -45,6 +45,10 @@ export interface PuckState {
   radius: number;
   trail: Array<{ x: number; y: number; alpha: number }>;
   lastHitTeam: 'blue' | 'red' | 'obstacle' | null;
+  spin?: number;
+  angle?: number;
+  superCharged?: boolean;
+  rallyCount?: number;
 }
 
 export interface Particle {
@@ -76,6 +80,8 @@ export interface LiveGameState {
   allRobots: RobotState[]; // [REQ] 2개에서 10개 사이로 유동적 인식된 모든 마젠타 로봇/블록 (장애물 로봇 포함)
   puck: PuckState;
   particles: Particle[];
+  ripples?: ImpactRipple[];
+  centerSpeaker?: { x: number; y: number; radius: number };
 }
 
 export type BotDifficulty = 'EASY' | 'NORMAL' | 'HARD' | 'PRO';
@@ -155,7 +161,12 @@ export type GameActionMessage = {
     | 'UPDATE_GOAL_SIZE'
     | 'SET_LOW_LIGHT_MODE'
     | 'UPDATE_COLOR_SETTINGS'
-    | 'SAMPLE_COLOR';
+    | 'SAMPLE_COLOR'
+    | 'SET_BOT_CONFIG'
+    | 'SET_AUDIO_CONFIG'
+    | 'PLAY_SOUND_EFFECT'
+    | 'TRIGGER_SUPER_PUCK'
+    | 'SET_CAMERA_DEVICE';
   seconds?: number;
   score?: MatchScore;
   mode?: MatchMode;
@@ -169,6 +180,15 @@ export type GameActionMessage = {
   lowLightMode?: boolean;
   colorSettings?: Partial<ColorSettings>;
   customSample?: { r: number; g: number; b: number; hex: string } | null;
+  botTeam?: BotTargetTeam;
+  botDifficulty?: BotDifficulty;
+  volume?: number;
+  isMuted?: boolean;
+  sound?: string;
+  soundEffect?: string;
+  deviceId?: string;
+  cameraDeviceId?: string;
+
 };
 
 export const DEFAULT_NORMALIZED_CORNERS: FourCorners = [

@@ -21,8 +21,7 @@ import {
   ROBOT_RADIUS,
   DEFAULT_NORMALIZED_CORNERS,
   LiveGameState,
-  Obstacle,
-  ObstacleType,
+  CENTER_SPEAKER_RADIUS,
   BotTargetTeam,
   BotDifficulty,
   GoalLogEntry,
@@ -145,6 +144,10 @@ export default function App() {
   });
   const [isCalibrating, setIsCalibrating] = useState(false);
   const [draggingScreenCorner, setDraggingScreenCorner] = useState<number | null>(null);
+  const [obstaclesEnabled, setObstaclesEnabled] = useState(false);
+  const obstaclesEnabledRef = useRef(false);
+  obstaclesEnabledRef.current = obstaclesEnabled;
+  const obstaclesRef = useRef<any[]>([]);
 
   // Restore saved calibration & settings from Electron disk storage on startup so it never resets or asks again
   useEffect(() => {
@@ -1291,29 +1294,8 @@ export default function App() {
             liveStateRef.current.redRobot = updateTrackedRobot(liveStateRef.current.redRobot, redBlob);
           }
 
-          // Map remaining detected magenta blobs (2..10 dynamic tracking) as obstacle robots
-          const otherBlobs = (allBlobs || []).filter(
-            (b) => b !== blueBlob && b !== redBlob
-          );
-          const obstacleRobots: RobotState[] = otherBlobs.map((blob, idx) => {
-            const tablePos = cameraTf.screenToTable(blob.x, blob.y);
-            const clampedX = Math.max(ROBOT_RADIUS, Math.min(TABLE_WIDTH - ROBOT_RADIUS, tablePos.x));
-            const clampedY = Math.max(ROBOT_RADIUS, Math.min(TABLE_HEIGHT - ROBOT_RADIUS, tablePos.y));
-            const curScreen = screenTf.tableToScreen(clampedX, clampedY);
-            return {
-              id: `obs-robot-${idx}`,
-              team: 'obstacle',
-              tableX: clampedX,
-              tableY: clampedY,
-              screenX: curScreen.x,
-              screenY: curScreen.y,
-              vx: 0,
-              vy: 0,
-              detected: true,
-              confidence: blob.confidence,
-              lastSeenTime: currentTime,
-            };
-          });
+          // Map remaining detected magenta blobs as obstacle robots
+          const obstacleRobots: RobotState[] = [];
 
           liveStateRef.current.allRobots = [
             liveStateRef.current.blueRobot,
@@ -1384,7 +1366,7 @@ export default function App() {
             score: scoreRef.current,
             timeLeft: timeLeftRef.current,
             gamePhase: gamePhaseRef.current,
-            obstacles: obstaclesEnabledRef.current ? (live.obstacles || obstaclesRef.current) : [],
+            obstacles: obstaclesEnabledRef.current ? obstaclesRef.current : [],
             obstaclesEnabled: obstaclesEnabledRef.current,
             botTeam: botTeamRef.current,
             botDifficulty: botDifficultyRef.current,
@@ -1439,7 +1421,7 @@ export default function App() {
 
         // Process all collision feedback events
         for (const ev of events) {
-          if (ev.type === 'GOAL' && ev.team) {
+          if (ev.type === 'GOAL' && (ev.team === 'blue' || ev.team === 'red')) {
             handleGoalScored(ev.team);
           } else if (ev.type === 'SPEAKER') {
             // [REQ] 경기장 정가운데 실제 물리 스피커 충돌 피드백 (묵직한 킥 타격음 + 스파크)

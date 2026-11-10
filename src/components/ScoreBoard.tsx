@@ -111,7 +111,7 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
           <div className="flex items-center gap-2">
             <div className="text-right">
               <div className="text-xs font-semibold text-cyan-400 tracking-wide uppercase">
-                Cyan 팀 (Cyan)
+                Cyan 팀 (1P)
               </div>
               <div className="text-[11px] text-slate-400">
                 {blueRobot.detected ? (
@@ -155,7 +155,7 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
             </div>
             <div className="text-left">
               <div className="text-xs font-semibold text-yellow-400 tracking-wide uppercase">
-                Yellow 팀 (Yellow)
+                Yellow 팀 (2P)
               </div>
               <div className="text-[11px] text-slate-400">
                 {redRobot.detected ? (

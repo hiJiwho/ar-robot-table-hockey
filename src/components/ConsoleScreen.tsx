@@ -17,6 +17,8 @@ import {
   VisionEngineType,
   RobotState,
   CENTER_SPEAKER_RADIUS,
+  BotDifficulty,
+  BotTargetTeam,
 } from '../types/hockey';
 import {
   Clock,
