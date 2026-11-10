@@ -329,30 +329,114 @@
   </div>
 
   <script>
-    // 1. Parse URL Query Parameters
+    // [REQ] "이미 정해진거면 값별로 1,2,3 이런식으로 넣어서 사이트에 있는걸 불러오면"
+    // 모바일 리포트 초경량 카탈로그 (URL 길이를 450자 -> 80자로 대폭 단축하여 QR 코드가 매우 단순해짐)
+    const TITLE_CATALOG = [
+      { ttl: '초음속 스트라이커', bdg: '⚡' },   // 0
+      { ttl: '철벽의 가디언', bdg: '🛡️' },      // 1
+      { ttl: '소닉 트릭마스터', bdg: '🔊' },    // 2
+      { ttl: '저격형 스나이퍼', bdg: '🎯' },    // 3
+      { ttl: '올라운드 마에스트로', bdg: '👑' } // 4
+    ];
+
+    const GROWTH_CATALOG = [
+      { bdg: '🌱 데뷔전', summary: '첫 경기 기준 데이터가 성공적으로 등록되었습니다.' }, // 0
+      { bdg: '🚀 개인 최고 신기록!', summary: '이전 역대 최고 시속을 깨고 새로운 속도 신기록을 달성했습니다!' }, // 1
+      { bdg: '⚡ 스피드 급상승!', summary: '이전 경기 평균 대비 퍽 가속도가 폭발적으로 향상되었습니다.' }, // 2
+      { bdg: '🔥 랠리 집중력 향상!', summary: '과거 평균 대비 유효타가 크게 증가하며 끈질긴 랠리 지속력을 보여주었습니다.' }, // 3
+      { bdg: '🔊 스피커 전술 진화!', summary: '중앙 물리 스피커를 쿠션으로 활용하는 기습 굴절 뱅크샷이 돋보였습니다.' }, // 4
+      { bdg: '📈 안정적 경기력 유지', summary: '이전 경기들의 패턴을 안정적으로 계승하며 침착한 경기 운영을 유지했습니다.' } // 5
+    ];
+
+    // 1. Parse URL Query Parameters (초압축 1,2,3 번호 및 기존 긴 파라미터 완전 호환)
     const params = new URLSearchParams(window.location.search);
     const p = params.get('p') || '1';
     const isBlue = p === '1';
-    const anon = params.get('anon') || `ANON-${p}P-XXXX`;
-    const mcount = params.get('mcount') || '1';
-    const gwbdg = params.get('gwbdg') || '📈 데이터 누적 중';
-    const team = params.get('team') || (isBlue ? 'Cyan' : 'Yellow');
-    const res = (params.get('res') || 'WIN').toUpperCase();
-    const s1 = params.get('s1') || '0';
-    const s2 = params.get('s2') || '0';
-    const hits = params.get('hits') || '0';
-    const spd = params.get('spd') || '0';
-    const spk = params.get('spk') || '0';
-    const ttl = params.get('ttl') || (isBlue ? '초음속 스트라이커' : '철벽의 가디언');
-    const bdg = params.get('bdg') || '⚡';
-    const grd = params.get('grd') || 'S';
-    const cmm = params.get('cmm') || '이전 경기 대비 지속적인 성장세를 기록하고 있습니다.';
+    const team = isBlue ? 'Cyan' : 'Yellow';
 
-    const atk = parseInt(params.get('atk') || '75', 10);
-    const def = parseInt(params.get('def') || '70', 10);
-    const vel = parseInt(params.get('vel') || '85', 10);
-    const prc = parseInt(params.get('prc') || '68', 10);
-    const tac = parseInt(params.get('tac') || '60', 10);
+    // 점수: s="5,3" 또는 s1, s2
+    const rawS = params.get('s');
+    let s1 = '0', s2 = '0';
+    if (rawS && rawS.includes(',')) {
+      const parts = rawS.split(',');
+      s1 = parts[0] || '0';
+      s2 = parts[1] || '0';
+    } else {
+      s1 = params.get('s1') || '0';
+      s2 = params.get('s2') || '0';
+    }
+
+    // 스탯: st="hits,speed,speakerHits" 또는 개별
+    const rawSt = params.get('st');
+    let hits = '0', spd = '0', spk = '0';
+    if (rawSt && rawSt.includes(',')) {
+      const parts = rawSt.split(',');
+      hits = parts[0] || '0';
+      spd = parts[1] || '0';
+      spk = parts[2] || '0';
+    } else {
+      hits = params.get('hits') || '0';
+      spd = params.get('spd') || '0';
+      spk = params.get('spk') || '0';
+    }
+
+    // 익명 ID: id="9C8E" -> "ANON-1P-9C8E"
+    const shortId = params.get('id');
+    const anon = shortId ? `ANON-${p}P-${shortId}` : (params.get('anon') || `ANON-${p}P-XXXX`);
+    const mcount = params.get('m') || params.get('mcount') || '1';
+
+    // 승패 판정
+    const myScore = isBlue ? parseInt(s1, 10) : parseInt(s2, 10);
+    const oppScore = isBlue ? parseInt(s2, 10) : parseInt(s1, 10);
+    const res = myScore > oppScore ? 'WIN' : myScore < oppScore ? 'LOSE' : 'DRAW';
+
+    // 칭호 & 배지 (인덱스 t=0..4)
+    const tIdx = params.has('t') ? parseInt(params.get('t'), 10) : -1;
+    let ttl = params.get('ttl');
+    let bdg = params.get('bdg');
+    if (tIdx >= 0 && tIdx < TITLE_CATALOG.length) {
+      ttl = TITLE_CATALOG[tIdx].ttl;
+      bdg = TITLE_CATALOG[tIdx].bdg;
+    } else if (!ttl) {
+      ttl = isBlue ? '초음속 스트라이커' : '철벽의 가디언';
+      bdg = isBlue ? '⚡' : '🛡️';
+    }
+
+    // 성장 배지 & 코멘트 (인덱스 b=0..5)
+    const bIdx = params.has('b') ? parseInt(params.get('b'), 10) : -1;
+    let gwbdg = params.get('gwbdg');
+    let growthSummary = '';
+    if (bIdx >= 0 && bIdx < GROWTH_CATALOG.length) {
+      gwbdg = GROWTH_CATALOG[bIdx].bdg;
+      growthSummary = GROWTH_CATALOG[bIdx].summary;
+    } else if (!gwbdg) {
+      gwbdg = '📈 안정적 경기력 유지';
+      growthSummary = '이전 경기들의 패턴을 안정적으로 계승하며 침착한 경기 운영을 유지했습니다.';
+    }
+
+    let cmm = params.get('cmm');
+    if (!cmm) {
+      const resultComment = res === 'WIN'
+        ? `${team} 팀의 뛰어난 템포 조율과 결정력이 돋보였습니다.`
+        : res === 'DRAW'
+        ? '마지막 1초까지 손에 땀을 쥐게 한 팽팽한 명승부였습니다.'
+        : '아쉬운 실점이 있었으나 뛰어난 순간 반응 속도를 보여주었습니다.';
+      cmm = `${resultComment} ${growthSummary}`;
+    }
+
+    // 5대 스탯 자동 계산
+    const nHits = parseInt(hits, 10) || 0;
+    const nSpd = parseInt(spd, 10) || 0;
+    const nSpk = parseInt(spk, 10) || 0;
+
+    const atk = params.get('atk') ? parseInt(params.get('atk'), 10) : Math.min(99, Math.round(50 + myScore * 10));
+    const def = params.get('def') ? parseInt(params.get('def'), 10) : Math.min(99, Math.max(30, 95 - oppScore * 12 + (res === 'WIN' ? 10 : 0)));
+    const vel = params.get('vel') ? parseInt(params.get('vel'), 10) : Math.min(99, Math.max(40, Math.round((nSpd / 900) * 100)));
+    const prc = params.get('prc') ? parseInt(params.get('prc'), 10) : Math.min(98, Math.max(45, Math.round(55 + (nHits > 0 ? (myScore / nHits) * 80 : 0))));
+    const tac = params.get('tac') ? parseInt(params.get('tac'), 10) : Math.min(99, Math.max(50, Math.round(52 + nSpk * 8 + (res === 'WIN' ? 8 : 0))));
+
+    const avgStat = (atk + def + vel + prc + tac) / 5;
+    const grd = params.get('grd') || (avgStat >= 85 && res === 'WIN' ? 'S+' : avgStat >= 76 ? 'S' : avgStat >= 65 ? 'A' : 'B+');
 
     // 2. DOM Binding
     document.getElementById('anonIdTag').textContent = `🔒 ${anon}`;

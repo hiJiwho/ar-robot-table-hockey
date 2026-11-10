@@ -125,19 +125,24 @@ export function generateAIPlayerReport(
   // 5. Tactics score (0..100)
   const tactics = Math.min(99, Math.max(50, Math.round(52 + speakerHits * 8 + (result === 'WIN' ? 8 : 0))));
 
-  // Classify AI Archetype Title
+  // Classify AI Archetype Title & Compact Numeric Index
+  let titleIdx = 4; // 올라운드 마에스트로
   let title = '올라운드 마에스트로';
   let badge = '👑';
   if (speed >= 82) {
+    titleIdx = 0;
     title = '초음속 스트라이커';
     badge = '⚡';
   } else if (defense >= 80 && oppScore <= 1) {
+    titleIdx = 1;
     title = '철벽의 가디언';
     badge = '🛡️';
   } else if (speakerHits >= 2) {
+    titleIdx = 2;
     title = '소닉 트릭마스터';
     badge = '🔊';
   } else if (attack >= 78) {
+    titleIdx = 3;
     title = '저격형 스나이퍼';
     badge = '🎯';
   }
@@ -166,7 +171,8 @@ export function generateAIPlayerReport(
       ? Math.round(history.recentHits.reduce((a, b) => a + b, 0) / history.recentHits.length)
       : myHits;
 
-  // Compare & Generate Growth Analytics
+  // Compare & Generate Growth Analytics & Compact Numeric Index
+  let growthIdx = 0; // 데뷔전
   let growthBadge = '🌱 데뷔전';
   let growthSummary = '첫 경기 기준 데이터가 성공적으로 등록되었습니다.';
 
@@ -175,18 +181,23 @@ export function generateAIPlayerReport(
     const speedPercent = Math.round((speedDiff / Math.max(1, prevAvgSpeed)) * 100);
 
     if (maxPuckSpeed > history.allTimeMaxSpeed && maxPuckSpeed > 500) {
+      growthIdx = 1;
       growthBadge = '🚀 개인 최고 신기록!';
       growthSummary = `이전 역대 최고 시속(${history.allTimeMaxSpeed} px/s)을 깨고 ${maxPuckSpeed} px/s 신기록을 달성했습니다!`;
     } else if (speedPercent > 8) {
+      growthIdx = 2;
       growthBadge = `⚡ 스피드 +${speedPercent}% 상승!`;
       growthSummary = `이전 ${history.totalMatches}경기 평균(${prevAvgSpeed} px/s) 대비 퍽 가속도가 +${speedPercent}% 폭발적으로 향상되었습니다.`;
     } else if (myHits > prevAvgHits + 4) {
+      growthIdx = 3;
       growthBadge = '🔥 랠리 집중력 향상!';
       growthSummary = `과거 평균 대비 유효타가 +${myHits - prevAvgHits}회 증가하며 끈질긴 랠리 지속력을 보여주었습니다.`;
     } else if (speakerHits >= 2) {
+      growthIdx = 4;
       growthBadge = '🔊 스피커 전술 진화!';
       growthSummary = `중앙 물리 스피커를 쿠션으로 활용하는 기습 굴절 뱅크샷이 통산 최다(${speakerHits}회)를 기록했습니다.`;
     } else {
+      growthIdx = 5;
       growthBadge = '📈 안정적 경기력 유지';
       growthSummary = `이전 경기들의 패턴을 안정적으로 계승하며 침착한 경기 운영을 유지했습니다.`;
     }
@@ -218,32 +229,11 @@ export function generateAIPlayerReport(
 
   const summary = commentaries.join(' ');
 
-  // Build GitHub Pages Mobile Report URL with query string parameters
+  // [REQ] "QR이 넘 복잡한데 값별로 1,2,3 넣어서 사이트에서 불러오면"
+  // 극초소형 쿼리스트링 (단 80자 내외) -> QR 코드가 단순한 굵은 도트로 생성되어 프로젝터 투사 시에도 0.1초 즉시 스캔!
   const baseUrl = customBaseUrl || DEFAULT_GITHUB_PAGES_BASE;
-  const params = new URLSearchParams({
-    p: isBlue ? '1' : '2',
-    anon: history.anonId,
-    team: isBlue ? 'Cyan' : 'Yellow',
-    res: result,
-    s1: String(score.blue),
-    s2: String(score.red),
-    hits: String(myHits),
-    spd: String(maxPuckSpeed),
-    spk: String(speakerHits),
-    ttl: title,
-    bdg: badge,
-    grd: grade,
-    mcount: String(matchNum),
-    gwbdg: growthBadge,
-    atk: String(attack),
-    def: String(defense),
-    vel: String(speed),
-    prc: String(precision),
-    tac: String(tactics),
-    cmm: summary,
-  });
-
-  const reportUrl = `${baseUrl}?${params.toString()}`;
+  const shortId = history.anonId.split('-').pop() || '0000';
+  const reportUrl = `${baseUrl}?p=${isBlue ? '1' : '2'}&s=${score.blue},${score.red}&st=${myHits},${maxPuckSpeed},${speakerHits}&t=${titleIdx}&b=${growthIdx}&m=${matchNum}&id=${shortId}`;
 
   return {
     player,
@@ -283,7 +273,7 @@ export async function generateQRCode(
         dark: color,
         light: bgColor,
       },
-      errorCorrectionLevel: 'M',
+      errorCorrectionLevel: 'L', // 초경량 큼직한 도트
     });
   } catch (err) {
     console.warn('Failed to generate QR code:', err);
