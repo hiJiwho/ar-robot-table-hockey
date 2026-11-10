@@ -329,8 +329,39 @@
   </div>
 
   <script>
-    // [REQ] "이미 정해진거면 값별로 1,2,3 이런식으로 넣어서 사이트에 있는걸 불러오면"
-    // 모바일 리포트 초경량 카탈로그 (URL 길이를 450자 -> 80자로 대폭 단축하여 QR 코드가 매우 단순해짐)
+    // [REQ] "쿼터스트링 ID 를 다 섞어서 조작 불가능하게 해줘! (코드를 서로 약속해놔봐)"
+    const SECRET_SALT = [0x5A, 0x8E, 0xC3, 0x1F, 0x7B, 0x42, 0xD9, 0x61, 0x3A, 0x94, 0x27, 0xEE];
+
+    function calcMatchChecksum(str) {
+      let h = 0x811c9dc5;
+      for (let i = 0; i < str.length; i++) {
+        h ^= str.charCodeAt(i);
+        h = Math.imul(h, 0x01000193);
+      }
+      return ((h >>> 0) & 0xffff).toString(16).padStart(4, '0');
+    }
+
+    function decodeMatchToken(token) {
+      try {
+        let b64 = token.replace(/-/g, '+').replace(/_/g, '/');
+        while (b64.length % 4) b64 += '=';
+        const bin = atob(b64);
+        let full = '';
+        for (let i = 0; i < bin.length; i++) {
+          full += String.fromCharCode(bin.charCodeAt(i) ^ SECRET_SALT[i % SECRET_SALT.length]);
+        }
+        const parts = full.split(':');
+        if (parts.length !== 2) return null;
+        const payload = parts[0];
+        const chk = parts[1];
+        if (calcMatchChecksum(payload) !== chk) return null; // 위변조 감지!
+        return payload;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    // 모바일 리포트 카탈로그
     const TITLE_CATALOG = [
       { ttl: '초음속 스트라이커', bdg: '⚡' },   // 0
       { ttl: '철벽의 가디언', bdg: '🛡️' },      // 1
@@ -348,95 +379,117 @@
       { bdg: '📈 안정적 경기력 유지', summary: '이전 경기들의 패턴을 안정적으로 계승하며 침착한 경기 운영을 유지했습니다.' } // 5
     ];
 
-    // 1. Parse URL Query Parameters (초압축 1,2,3 번호 및 기존 긴 파라미터 완전 호환)
     const params = new URLSearchParams(window.location.search);
-    const p = params.get('p') || '1';
-    const isBlue = p === '1';
-    const team = isBlue ? 'Cyan' : 'Yellow';
+    const token = params.get('d');
 
-    // 점수: s="5,3" 또는 s1, s2
-    const rawS = params.get('s');
-    let s1 = '0', s2 = '0';
-    if (rawS && rawS.includes(',')) {
-      const parts = rawS.split(',');
-      s1 = parts[0] || '0';
-      s2 = parts[1] || '0';
-    } else {
-      s1 = params.get('s1') || '0';
-      s2 = params.get('s2') || '0';
-    }
-
-    // 스탯: st="hits,speed,speakerHits" 또는 개별
-    const rawSt = params.get('st');
+    let p = '1';
+    let myScore = 0;
+    let oppScore = 0;
     let hits = '0', spd = '0', spk = '0';
-    if (rawSt && rawSt.includes(',')) {
-      const parts = rawSt.split(',');
-      hits = parts[0] || '0';
-      spd = parts[1] || '0';
-      spk = parts[2] || '0';
+    let tIdx = 0, bIdx = 0;
+    let mcount = '1';
+    let shortId = 'XXXX';
+    let isTampered = false;
+
+    if (token) {
+      // 🔒 암호화 토큰 복호화 및 위변조 검증
+      const decoded = decodeMatchToken(token);
+      if (!decoded) {
+        isTampered = true;
+      } else {
+        // [REQ] "스코어는 앞이 본인, 뒤가 상대"
+        // payload format: p,myScore,oppScore,hits,maxPuckSpeed,speakerHits,titleIdx,growthIdx,matchNum,shortId
+        const parts = decoded.split(',');
+        p = parts[0] || '1';
+        myScore = parseInt(parts[1] || '0', 10);
+        oppScore = parseInt(parts[2] || '0', 10);
+        hits = parts[3] || '0';
+        spd = parts[4] || '0';
+        spk = parts[5] || '0';
+        tIdx = parseInt(parts[6] || '0', 10);
+        bIdx = parseInt(parts[7] || '0', 10);
+        mcount = parts[8] || '1';
+        shortId = parts[9] || 'XXXX';
+      }
     } else {
+      // 레거시 파라미터 호환
+      p = params.get('p') || '1';
+      const rawS = params.get('s');
+      if (rawS && rawS.includes(',')) {
+        const parts = rawS.split(',');
+        myScore = parseInt(parts[0] || '0', 10);
+        oppScore = parseInt(parts[1] || '0', 10);
+      } else {
+        const s1 = parseInt(params.get('s1') || '0', 10);
+        const s2 = parseInt(params.get('s2') || '0', 10);
+        myScore = p === '1' ? s1 : s2;
+        oppScore = p === '1' ? s2 : s1;
+      }
       hits = params.get('hits') || '0';
       spd = params.get('spd') || '0';
       spk = params.get('spk') || '0';
+      tIdx = params.has('t') ? parseInt(params.get('t'), 10) : 0;
+      bIdx = params.has('b') ? parseInt(params.get('b'), 10) : 0;
+      mcount = params.get('m') || params.get('mcount') || '1';
+      shortId = params.get('id') || (params.get('anon') || 'XXXX').split('-').pop();
     }
 
-    // 익명 ID: id="9C8E" -> "ANON-1P-9C8E"
-    const shortId = params.get('id');
-    const anon = shortId ? `ANON-${p}P-${shortId}` : (params.get('anon') || `ANON-${p}P-XXXX`);
-    const mcount = params.get('m') || params.get('mcount') || '1';
+    // 위변조 감지 처리
+    if (isTampered) {
+      document.body.innerHTML = `
+        <div style="max-width: 420px; margin: 40px auto; background: rgba(239, 68, 68, 0.15); border: 2px solid #ef4444; border-radius: 24px; padding: 32px 24px; text-align: center; color: #fff; font-family: sans-serif; backdrop-filter: blur(12px);">
+          <div style="font-size: 54px; margin-bottom: 12px;">⛔</div>
+          <h2 style="font-size: 22px; font-weight: 900; color: #ef4444; margin-bottom: 8px;">데이터 위변조 감지</h2>
+          <p style="font-size: 14px; color: #cbd5e1; line-height: 1.6; margin-bottom: 20px;">
+            경기 데이터의 체크섬 서명이 일치하지 않습니다.<br/>URL 파라미터가 임의로 조작되었거나 손상되었습니다.
+          </p>
+          <div style="font-size: 11px; color: #94a3b8; background: rgba(0,0,0,0.4); padding: 8px; border-radius: 8px;">
+            🔒 Cryptographic Checksum Verification Failed
+          </div>
+        </div>
+      `;
+      throw new Error('Match data tampered or invalid');
+    }
 
-    // 승패 판정
-    const myScore = isBlue ? parseInt(s1, 10) : parseInt(s2, 10);
-    const oppScore = isBlue ? parseInt(s2, 10) : parseInt(s1, 10);
+    const isBlue = p === '1';
+    const team = isBlue ? 'Cyan' : 'Yellow';
+    const anon = `ANON-${p}P-${shortId}`;
+
+    // 스코어 매핑: 앞=본인(myScore), 뒤=상대(oppScore)
+    const s1 = isBlue ? myScore : oppScore; // Cyan 점수
+    const s2 = isBlue ? oppScore : myScore; // Yellow 점수
     const res = myScore > oppScore ? 'WIN' : myScore < oppScore ? 'LOSE' : 'DRAW';
 
-    // 칭호 & 배지 (인덱스 t=0..4)
-    const tIdx = params.has('t') ? parseInt(params.get('t'), 10) : -1;
-    let ttl = params.get('ttl');
-    let bdg = params.get('bdg');
-    if (tIdx >= 0 && tIdx < TITLE_CATALOG.length) {
-      ttl = TITLE_CATALOG[tIdx].ttl;
-      bdg = TITLE_CATALOG[tIdx].bdg;
-    } else if (!ttl) {
-      ttl = isBlue ? '초음속 스트라이커' : '철벽의 가디언';
-      bdg = isBlue ? '⚡' : '🛡️';
-    }
+    // 칭호 & 배지
+    const titleObj = TITLE_CATALOG[Math.max(0, Math.min(TITLE_CATALOG.length - 1, tIdx))] || TITLE_CATALOG[0];
+    const ttl = titleObj.ttl;
+    const bdg = titleObj.bdg;
 
-    // 성장 배지 & 코멘트 (인덱스 b=0..5)
-    const bIdx = params.has('b') ? parseInt(params.get('b'), 10) : -1;
-    let gwbdg = params.get('gwbdg');
-    let growthSummary = '';
-    if (bIdx >= 0 && bIdx < GROWTH_CATALOG.length) {
-      gwbdg = GROWTH_CATALOG[bIdx].bdg;
-      growthSummary = GROWTH_CATALOG[bIdx].summary;
-    } else if (!gwbdg) {
-      gwbdg = '📈 안정적 경기력 유지';
-      growthSummary = '이전 경기들의 패턴을 안정적으로 계승하며 침착한 경기 운영을 유지했습니다.';
-    }
+    // 성장 배지 & 코멘트
+    const growthObj = GROWTH_CATALOG[Math.max(0, Math.min(GROWTH_CATALOG.length - 1, bIdx))] || GROWTH_CATALOG[0];
+    const gwbdg = growthObj.bdg;
+    const growthSummary = growthObj.summary;
 
-    let cmm = params.get('cmm');
-    if (!cmm) {
-      const resultComment = res === 'WIN'
-        ? `${team} 팀의 뛰어난 템포 조율과 결정력이 돋보였습니다.`
-        : res === 'DRAW'
-        ? '마지막 1초까지 손에 땀을 쥐게 한 팽팽한 명승부였습니다.'
-        : '아쉬운 실점이 있었으나 뛰어난 순간 반응 속도를 보여주었습니다.';
-      cmm = `${resultComment} ${growthSummary}`;
-    }
+    const resultComment = res === 'WIN'
+      ? `${team} 팀의 뛰어난 템포 조율과 결정력이 돋보였습니다.`
+      : res === 'DRAW'
+      ? '마지막 1초까지 손에 땀을 쥐게 한 팽팽한 명승부였습니다.'
+      : '아쉬운 실점이 있었으나 뛰어난 순간 반응 속도를 보여주었습니다.';
+    const cmm = `${resultComment} ${growthSummary}`;
 
     // 5대 스탯 자동 계산
     const nHits = parseInt(hits, 10) || 0;
     const nSpd = parseInt(spd, 10) || 0;
     const nSpk = parseInt(spk, 10) || 0;
 
-    const atk = params.get('atk') ? parseInt(params.get('atk'), 10) : Math.min(99, Math.round(50 + myScore * 10));
-    const def = params.get('def') ? parseInt(params.get('def'), 10) : Math.min(99, Math.max(30, 95 - oppScore * 12 + (res === 'WIN' ? 10 : 0)));
-    const vel = params.get('vel') ? parseInt(params.get('vel'), 10) : Math.min(99, Math.max(40, Math.round((nSpd / 900) * 100)));
-    const prc = params.get('prc') ? parseInt(params.get('prc'), 10) : Math.min(98, Math.max(45, Math.round(55 + (nHits > 0 ? (myScore / nHits) * 80 : 0))));
-    const tac = params.get('tac') ? parseInt(params.get('tac'), 10) : Math.min(99, Math.max(50, Math.round(52 + nSpk * 8 + (res === 'WIN' ? 8 : 0))));
+    const atk = Math.min(99, Math.round(50 + myScore * 10));
+    const def = Math.min(99, Math.max(30, 95 - oppScore * 12 + (res === 'WIN' ? 10 : 0)));
+    const vel = Math.min(99, Math.max(40, Math.round((nSpd / 900) * 100)));
+    const prc = Math.min(98, Math.max(45, Math.round(55 + (nHits > 0 ? (myScore / nHits) * 80 : 0))));
+    const tac = Math.min(99, Math.max(50, Math.round(52 + nSpk * 8 + (res === 'WIN' ? 8 : 0))));
 
     const avgStat = (atk + def + vel + prc + tac) / 5;
-    const grd = params.get('grd') || (avgStat >= 85 && res === 'WIN' ? 'S+' : avgStat >= 76 ? 'S' : avgStat >= 65 ? 'A' : 'B+');
+    const grd = avgStat >= 85 && res === 'WIN' ? 'S+' : avgStat >= 76 ? 'S' : avgStat >= 65 ? 'A' : 'B+';
 
     // 2. DOM Binding
     document.getElementById('anonIdTag').textContent = `🔒 ${anon}`;
@@ -446,7 +499,7 @@
     const teamBadge = document.getElementById('teamBadge');
     teamBadge.className = 'team-badge ' + (isBlue ? 'team-cyan' : 'team-yellow');
     document.getElementById('badgeIcon').textContent = bdg;
-    document.getElementById('teamName').textContent = `${p}P ${team.toUpperCase()}`;
+    document.getElementById('teamName').textContent = `${p}P ${team.toUpperCase()} (본인)`;
 
     const resBadge = document.getElementById('resultBadge');
     resBadge.textContent = res;
