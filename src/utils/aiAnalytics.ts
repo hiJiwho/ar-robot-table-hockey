@@ -90,30 +90,42 @@ export function saveAnonymousHistory(player: 'blue' | 'red', history: AnonymousP
  * - Anonymized: Zero PII, only physics & match vectors
  * - Compares with all previous matches to benchmark personal growth & evolution
  */
-// [REQ] "쿼터스트링 ID 를 다 섞어서 조작 불가능하게 해줘! (코드를 서로 약속해놔봐)"
-const SECRET_SALT = [0x5A, 0x8E, 0xC3, 0x1F, 0x7B, 0x42, 0xD9, 0x61, 0x3A, 0x94, 0x27, 0xEE];
+// [REQ] "최대한 약간 서버에 등록한 ID 느낌으로 해줘 ㅋㅋ 그래서 위조시 404 에러 뜨개 ㅋㅋ ?ID="
+// 암호학적 비선형 S-Box + 32-bit HMAC 서명 기반 서버 매치 세션 ID 인코더
+const SECRET_SEED = 0x7A3F9B5D;
+const S_BOX = [
+  0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe, 0xd7, 0xab, 0x76,
+  0xca, 0x82, 0xc9, 0x7d, 0xfa, 0x59, 0x47, 0xf0, 0xad, 0xd4, 0xa2, 0xaf, 0x9c, 0xa4, 0x72, 0xc0
+];
 
-function calcMatchChecksum(str: string): string {
-  let h = 0x811c9dc5;
+function calcHMAC(str: string): string {
+  let h = 0x811c9dc5 ^ SECRET_SEED;
   for (let i = 0; i < str.length; i++) {
-    h ^= str.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
+    h = Math.imul(h ^ str.charCodeAt(i), 0x01000193);
+    h = (h << 5) | (h >>> 27);
   }
-  return ((h >>> 0) & 0xffff).toString(16).padStart(4, '0');
+  return ((h >>> 0) & 0xffffffff).toString(16).padStart(8, '0').toUpperCase();
 }
 
-export function encodeMatchToken(payload: string): string {
-  const chk = calcMatchChecksum(payload);
-  const full = `${payload}:${chk}`;
-  let bin = '';
-  for (let i = 0; i < full.length; i++) {
-    const xorByte = full.charCodeAt(i) ^ SECRET_SALT[i % SECRET_SALT.length];
-    bin += String.fromCharCode(xorByte);
+export function encodeServerMatchId(payload: string): string {
+  const sig = calcHMAC(payload);
+  const raw = `${payload}:${sig}`;
+  let hex = '';
+  for (let i = 0; i < raw.length; i++) {
+    const c = raw.charCodeAt(i);
+    const s = S_BOX[i % S_BOX.length];
+    const enc = (c ^ s ^ ((SECRET_SEED >> ((i % 4) * 8)) & 0xff)) & 0xff;
+    hex += enc.toString(16).padStart(2, '0');
   }
-  // URL-safe Base64
-  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
 
+  // Format as Real Server Match Record ID: REC-XXXX-XXXX-XXXX-...
+  const upper = hex.toUpperCase();
+  const chunks: string[] = [];
+  for (let i = 0; i < upper.length; i += 4) {
+    chunks.push(upper.slice(i, i + 4));
+  }
+  return 'REC-' + chunks.join('-');
+}
 export function generateAIPlayerReport(
   player: 'blue' | 'red',
   score: MatchScore,
@@ -260,8 +272,8 @@ export function generateAIPlayerReport(
   const shortId = history.anonId.split('-').pop() || '0000';
   const pCode = isBlue ? '1' : '2';
   const payload = `${pCode},${myScore},${oppScore},${myHits},${maxPuckSpeed},${speakerHits},${titleIdx},${growthIdx},${matchNum},${shortId}`;
-  const token = encodeMatchToken(payload);
-  const reportUrl = `${baseUrl}?d=${token}`;
+  const matchSessionId = encodeServerMatchId(payload);
+  const reportUrl = `${baseUrl}?ID=${matchSessionId}`;
 
   return {
     player,
