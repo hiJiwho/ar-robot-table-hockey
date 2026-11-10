@@ -217,23 +217,28 @@ export function stepPuckPhysics(
       }
     }
 
-    // 8. [REQ] 마젠타 센서 2개~10개 유동적 인식 & 충돌 (패들 + 장애물 로봇 모두 튕김)
+    // 8. [REQ] 마젠타 센서 2개~10개 유동적 인식 & 충돌 (패들 관통 터널링 100% 원천 방지)
     if (allRobots && allRobots.length > 0) {
       for (const robot of allRobots) {
-        if (!robot.detected || robot.confidence < 0.28) continue;
+        // 일시적 인식 감도 저하 시에도 통과 방지를 위해 최소 신뢰도 기준 완화
+        if (!robot.detected && robot.confidence < 0.08) continue;
 
         const strikerRadius = robot.radius || ROBOT_RADIUS;
+        const minDist = r + strikerRadius;
         const dx = px - robot.tableX;
         const dy = py - robot.tableY;
         const dist = Math.hypot(dx, dy);
-        const minDist = r + strikerRadius;
 
-        if (dist < minDist) {
-          let nx = dist > 0.0001 ? dx / dist : (robot.tableX < TABLE_WIDTH / 2 ? 1 : -1);
+        const isObstacle = robot.team === 'obstacle';
+        const isLeftSide = robot.tableX < TABLE_WIDTH / 2;
+
+        // [터널링 방지 CCD 방벽]: 거리 접촉 또는 고속 관통 시도 즉시 포착
+        const isPenetrating1P = isLeftSide && !isObstacle && dx < minDist && dx > -minDist * 0.8 && Math.abs(dy) < minDist * 1.15 && pvx < 0;
+        const isPenetrating2P = !isLeftSide && !isObstacle && dx > -minDist && dx < minDist * 0.8 && Math.abs(dy) < minDist * 1.15 && pvx > 0;
+
+        if (dist < minDist || isPenetrating1P || isPenetrating2P) {
+          let nx = dist > 0.0001 ? dx / dist : (isLeftSide ? 1 : -1);
           let ny = dist > 0.0001 ? dy / dist : 0;
-
-          const isObstacle = robot.team === 'obstacle';
-          const isLeftSide = robot.tableX < TABLE_WIDTH / 2;
 
           if (isObstacle) {
             // [중간 장애물 로봇]: 물리적 장애물처럼 닿는 즉시 탄력 있게 튕겨냄
@@ -247,36 +252,34 @@ export function stepPuckPhysics(
               pvy -= (1 + restitution) * vDotN * ny;
             }
           } else if (isLeftSide) {
-            // [1P 패들]: 왼쪽 골대 반대 방향인 오른쪽(+X)으로 무조건 밀어냄 (자책골 방지)
-            if (nx < 0.2) {
-              nx = Math.max(0.4, Math.abs(nx));
-              const reLen = Math.hypot(nx, ny) || 1;
-              nx /= reLen;
-              ny /= reLen;
-            }
-            px = Math.max(robot.tableX + minDist * 0.5, robot.tableX + nx * (minDist + 1));
+            // [1P 패들]: 왼쪽 골대 방향 관통을 절대 불허하고 오른쪽(+X)으로 강력 튕겨냄
+            nx = Math.max(0.45, Math.abs(nx));
+            const reLen = Math.hypot(nx, ny) || 1;
+            nx /= reLen;
+            ny /= reLen;
+
+            px = Math.max(robot.tableX + minDist + 2, px);
             py = robot.tableY + ny * (minDist + 1);
 
-            const swingBonus = Math.max(0, robot.vx * 0.85);
-            pvx = Math.max(680, Math.abs(pvx) * 1.15 + swingBonus + 420);
+            const swingBonus = Math.max(0, robot.vx * 0.9);
+            pvx = Math.max(720, Math.abs(pvx) * 1.18 + swingBonus + 450);
           } else {
-            // [2P 패들]: 오른쪽 골대 반대 방향인 왼쪽(-X)으로 무조건 밀어냄 (자책골 방지)
-            if (nx > -0.2) {
-              nx = -Math.max(0.4, Math.abs(nx));
-              const reLen = Math.hypot(nx, ny) || 1;
-              nx /= reLen;
-              ny /= reLen;
-            }
-            px = Math.min(robot.tableX - minDist * 0.5, robot.tableX + nx * (minDist + 1));
+            // [2P 패들]: 오른쪽 골대 방향 관통을 절대 불허하고 왼쪽(-X)으로 강력 튕겨냄
+            nx = -Math.max(0.45, Math.abs(nx));
+            const reLen = Math.hypot(nx, ny) || 1;
+            nx /= reLen;
+            ny /= reLen;
+
+            px = Math.min(robot.tableX - minDist - 2, px);
             py = robot.tableY + ny * (minDist + 1);
 
-            const swingBonus = Math.max(0, -robot.vx * 0.85);
-            pvx = -Math.max(680, Math.abs(pvx) * 1.15 + swingBonus + 420);
+            const swingBonus = Math.max(0, -robot.vx * 0.9);
+            pvx = -Math.max(720, Math.abs(pvx) * 1.18 + swingBonus + 450);
           }
 
           // Controlled Y deflection
           const offsetRatio = Math.max(-1, Math.min(1, dy / minDist));
-          pvy = pvy * 0.25 + offsetRatio * 180 + robot.vy * 0.45;
+          pvy = pvy * 0.20 + offsetRatio * 200 + robot.vy * 0.50;
 
           let curSpeed = Math.hypot(pvx, pvy);
           const minHitSpeed = 620;

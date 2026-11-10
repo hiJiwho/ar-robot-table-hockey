@@ -77,11 +77,11 @@ export function detectTwoMagentaBlobsOpenCV(
   const f = settings.customSample
     ? settings.magenta
     : {
-        hMin: 255, // Wide Magenta / Hot-Pink / Fuchsia spectrum
-        hMax: 25,
-        sMin: isLowLight ? 0.08 : 0.12,
+        hMin: 240, // [REQ] 240~360 & 0~35 광대역 마젠타/핫핑크/바이올렛 OBS 완벽 인식
+        hMax: 35,
+        sMin: isLowLight ? 0.04 : 0.07,
         sMax: 1.0,
-        vMin: isLowLight ? 0.04 : 0.08,
+        vMin: isLowLight ? 0.03 : 0.06,
         vMax: 1.0,
       };
 
@@ -165,7 +165,7 @@ export function detectTwoMagentaBlobsOpenCV(
       rgbPlanes.get(2).delete();
     }
 
-    // 5. Perimeter Court ROI Masking (Works with both 4-point and 8-point polygons)
+    // 5. Perimeter Court ROI Masking (With 45px safety buffer to prevent paddle clipping)
     if (courtPoints && courtPoints.length >= 4) {
       const roi = track(cv.Mat.zeros(height, width, cv.CV_8UC1));
       const polyPts = courtPoints.map((p) => [Math.round(p.x), Math.round(p.y)]).flat();
@@ -175,6 +175,9 @@ export function detectTwoMagentaBlobsOpenCV(
       const vec = track(new cv.MatVector());
       vec.push_back(ptsMat);
       cv.fillPoly(roi, vec, new cv.Scalar(255));
+      // 45px Dilate so paddles near goals/rails are never clipped out!
+      const dilateKernel = track(cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(45, 45)));
+      cv.dilate(roi, roi, dilateKernel);
       cv.bitwise_and(mask, roi, mask);
     }
 

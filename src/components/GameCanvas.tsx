@@ -800,7 +800,8 @@ function renderDualGoalQRCodes(
   redImg: HTMLImageElement | null,
   _isLight: boolean
 ) {
-  const qrBox = 72; // [REQ] 'QR는 작게 띄워줘' (소형 72px)
+  // [REQ] "QR 조금 더 크게 뜨게 해줘 (QR자체도 고화질로 랜더링 되게)"
+  const qrBox = 112; // 72px -> 112px 대폭 확대 (원거리 스캔 극대화)
 
   // -----------------------------------------------------------------
   // 1P 진영 (테이블 좌측, +90도 회전 -> 1P 정면 시선 일치)
@@ -814,33 +815,38 @@ function renderDualGoalQRCodes(
   ctx.rotate(Math.PI / 2);
 
   // 1P WIN / LOSE 대형 네온 텍스트
-  ctx.font = '900 82px "Arial Black", Impact, -apple-system, sans-serif';
+  ctx.font = '900 86px "Arial Black", Impact, -apple-system, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.shadowColor = p1Color;
   ctx.shadowBlur = 32;
   ctx.fillStyle = p1Color;
-  ctx.fillText(p1Outcome, 0, -64);
+  ctx.fillText(p1Outcome, 0, -82);
 
-  // 1P 소형 스마트폰 QR 코드 박스
+  // 1P 고화질 선명 QR 코드 박스 (블러 방지 화이트 패널)
   ctx.fillStyle = '#ffffff';
   ctx.shadowColor = p1Color;
-  ctx.shadowBlur = 14;
+  ctx.shadowBlur = 18;
   ctx.beginPath();
-  ctx.roundRect(-qrBox / 2, 6, qrBox, qrBox, 8);
+  ctx.roundRect(-qrBox / 2, 6, qrBox, qrBox, 10);
   ctx.fill();
 
   if (blueImg && blueImg.complete) {
-    ctx.drawImage(blueImg, -qrBox / 2 + 3, 9, qrBox - 6, qrBox - 6);
+    ctx.save();
+    // [REQ] 고화질 선명 렌더링 (도트 블러/흐림 원천 차단)
+    ctx.imageSmoothingEnabled = false;
+    ctx.shadowBlur = 0;
+    ctx.drawImage(blueImg, -qrBox / 2 + 5, 11, qrBox - 10, qrBox - 10);
+    ctx.restore();
   }
 
   // 1P 라벨
   ctx.shadowBlur = 0;
-  ctx.font = '800 11px system-ui, sans-serif';
+  ctx.font = '800 13px system-ui, sans-serif';
   ctx.fillStyle = p1Color;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
-  ctx.fillText('📱 1P AI 리포트', 0, 6 + qrBox + 4);
+  ctx.fillText('📱 1P AI 리포트', 0, 6 + qrBox + 7);
   ctx.restore();
 
   // -----------------------------------------------------------------
@@ -855,32 +861,36 @@ function renderDualGoalQRCodes(
   ctx.rotate(-Math.PI / 2);
 
   // 2P WIN / LOSE 대형 네온 텍스트
-  ctx.font = '900 82px "Arial Black", Impact, -apple-system, sans-serif';
+  ctx.font = '900 86px "Arial Black", Impact, -apple-system, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.shadowColor = p2Color;
   ctx.shadowBlur = 32;
   ctx.fillStyle = p2Color;
-  ctx.fillText(p2Outcome, 0, -64);
+  ctx.fillText(p2Outcome, 0, -82);
 
-  // 2P 소형 스마트폰 QR 코드 박스
+  // 2P 고화질 선명 QR 코드 박스
   ctx.fillStyle = '#ffffff';
   ctx.shadowColor = p2Color;
-  ctx.shadowBlur = 14;
+  ctx.shadowBlur = 18;
   ctx.beginPath();
-  ctx.roundRect(-qrBox / 2, 6, qrBox, qrBox, 8);
+  ctx.roundRect(-qrBox / 2, 6, qrBox, qrBox, 10);
   ctx.fill();
 
   if (redImg && redImg.complete) {
-    ctx.drawImage(redImg, -qrBox / 2 + 3, 9, qrBox - 6, qrBox - 6);
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.shadowBlur = 0;
+    ctx.drawImage(redImg, -qrBox / 2 + 5, 11, qrBox - 10, qrBox - 10);
+    ctx.restore();
   }
 
   // 2P 라벨
   ctx.shadowBlur = 0;
-  ctx.font = '800 11px system-ui, sans-serif';
+  ctx.font = '800 13px system-ui, sans-serif';
   ctx.fillStyle = p2Color;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
-  ctx.fillText('📱 2P AI 리포트', 0, 6 + qrBox + 4);
+  ctx.fillText('📱 2P AI 리포트', 0, 6 + qrBox + 7);
   ctx.restore();
 }

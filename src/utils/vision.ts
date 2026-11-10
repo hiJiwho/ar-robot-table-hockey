@@ -98,6 +98,11 @@ function isMagentaChromatic(
   customSample?: { r: number; g: number; b: number } | null,
   lowLightMode = false
 ): boolean {
+  // [REQ] OBS 시뮬레이션 및 디지털/물리 마젠타 100% 즉시 인식:
+  // 순수 마젠타(#FF00FF), 핫핑크(#FF1493), 푸시아, 네온 핑크 등 디지털 RGB 즉각 수용
+  if (r > 130 && b > 85 && r > g * 1.15 && b > g * 0.75) {
+    return true;
+  }
   const sum = r + g + b;
   const minSum = lowLightMode ? 12 : 28;
   if (sum < minSum) return false;
@@ -258,7 +263,19 @@ export const isPinkPixel = isMagentaPixel;
  * Point-in-Polygon test (Ray-Casting Algorithm)
  * Accurately supports both 4-point quadrilateral and 8-point mesh polygon calibration!
  */
-export function isPointInPolygon(px: number, py: number, polygon: Point2D[]): boolean {
+export function isPointInPolygon(px: number, py: number, polygon: Point2D[], margin = 45): boolean {
+  // [REQ] 골대 앞/테두리에 있는 말이 마스크로 잘리지 않도록 45px 버퍼 마진 지원
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const p of polygon) {
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+  if (px < minX - margin || px > maxX + margin || py < minY - margin || py > maxY + margin) {
+    return false;
+  }
+
   let inside = false;
   const n = polygon.length;
   for (let i = 0, j = n - 1; i < n; j = i++) {
@@ -270,7 +287,7 @@ export function isPointInPolygon(px: number, py: number, polygon: Point2D[]): bo
     const intersect = yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi;
     if (intersect) inside = !inside;
   }
-  return inside;
+  return inside || (px >= minX - 15 && px <= maxX + 15 && py >= minY - 15 && py <= maxY + 15);
 }
 
 /**

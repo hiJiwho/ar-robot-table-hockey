@@ -308,7 +308,7 @@ export async function generateQRCode(
   try {
     return await QRCode.toDataURL(url, {
       margin: 1,
-      width: 256,
+      width: 512, // [REQ] 고화질 512px 렌더링
       color: {
         dark: color,
         light: bgColor,
