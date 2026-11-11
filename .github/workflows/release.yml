@@ -41,11 +41,10 @@ jobs:
         shell: pwsh
         run: |
           $tag = "${{ github.ref_name }}"
-          if (-not $tag.StartsWith("v")) { $tag = "v1.7.3" }
           $asset = "release/AR-Robot-Table-Hockey-$tag-win-x64.zip"
-          try {
-            gh release view $tag
+          gh release view $tag
+          if ($LASTEXITCODE -eq 0) {
             gh release upload $tag $asset --clobber
-          } catch {
+          } else {
             gh release create $tag $asset --title "$tag - AR Robot Table Hockey Windows Portable" --notes "Windows Portable x64 Release $tag"
           }
