@@ -34,6 +34,7 @@ export interface AIPlayerReport {
     attack: string;
     defense: string;
     tactics: string;
+    roadmap: string;
   };
   radar: {
     attack: number;
@@ -42,6 +43,14 @@ export interface AIPlayerReport {
     precision: number;
     tactics: number;
   };
+  percentiles: {
+    attack: number;
+    defense: number;
+    speed: number;
+    precision: number;
+    tactics: number;
+  };
+  milestones: string[];
   summary: string;
   reportUrl: string;
 }
@@ -284,7 +293,7 @@ export function generateAIPlayerReport(
   };
   saveAnonymousHistory(player, updatedHistory);
 
-  // [NEW] AI Tactical Coach Tips (공격 / 수비 / 전술 맞춤형 원포인트 레슨)
+  // [NEW] AI Tactical Coach Tips (공격 / 수비 / 전술 / 로드맵 맞춤형 심층 레슨)
   const coachTips = {
     attack:
       precision >= 70
@@ -298,7 +307,28 @@ export function generateAIPlayerReport(
       speakerHits >= 2
         ? '중앙 스피커 충돌 가속을 능숙하게 활용하고 있습니다. 스피커 리바운드 후 상대방 패들의 맹점을 파고드세요.'
         : '중앙 스피커는 초탄성 가속을 일으키며 마지막 타격자에게 불리하게 튕겨나가므로 정면 강타를 삼가고 측면 쿠션을 유도하세요.',
+    roadmap:
+      result === 'WIN'
+        ? `차기 경기에서는 중앙 스피커를 통한 3연타 쿠션과 ${maxRally + 2}회 이상 랠리를 달성하여 래더 랭크 ${tierBadge}의 입지를 굳히세요!`
+        : '다음 매치에서는 수비 복귀 템포를 0.2초 앞당기고 장애물 충돌을 최소화하여 첫 승을 노려보세요.',
   };
+
+  // 5대 능력치 세부 백분위율(0..100)
+  const percentiles = {
+    attack: Math.min(99, Math.round(attack * 0.95 + (result === 'WIN' ? 4 : 0))),
+    defense: Math.min(99, Math.round(defense * 0.96)),
+    speed: Math.min(99, Math.round((maxPuckSpeed / 1200) * 100)),
+    precision: Math.min(99, Math.round(precision * 0.94)),
+    tactics: Math.min(99, Math.round(tactics * 0.95)),
+  };
+
+  // 매치 주요 분기점 타임라인 하이라이트 4종
+  const milestones = [
+    `순간 최고 속도 ${maxPuckSpeed} px/s (${Math.round(maxPuckSpeed * 0.085)} km/h) 돌파`,
+    `최대 ${maxRally}회 연속 무결점 랠리 집중력 발휘`,
+    `중앙 스피커 & 레일 쿠션 뱅크샷 유효타 ${speakerHits}회 기록`,
+    `유효 슈팅 ${myHits}회 중 ${myScore}골 성공 (골 결정력 ${myHits > 0 ? Math.round((myScore / myHits) * 100) : 0}%)`,
+  ];
 
   // Personalized Match Commentary
   const commentaries: string[] = [];
@@ -341,6 +371,8 @@ export function generateAIPlayerReport(
     growthSummary,
     coachTips,
     radar: { attack, defense, speed, precision, tactics },
+    percentiles,
+    milestones,
     summary,
     reportUrl,
   };

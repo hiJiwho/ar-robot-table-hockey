@@ -74,39 +74,39 @@ export function stepPuckPhysics(
     px += pvx * subDt;
     py += pvy * subDt;
 
-    // 3. Air Cushion Drag (Floating puck: very low drag so bank shots glide across the table)
-    pvx *= 0.9998;
-    pvy *= 0.9998;
+    // 3. Air Cushion Drag (Floating puck: virtually zero friction so bank shots glide freely across the table)
+    pvx *= 0.99995;
+    pvy *= 0.99995;
 
-    // 4. [REQ] 상하 벽면(Top & Bottom Cushion Rails): 부딪치면 아예 대각선으로 튀게 (Sharp Diagonal Carom)
-    const RAIL_RESTITUTION = 1.0;
+    // 4. [REQ] 상하 벽면(Top & Bottom Cushion Rails): 부딪치면 아예 역동적인 대각선으로 튀게 (Dynamic Sharp Diagonal Carom)
+    const RAIL_RESTITUTION = 1.04;
     if (py - r < 0) {
       py = r + 0.5;
       const incomingSpeed = Math.hypot(pvx, pvy);
-      const curSpeed = Math.max(incomingSpeed * RAIL_RESTITUTION, 580);
+      const curSpeed = Math.max(incomingSpeed * RAIL_RESTITUTION, 640);
 
-      // [REQ] 아예 뚜렷한 대각선 반사각 (32도 ~ 58도) 강제 부여
+      // [REQ] 아예 뚜렷하고 역동적인 대각선 반사각 (32도 ~ 58도) 강제 부여
       const diagAngleDeg = 32 + Math.random() * 26;
       const rad = (diagAngleDeg * Math.PI) / 180;
       const dirX = pvx !== 0 ? Math.sign(pvx) : (Math.random() < 0.5 ? 1 : -1);
 
-      pvx = dirX * Math.cos(rad) * curSpeed + spin * 12;
+      pvx = dirX * Math.cos(rad) * curSpeed + spin * 14;
       pvy = Math.sin(rad) * curSpeed;
-      spin = spin * 0.55 + (Math.random() < 0.5 ? 1 : -1) * 3.5;
+      spin = spin * 0.6 + (Math.random() < 0.5 ? 1 : -1) * 4.0;
 
       events.push({ type: 'WALL', x: px, y: py, speed: Math.hypot(pvx, pvy) });
     } else if (py + r > TABLE_HEIGHT) {
       py = TABLE_HEIGHT - r - 0.5;
       const incomingSpeed = Math.hypot(pvx, pvy);
-      const curSpeed = Math.max(incomingSpeed * RAIL_RESTITUTION, 580);
+      const curSpeed = Math.max(incomingSpeed * RAIL_RESTITUTION, 640);
 
       const diagAngleDeg = 32 + Math.random() * 26;
       const rad = (diagAngleDeg * Math.PI) / 180;
       const dirX = pvx !== 0 ? Math.sign(pvx) : (Math.random() < 0.5 ? 1 : -1);
 
-      pvx = dirX * Math.cos(rad) * curSpeed - spin * 12;
+      pvx = dirX * Math.cos(rad) * curSpeed - spin * 14;
       pvy = -Math.sin(rad) * curSpeed;
-      spin = spin * 0.55 + (Math.random() < 0.5 ? 1 : -1) * 3.5;
+      spin = spin * 0.6 + (Math.random() < 0.5 ? 1 : -1) * 4.0;
 
       events.push({ type: 'WALL', x: px, y: py, speed: Math.hypot(pvx, pvy) });
     }
@@ -150,14 +150,14 @@ export function stepPuckPhysics(
       } else {
         // [REQ] "벽 부딫치면 아에 대각선으로 튀게": 좌측 끝 벽면 충돌 시 코트 중앙 대각선 방향으로 방출
         px = r + 1;
-        const curSpeed = Math.max(Math.hypot(pvx, pvy) * RAIL_RESTITUTION, 580);
+        const curSpeed = Math.max(Math.hypot(pvx, pvy) * RAIL_RESTITUTION, 640);
         const diagAngleDeg = 32 + Math.random() * 26; // 32 ~ 58도 대각선
         const rad = (diagAngleDeg * Math.PI) / 180;
         const signY = pvy !== 0 ? Math.sign(pvy) : (py < TABLE_HEIGHT / 2 ? 1 : -1);
 
         pvx = Math.cos(rad) * curSpeed;
         pvy = signY * Math.sin(rad) * curSpeed;
-        spin = spin * 0.55 + (Math.random() < 0.5 ? 1 : -1) * 4.0;
+        spin = spin * 0.6 + (Math.random() < 0.5 ? 1 : -1) * 4.5;
         events.push({ type: 'WALL', x: px, y: py, speed: curSpeed });
       }
     }
@@ -175,14 +175,14 @@ export function stepPuckPhysics(
       } else {
         // [REQ] "벽 부딫치면 아에 대각선으로 튀게": 우측 끝 벽면 충돌 시 코트 중앙 대각선 방향으로 방출
         px = TABLE_WIDTH - r - 1;
-        const curSpeed = Math.max(Math.hypot(pvx, pvy) * RAIL_RESTITUTION, 580);
+        const curSpeed = Math.max(Math.hypot(pvx, pvy) * RAIL_RESTITUTION, 640);
         const diagAngleDeg = 32 + Math.random() * 26; // 32 ~ 58도 대각선
         const rad = (diagAngleDeg * Math.PI) / 180;
         const signY = pvy !== 0 ? Math.sign(pvy) : (py < TABLE_HEIGHT / 2 ? 1 : -1);
 
         pvx = -Math.cos(rad) * curSpeed;
         pvy = signY * Math.sin(rad) * curSpeed;
-        spin = spin * 0.55 + (Math.random() < 0.5 ? 1 : -1) * 4.0;
+        spin = spin * 0.6 + (Math.random() < 0.5 ? 1 : -1) * 4.5;
         events.push({ type: 'WALL', x: px, y: py, speed: curSpeed });
       }
     }
@@ -302,10 +302,10 @@ export function stepPuckPhysics(
             px = Math.max(robot.tableX + minDist * 0.5, robot.tableX + nx * (minDist + 1));
             py = robot.tableY + ny * (minDist + 1);
 
-            const swingBonus = Math.max(0, robot.vx * 0.85) + Math.abs(robot.vy) * 0.55;
-            pvx = Math.max(680, Math.abs(pvx) * 1.15 + swingBonus + 420);
+            const swingBonus = Math.max(0, robot.vx * 0.9) + Math.abs(robot.vy) * 0.6;
+            pvx = Math.max(720, Math.abs(pvx) * 1.18 + swingBonus + 460);
             const offsetRatio = Math.max(-1, Math.min(1, dy / minDist));
-            pvy = pvy * 0.25 + offsetRatio * 180 + robot.vy * 0.45;
+            pvy = pvy * 0.25 + offsetRatio * 200 + robot.vy * 0.5;
           } else {
             // [2P 패들]: 오른쪽 골대 반대 방향인 왼쪽(-X)으로 무조건 밀어냄 (자책골 방지)
             if (nx > -0.2) {
@@ -317,14 +317,14 @@ export function stepPuckPhysics(
             px = Math.min(robot.tableX - minDist * 0.5, robot.tableX + nx * (minDist + 1));
             py = robot.tableY + ny * (minDist + 1);
 
-            const swingBonus = Math.max(0, -robot.vx * 0.85) + Math.abs(robot.vy) * 0.55;
-            pvx = -Math.max(680, Math.abs(pvx) * 1.15 + swingBonus + 420);
+            const swingBonus = Math.max(0, -robot.vx * 0.9) + Math.abs(robot.vy) * 0.6;
+            pvx = -Math.max(720, Math.abs(pvx) * 1.18 + swingBonus + 460);
             const offsetRatio = Math.max(-1, Math.min(1, dy / minDist));
-            pvy = pvy * 0.25 + offsetRatio * 180 + robot.vy * 0.45;
+            pvy = pvy * 0.25 + offsetRatio * 200 + robot.vy * 0.5;
           }
 
           let curSpeed = Math.hypot(pvx, pvy);
-          const minHitSpeed = 620;
+          const minHitSpeed = 660;
           if (curSpeed < minHitSpeed) {
             const boost = minHitSpeed / (curSpeed || 1);
             pvx *= boost;

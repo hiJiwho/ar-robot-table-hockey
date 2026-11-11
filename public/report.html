@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>AR Robot Table Hockey - AI 프로 플레이어 분석 리포트</title>
+  <title>AR Robot Table Hockey - AI 프로 경기 심층 분석 리포트</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800;900&family=Teko:wght@600;700&display=swap" rel="stylesheet" />
@@ -22,20 +22,20 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 16px 14px 40px;
+      padding: 16px 14px 44px;
       overflow-x: hidden;
       background-image: 
-        radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.18) 0%, transparent 50%),
-        radial-gradient(circle at 100% 100%, rgba(234, 179, 8, 0.15) 0%, transparent 45%);
+        radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.2) 0%, transparent 50%),
+        radial-gradient(circle at 100% 100%, rgba(234, 179, 8, 0.16) 0%, transparent 45%);
     }
     .card-container {
       width: 100%;
-      max-width: 450px;
-      background: rgba(15, 23, 42, 0.88);
+      max-width: 460px;
+      background: rgba(15, 23, 42, 0.9);
       border: 1px solid rgba(255, 255, 255, 0.12);
       border-radius: 28px;
       padding: 24px 20px;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 40px rgba(16, 185, 129, 0.15);
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.75), 0 0 40px rgba(16, 185, 129, 0.15);
       backdrop-filter: blur(20px);
       position: relative;
     }
@@ -177,20 +177,21 @@
       border-radius: 12px;
       padding: 3px;
       margin-bottom: 14px;
-      gap: 4px;
+      gap: 3px;
     }
     .tab-btn {
       flex: 1;
       background: transparent;
       border: none;
       color: #94a3b8;
-      font-size: 12px;
+      font-size: 11.5px;
       font-weight: 700;
-      padding: 8px 6px;
+      padding: 8px 4px;
       border-radius: 9px;
       cursor: pointer;
       transition: all 0.2s ease;
       font-family: inherit;
+      white-space: nowrap;
     }
     .tab-btn.active {
       background: rgba(255, 255, 255, 0.12);
@@ -254,6 +255,40 @@
       font-weight: 700;
     }
 
+    /* 5-Axis Percentile Progress Bars */
+    .percentile-box {
+      background: rgba(2, 6, 23, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 12px 14px;
+      margin-bottom: 14px;
+    }
+    .percentile-row {
+      margin-bottom: 8px;
+    }
+    .percentile-row:last-child {
+      margin-bottom: 0;
+    }
+    .percentile-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      font-weight: 700;
+      margin-bottom: 3px;
+    }
+    .percentile-track {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .percentile-bar {
+      height: 100%;
+      border-radius: 999px;
+      transition: width 0.6s ease;
+    }
+
     /* AI Coach Feedback Boxes */
     .coach-card {
       background: rgba(30, 41, 59, 0.5);
@@ -270,6 +305,9 @@
     }
     .coach-card.tactics {
       border-left-color: #f59e0b;
+    }
+    .coach-card.roadmap {
+      border-left-color: #a855f7;
     }
     .coach-title {
       font-size: 11px;
@@ -302,6 +340,31 @@
       display: flex;
       align-items: center;
       gap: 4px;
+    }
+
+    /* Timeline Milestones */
+    .timeline-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .timeline-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      background: rgba(30, 41, 59, 0.45);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 12px;
+      color: #cbd5e1;
+      line-height: 1.5;
+    }
+    .timeline-icon {
+      font-size: 16px;
+      flex-shrink: 0;
+      margin-top: 1px;
     }
 
     /* History Milestones */
@@ -395,14 +458,15 @@
       </div>
     </div>
 
-    <!-- Interactive Navigation Tabs -->
+    <!-- Interactive Navigation Tabs (4 Tabs) -->
     <div class="tab-bar">
       <button class="tab-btn active" onclick="switchTab('tab-radar')">📊 레이더 스탯</button>
       <button class="tab-btn" onclick="switchTab('tab-coach')">🧠 AI 감독 코칭</button>
-      <button class="tab-btn" onclick="switchTab('tab-history')">📈 성장 히스토리</button>
+      <button class="tab-btn" onclick="switchTab('tab-timeline')">⏱️ 매치 하이라이트</button>
+      <button class="tab-btn" onclick="switchTab('tab-history')">📈 통산 래더</button>
     </div>
 
-    <!-- Tab 1: Radar & Metrics -->
+    <!-- Tab 1: Radar & Metrics & Percentiles -->
     <div id="tab-radar" class="tab-pane active">
       <div class="radar-box">
         <canvas id="radarCanvas" width="340" height="220"></canvas>
@@ -435,6 +499,58 @@
         </div>
       </div>
 
+      <!-- 5-Axis Percentile Progress Bars -->
+      <div class="percentile-box">
+        <div style="font-size: 11px; font-weight: 800; color: #34d399; margin-bottom: 8px;">
+          ⚡ 5대 핵심 능력치 세부 벤치마킹
+        </div>
+        <div class="percentile-row">
+          <div class="percentile-header">
+            <span style="color: #cbd5e1;">공격 결정력 (Attack)</span>
+            <span id="pctAtkLabel" style="color: #34d399;">상위 15%</span>
+          </div>
+          <div class="percentile-track">
+            <div id="pctAtkBar" class="percentile-bar" style="width: 85%; background: linear-gradient(90deg, #059669, #34d399);"></div>
+          </div>
+        </div>
+        <div class="percentile-row">
+          <div class="percentile-header">
+            <span style="color: #cbd5e1;">리플렉스 반응속도 (Reflex)</span>
+            <span id="pctSpdLabel" style="color: #38bdf8;">상위 12%</span>
+          </div>
+          <div class="percentile-track">
+            <div id="pctSpdBar" class="percentile-bar" style="width: 88%; background: linear-gradient(90deg, #0284c7, #38bdf8);"></div>
+          </div>
+        </div>
+        <div class="percentile-row">
+          <div class="percentile-header">
+            <span style="color: #cbd5e1;">골문 방어율 (Defense)</span>
+            <span id="pctDefLabel" style="color: #a855f7;">상위 10%</span>
+          </div>
+          <div class="percentile-track">
+            <div id="pctDefBar" class="percentile-bar" style="width: 90%; background: linear-gradient(90deg, #7e22ce, #c084fc);"></div>
+          </div>
+        </div>
+        <div class="percentile-row">
+          <div class="percentile-header">
+            <span style="color: #cbd5e1;">샷 정밀도 (Precision)</span>
+            <span id="pctPrcLabel" style="color: #f59e0b;">상위 20%</span>
+          </div>
+          <div class="percentile-track">
+            <div id="pctPrcBar" class="percentile-bar" style="width: 80%; background: linear-gradient(90deg, #d97706, #fbbf24);"></div>
+          </div>
+        </div>
+        <div class="percentile-row">
+          <div class="percentile-header">
+            <span style="color: #cbd5e1;">스피커/장애물 전술 IQ (Tactics)</span>
+            <span id="pctTacLabel" style="color: #ec4899;">상위 18%</span>
+          </div>
+          <div class="percentile-track">
+            <div id="pctTacBar" class="percentile-bar" style="width: 82%; background: linear-gradient(90deg, #db2777, #f472b6);"></div>
+          </div>
+        </div>
+      </div>
+
       <div class="commentary-box">
         <div class="commentary-title">🧠 Cumulative AI Scout Benchmarking</div>
         <div id="aiCommentary">경기를 정밀 분석 중입니다...</div>
@@ -445,7 +561,7 @@
     <div id="tab-coach" class="tab-pane">
       <div class="coach-card attack">
         <div class="coach-title" style="color: #34d399;">
-          <span>🎯</span><span>공격 전술 가이드</span>
+          <span>🎯</span><span>공격 전술 심층 가이드</span>
         </div>
         <div id="coachAttackText">
           정밀한 코스 샷이 매우 위협적입니다. 코너 포스트 틈새를 노리는 대각선 컷샷을 적극 구사해보세요.
@@ -469,9 +585,52 @@
           중앙 스피커나 시안 장애물 로봇에 공이 닿으면 마지막 타격자에게 불리한 궤적으로 급가속 튕겨납니다! 상대방이 맞추도록 유도하는 심리전을 펼치세요.
         </div>
       </div>
+
+      <div class="coach-card roadmap">
+        <div class="coach-title" style="color: #c084fc;">
+          <span>🚀</span><span>차기 래더 승급 로드맵</span>
+        </div>
+        <div id="coachRoadmapText">
+          다음 경기에서는 패들 복귀 속도를 0.15초 단축하고 중앙 스피커를 통한 2연속 뱅크샷 득점을 노려보세요!
+        </div>
+      </div>
     </div>
 
-    <!-- Tab 3: Cumulative Growth -->
+    <!-- Tab 3: Match Highlights Timeline -->
+    <div id="tab-timeline" class="tab-pane">
+      <div class="timeline-list">
+        <div class="timeline-item">
+          <div class="timeline-icon">🚀</div>
+          <div>
+            <strong style="color: #38bdf8; display: block; margin-bottom: 2px;">순간 폭발 가속 하이라이트</strong>
+            <span id="timePeakSpeed">순간 최고 속도 돌파 기록</span>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-icon">🔥</div>
+          <div>
+            <strong style="color: #f43f5e; display: block; margin-bottom: 2px;">클러치 랠리 공방</strong>
+            <span id="timePeakRally">연속 랠리 집중력 발휘</span>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-icon">🔊</div>
+          <div>
+            <strong style="color: #fbbf24; display: block; margin-bottom: 2px;">스피커 뱅크샷 승부수</strong>
+            <span id="timeSpeaker">중앙 물리 스피커를 활용한 전술 굴절</span>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-icon">🎯</div>
+          <div>
+            <strong style="color: #34d399; display: block; margin-bottom: 2px;">골 결정력 분석</strong>
+            <span id="timeConversion">유효 슈팅 대비 득점 성공률</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 4: Cumulative Growth & Career -->
     <div id="tab-history" class="tab-pane">
       <div class="history-card">
         <div style="font-weight: 800; color: #34d399; margin-bottom: 8px;">📊 누적 퍼포먼스 지표</div>
@@ -565,24 +724,23 @@
         if (parts.length !== 2) return null;
         const payload = parts[0];
         const sig = parts[1];
-        if (calcHMAC(payload) !== sig) return null; // 위조 시 404 차단!
+        if (calcHMAC(payload) !== sig) return null;
         return payload;
       } catch (e) {
         return null;
       }
     }
 
-    // 9 Extended Archetype Titles
     const TITLE_CATALOG = [
-      { ttl: '초음속 스트라이커', bdg: '⚡' },       // 0
-      { ttl: '철벽의 아이언 가디언', bdg: '🛡️' },    // 1
-      { ttl: '소닉 트릭마스터', bdg: '🔊' },        // 2
-      { ttl: '저격형 스나이퍼', bdg: '🎯' },        // 3
-      { ttl: '올라운드 마에스트로', bdg: '👑' },     // 4
-      { ttl: '폭풍의 랠리 챔피언', bdg: '🌪️' },     // 5
-      { ttl: '버서커 어태커', bdg: '⚔️' },          // 6
-      { ttl: '전술 브레인 메이커', bdg: '🧠' },      // 7
-      { ttl: '언터처블 에이스', bdg: '💎' }         // 8
+      { ttl: '초음속 스트라이커', bdg: '⚡' },
+      { ttl: '철벽의 아이언 가디언', bdg: '🛡️' },
+      { ttl: '소닉 트릭마스터', bdg: '🔊' },
+      { ttl: '저격형 스나이퍼', bdg: '🎯' },
+      { ttl: '올라운드 마에스트로', bdg: '👑' },
+      { ttl: '폭풍의 랠리 챔피언', bdg: '🌪️' },
+      { ttl: '버서커 어태커', bdg: '⚔️' },
+      { ttl: '전술 브레인 메이커', bdg: '🧠' },
+      { ttl: '언터처블 에이스', bdg: '💎' }
     ];
 
     const GROWTH_CATALOG = [
@@ -629,7 +787,6 @@
       }
     }
 
-    // 404 Not Found Screen
     if (isNotFound) {
       document.title = '404 Not Found - AR Table Hockey Match Database';
       document.body.innerHTML = `
@@ -643,17 +800,6 @@
           <p style="font-size: 14px; color: #94a3b8; max-width: 380px; line-height: 1.6; margin-bottom: 24px;">
             요청하신 경기 세션 식별자(<code style="color: #f1f5f9; background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 4px; font-size: 12px;">${rawId ? (rawId.slice(0, 18) + '...') : 'NULL'}</code>)가 서버 데이터베이스에 존재하지 않거나, 보안 서명이 위변조되어 만료되었습니다.
           </p>
-          <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 14px 18px; font-size: 12px; color: #64748b; text-align: left; max-width: 360px; width: 100%; margin-bottom: 24px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
-              <span>Error Code:</span><strong style="color: #e2e8f0;">ERR_MATCH_UNREGISTERED</strong>
-            </div>
-            <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
-              <span>Timestamp:</span><span style="color: #94a3b8;">${new Date().toISOString()}</span>
-            </div>
-            <div style="display:flex; justify-content:space-between;">
-              <span>Server Node:</span><span style="color: #34d399;">kr-seoul-edge-01</span>
-            </div>
-          </div>
           <a href="javascript:location.reload()" style="padding: 10px 24px; font-size: 13px; font-weight: 700; color: #fff; background: #334155; border-radius: 10px; text-decoration: none;">
             새로고침
           </a>
@@ -666,8 +812,8 @@
     const teamName = is1P ? 'Green' : 'Yellow';
     const anon = `ANON-${p}P-${shortId}`;
 
-    const s1 = is1P ? myScore : oppScore; // Green 점수
-    const s2 = is1P ? oppScore : myScore; // Yellow 점수
+    const s1 = is1P ? myScore : oppScore;
+    const s2 = is1P ? oppScore : myScore;
     const res = myScore > oppScore ? 'WIN' : myScore < oppScore ? 'LOSE' : 'DRAW';
 
     const titleObj = TITLE_CATALOG[Math.max(0, Math.min(TITLE_CATALOG.length - 1, tIdx))] || TITLE_CATALOG[0];
@@ -723,13 +869,36 @@
     document.getElementById('scoreGreen').textContent = s1;
     document.getElementById('scoreYellow').textContent = s2;
 
-    document.getElementById('valSpeed').textContent = spd + ' px/s';
+    document.getElementById('valSpeed').textContent = `${spd} px/s (${Math.round(nSpd * 0.085)} km/h)`;
     document.getElementById('valHits').textContent = hits + '회';
     document.getElementById('valSpk').textContent = spk + '회';
     document.getElementById('valRally').textContent = maxRally + '회';
-    document.getElementById('valConversion').textContent = (nHits > 0 ? Math.round((myScore / nHits) * 100) : 0) + '%';
+    const convPct = nHits > 0 ? Math.round((myScore / nHits) * 100) : 0;
+    document.getElementById('valConversion').textContent = convPct + '%';
     document.getElementById('valTactics').textContent = tac + '점';
     document.getElementById('aiCommentary').textContent = cmm;
+
+    // Percentile Progress Meters
+    const pctAtk = Math.min(99, Math.round(atk * 0.95 + (res === 'WIN' ? 4 : 0)));
+    const pctSpd = Math.min(99, Math.round((nSpd / 1200) * 100));
+    const pctDef = Math.min(99, Math.round(def * 0.96));
+    const pctPrc = Math.min(99, Math.round(prc * 0.94));
+    const pctTac = Math.min(99, Math.round(tac * 0.95));
+
+    document.getElementById('pctAtkLabel').textContent = `상위 ${100 - pctAtk}% (${atk}점)`;
+    document.getElementById('pctAtkBar').style.width = `${pctAtk}%`;
+
+    document.getElementById('pctSpdLabel').textContent = `상위 ${100 - pctSpd}% (${vel}점)`;
+    document.getElementById('pctSpdBar').style.width = `${pctSpd}%`;
+
+    document.getElementById('pctDefLabel').textContent = `상위 ${100 - pctDef}% (${def}점)`;
+    document.getElementById('pctDefBar').style.width = `${pctDef}%`;
+
+    document.getElementById('pctPrcLabel').textContent = `상위 ${100 - pctPrc}% (${prc}점)`;
+    document.getElementById('pctPrcBar').style.width = `${pctPrc}%`;
+
+    document.getElementById('pctTacLabel').textContent = `상위 ${100 - pctTac}% (${tac}점)`;
+    document.getElementById('pctTacBar').style.width = `${pctTac}%`;
 
     // AI Coach Tips
     document.getElementById('coachAttackText').textContent =
@@ -744,8 +913,19 @@
 
     document.getElementById('coachTacticsText').textContent =
       nSpk >= 2
-        ? '중앙 스피커 충돌 가속을 능숙하게 활용하고 있습니다. 스피커 리바운드 후 상대방 패들의 맹점을 파고드세요.'
-        : '중앙 스피커는 초탄성 가속을 일으키며 마지막 타격자에게 불리하게 튕겨나가므로 정면 강타를 삼가고 측면 쿠션을 유도하세요.';
+        ? '중앙 스피커 충돌 가속(최대 2450 px/s)을 능숙하게 활용하고 있습니다. 스피커 리바운드 후 상대방 패들의 맹점을 파고드세요.'
+        : '중앙 스피커는 초광속 폭풍 가속을 일으키며 마지막 타격자에게 불리하게 튕겨나가므로 정면 강타를 삼가고 측면 쿠션을 유도하세요.';
+
+    document.getElementById('coachRoadmapText').textContent =
+      res === 'WIN'
+        ? `차기 경기에서는 중앙 스피커를 통한 3연타 쿠션과 ${nRally + 2}회 이상 랠리를 달성하여 래더 랭크 ${tier}의 입지를 굳히세요!`
+        : '다음 매치에서는 수비 복귀 템포를 0.2초 앞당기고 장애물 충돌을 최소화하여 첫 승을 노려보세요.';
+
+    // Timeline Highlights
+    document.getElementById('timePeakSpeed').textContent = `순간 최고 속도 ${spd} px/s (${Math.round(nSpd * 0.085)} km/h) 돌파 기록 달성`;
+    document.getElementById('timePeakRally').textContent = `최대 ${maxRally}회 연속 무결점 랠리 집중력 발휘`;
+    document.getElementById('timeSpeaker').textContent = `중앙 물리 스피커 및 벽면 쿠션 뱅크샷 ${spk}회 전술 타격 성공`;
+    document.getElementById('timeConversion').textContent = `유효 슈팅 ${hits}회 중 ${myScore}골 성공 (골 전환율 ${convPct}%)`;
 
     // History Tab Binding
     document.getElementById('histMatchCount').textContent = `${mcount}회`;
@@ -768,7 +948,6 @@
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Web grid
       const steps = 4;
       for (let s = 1; s <= steps; s++) {
         const r = (radius / steps) * s;
@@ -786,7 +965,6 @@
         ctx.stroke();
       }
 
-      // Spokes and labels
       ctx.font = '11px sans-serif';
       ctx.fillStyle = '#94a3b8';
       ctx.textAlign = 'center';
@@ -807,7 +985,6 @@
         ctx.fillText(labels[i], labelX, labelY);
       }
 
-      // Polygon
       const strokeColor = is1P ? '#34d399' : '#facc15';
       const fillColor = is1P ? 'rgba(52, 211, 153, 0.35)' : 'rgba(250, 204, 21, 0.35)';
 
@@ -827,7 +1004,6 @@
       ctx.lineWidth = 2.5;
       ctx.stroke();
 
-      // Vertex dots
       ctx.fillStyle = '#ffffff';
       for (let i = 0; i < numSides; i++) {
         const angle = (Math.PI * 2 / numSides) * i - Math.PI / 2;
