@@ -26,7 +26,7 @@ export interface PhysicsStepResult {
  * Professional Air Hockey Physics Engine
  * - Multi-substep continuous collision detection (CCD) to eliminate tunneling & sticking
  * - Center Speaker Bounce: 퍽이 테이블 정가운데 놓인 실제 물리 스피커에 닿으면 튕겨나감
- * - Dynamic 2..10 Magenta Robots: 1P, 2P 및 중간 장애물 로봇 모두와 실시간 물리 충돌
+ * - Dynamic Tracking: 1P/2P 마젠타 플레이어(2개 고정) 및 시안 장애물 로봇(0..10개) 모두와 실시간 물리 충돌
  */
 export function stepPuckPhysics(
   currPuck: PuckState,
@@ -239,7 +239,7 @@ export function stepPuckPhysics(
       }
     }
 
-    // 8. [REQ] 마젠타 센서 2개~10개 유동적 인식 & 충돌 (패들 + 장애물 로봇 모두 튕김)
+    // 8. [REQ] 마젠타 플레이어(1P/2P) 및 시안 장애물 로봇(0~10개 유동 설정) 충돌 처리
     if (allRobots && allRobots.length > 0) {
       for (const robot of allRobots) {
         if (!robot.detected || robot.confidence < 0.28) continue;
