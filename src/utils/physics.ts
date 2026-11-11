@@ -78,39 +78,36 @@ export function stepPuckPhysics(
     pvx *= 0.9998;
     pvy *= 0.9998;
 
-    // 4. Top and Bottom Cushion Rails (Crisp elastic rebound + Spin English transfer)
-    const RAIL_RESTITUTION = 0.99;
+    // 4. [REQ] 상하 벽면(Top & Bottom Cushion Rails): 부딪치면 아예 대각선으로 튀게 (Sharp Diagonal Carom)
+    const RAIL_RESTITUTION = 1.0;
     if (py - r < 0) {
-      py = r;
-      pvy = Math.abs(pvy) * RAIL_RESTITUTION;
-      // Spin transfer on rail contact
-      pvx += spin * 14;
-      spin *= 0.65;
+      py = r + 0.5;
+      const incomingSpeed = Math.hypot(pvx, pvy);
+      const curSpeed = Math.max(incomingSpeed * RAIL_RESTITUTION, 580);
 
-      // [REQ] 상하 벽면으로만 튕기며 공이 멈추는 현상(Dead Puck) 완전 제거:
-      const dir = pvx >= 0 ? 1 : -1;
-      if (Math.abs(pvx) < 320) {
-        pvx = dir * 360;
-      }
-      if (Math.abs(pvy) > Math.abs(pvx) * 1.5) {
-        pvy *= 0.75;
-        pvx = dir * Math.max(Math.abs(pvx), 340);
-      }
+      // [REQ] 아예 뚜렷한 대각선 반사각 (32도 ~ 58도) 강제 부여
+      const diagAngleDeg = 32 + Math.random() * 26;
+      const rad = (diagAngleDeg * Math.PI) / 180;
+      const dirX = pvx !== 0 ? Math.sign(pvx) : (Math.random() < 0.5 ? 1 : -1);
+
+      pvx = dirX * Math.cos(rad) * curSpeed + spin * 12;
+      pvy = Math.sin(rad) * curSpeed;
+      spin = spin * 0.55 + (Math.random() < 0.5 ? 1 : -1) * 3.5;
+
       events.push({ type: 'WALL', x: px, y: py, speed: Math.hypot(pvx, pvy) });
     } else if (py + r > TABLE_HEIGHT) {
-      py = TABLE_HEIGHT - r;
-      pvy = -Math.abs(pvy) * RAIL_RESTITUTION;
-      pvx -= spin * 14;
-      spin *= 0.65;
+      py = TABLE_HEIGHT - r - 0.5;
+      const incomingSpeed = Math.hypot(pvx, pvy);
+      const curSpeed = Math.max(incomingSpeed * RAIL_RESTITUTION, 580);
 
-      const dir = pvx >= 0 ? 1 : -1;
-      if (Math.abs(pvx) < 320) {
-        pvx = dir * 360;
-      }
-      if (Math.abs(pvy) > Math.abs(pvx) * 1.5) {
-        pvy *= 0.75;
-        pvx = dir * Math.max(Math.abs(pvx), 340);
-      }
+      const diagAngleDeg = 32 + Math.random() * 26;
+      const rad = (diagAngleDeg * Math.PI) / 180;
+      const dirX = pvx !== 0 ? Math.sign(pvx) : (Math.random() < 0.5 ? 1 : -1);
+
+      pvx = dirX * Math.cos(rad) * curSpeed - spin * 12;
+      pvy = -Math.sin(rad) * curSpeed;
+      spin = spin * 0.55 + (Math.random() < 0.5 ? 1 : -1) * 3.5;
+
       events.push({ type: 'WALL', x: px, y: py, speed: Math.hypot(pvx, pvy) });
     }
 
@@ -151,9 +148,17 @@ export function stepPuckPhysics(
           break;
         }
       } else {
-        px = r;
-        pvx = Math.abs(pvx) * RAIL_RESTITUTION;
-        events.push({ type: 'WALL', x: px, y: py, speed: Math.abs(pvx) });
+        // [REQ] "벽 부딫치면 아에 대각선으로 튀게": 좌측 끝 벽면 충돌 시 코트 중앙 대각선 방향으로 방출
+        px = r + 1;
+        const curSpeed = Math.max(Math.hypot(pvx, pvy) * RAIL_RESTITUTION, 580);
+        const diagAngleDeg = 32 + Math.random() * 26; // 32 ~ 58도 대각선
+        const rad = (diagAngleDeg * Math.PI) / 180;
+        const signY = pvy !== 0 ? Math.sign(pvy) : (py < TABLE_HEIGHT / 2 ? 1 : -1);
+
+        pvx = Math.cos(rad) * curSpeed;
+        pvy = signY * Math.sin(rad) * curSpeed;
+        spin = spin * 0.55 + (Math.random() < 0.5 ? 1 : -1) * 4.0;
+        events.push({ type: 'WALL', x: px, y: py, speed: curSpeed });
       }
     }
 
@@ -168,13 +173,22 @@ export function stepPuckPhysics(
           break;
         }
       } else {
-        px = TABLE_WIDTH - r;
-        pvx = -Math.abs(pvx) * RAIL_RESTITUTION;
-        events.push({ type: 'WALL', x: px, y: py, speed: Math.abs(pvx) });
+        // [REQ] "벽 부딫치면 아에 대각선으로 튀게": 우측 끝 벽면 충돌 시 코트 중앙 대각선 방향으로 방출
+        px = TABLE_WIDTH - r - 1;
+        const curSpeed = Math.max(Math.hypot(pvx, pvy) * RAIL_RESTITUTION, 580);
+        const diagAngleDeg = 32 + Math.random() * 26; // 32 ~ 58도 대각선
+        const rad = (diagAngleDeg * Math.PI) / 180;
+        const signY = pvy !== 0 ? Math.sign(pvy) : (py < TABLE_HEIGHT / 2 ? 1 : -1);
+
+        pvx = -Math.cos(rad) * curSpeed;
+        pvy = signY * Math.sin(rad) * curSpeed;
+        spin = spin * 0.55 + (Math.random() < 0.5 ? 1 : -1) * 4.0;
+        events.push({ type: 'WALL', x: px, y: py, speed: curSpeed });
       }
     }
 
-    // 7. [REQ] 정가운데 물리 스피커 충돌 (가운데 공 오면 튕기게!)
+    // 7. [REQ] 정가운데 물리 스피커 충돌
+    // [REQ] "스피커는 훨씬 더 빠르고 더 많이 튀게... 경기장 전체 반전될 정도로 세게 반사시켜줘"
     const speakerX = TABLE_WIDTH / 2;
     const speakerY = TABLE_HEIGHT / 2;
     const speakerR = CENTER_SPEAKER_RADIUS;
@@ -187,41 +201,39 @@ export function stepPuckPhysics(
       const sNx = sDx / sDist;
       const sNy = sDy / sDist;
 
-      // Position separation to prevent puck tunneling inside speaker
-      px = speakerX + sNx * (sMinDist + 0.5);
-      py = speakerY + sNy * (sMinDist + 0.5);
+      // Position separation
+      px = speakerX + sNx * (sMinDist + 1.5);
+      py = speakerY + sNy * (sMinDist + 1.5);
 
       const vDotN = pvx * sNx + pvy * sNy;
       if (vDotN < 0) {
-        // [REQ] "스피커충돌시는마지막 부및친퍽주인이불리하게나오게하며 스피커반사시더가속"
-        // [REQ] "공이예측못하게대각선둥.장애물땡기게 엉둥하게되게해뤄"
         const hitterIs1P = lastHitTeam === 'blue' || (lastHitTeam !== 'red' && pvx > 0);
 
-        // 1. Extra Acceleration (초탄성 가속 부스트)
+        // 초특급 폭풍 가속: 경기장 1920px 전체를 단숨에 반전시키는 1950 ~ 2450 px/s 초광속 반사!
         const incomingSpeed = Math.hypot(pvx, pvy);
-        const boostedSpeed = Math.min(1680, Math.max(incomingSpeed * 1.6, 920 + Math.random() * 240));
+        const speakerHyperSpeed = Math.min(2450, Math.max(incomingSpeed * 2.1, 1950 + Math.random() * 350));
 
-        // 2. Unpredictable Chaotic Diagonal Deflection (예측 불가능한 엉뚱한 대각선 굴절 각도)
-        // 28도~68도의 가파른 대각선 뱅크 샷 궤적으로 꺾임
+        // 25도~65도의 가파른 대각선 각도로 마지막 타격자의 골대 쪽으로 초광속 발사
         const signY = sNy !== 0 ? (Math.random() < 0.2 ? -Math.sign(sNy) : Math.sign(sNy)) : (Math.random() < 0.5 ? 1 : -1);
-        const diagonalAngleDeg = 28 + Math.random() * 40; // 28 ~ 68 deg steep diagonal
+        const diagonalAngleDeg = 25 + Math.random() * 40;
         const rad = (diagonalAngleDeg * Math.PI) / 180;
 
         const dirX = hitterIs1P ? -Math.cos(rad) : Math.cos(rad);
         const dirY = signY * Math.sin(rad);
 
-        pvx = dirX * boostedSpeed;
-        pvy = dirY * boostedSpeed;
+        pvx = dirX * speakerHyperSpeed;
+        pvy = dirY * speakerHyperSpeed;
 
-        // 강력한 마구 스핀 회전(Magnus Curve Force) 부여 -> 비행 중 공이 휘어지며 레일 충돌 시 엉뚱하게 튕김
+        // 슈퍼 퍽 활성화 (슈퍼차지 불꽃 & 고속 유지)
+        superCharged = true;
         const spinSign = Math.random() < 0.5 ? 1 : -1;
-        spin = spinSign * (8.0 + Math.random() * 9.0);
+        spin = spinSign * (14.0 + Math.random() * 12.0);
 
         events.push({
           type: 'SPEAKER',
           x: px,
           y: py,
-          speed: boostedSpeed,
+          speed: speakerHyperSpeed,
           combo: rallyCount,
         });
       }
@@ -246,30 +258,29 @@ export function stepPuckPhysics(
           const isLeftSide = robot.tableX < TABLE_WIDTH / 2;
 
           if (isObstacle) {
-            // [REQ] "공이예측못하게대각선둥.장애물땡기게 엉둥하게되게해뤄"
-            // [장애물(시안) 충돌]: 예측 불가능하고 엉뚱한 대각선 굴절 & 마구 회전(Spin)으로 마지막 타격자에게 날아감
-            px = robot.tableX + nx * (minDist + 1.2);
-            py = robot.tableY + ny * (minDist + 1.2);
+            // [REQ] "장애물 에선 전체에 반 정도, 아에 대각선으로 튀게"
+            px = robot.tableX + nx * (minDist + 1.5);
+            py = robot.tableY + ny * (minDist + 1.5);
 
             const hitterIs1P = lastHitTeam === 'blue' || (lastHitTeam !== 'red' && pvx > 0);
+            // 경기장 전체(1920px)의 반(960px) 정도를 시원하게 날아가는 속도 (900 ~ 1150 px/s)
             const incomingSpeed = Math.hypot(pvx, pvy);
-            const obstacleBounceSpeed = Math.min(1580, Math.max(incomingSpeed * 1.35, 780 + Math.random() * 260));
+            const obstacleHalfCourtSpeed = Math.min(1250, Math.max(incomingSpeed * 1.15, 880 + Math.random() * 180));
 
-            // 가파른 엉뚱한 대각선 굴절 각도 (28도 ~ 68도 대각선 급반사)
-            // 22% 확률로 반대 Y 방향으로 꺾이는 불규칙 리바운드 연출
-            const signY = ny !== 0 ? (Math.random() < 0.22 ? -Math.sign(ny) : Math.sign(ny)) : (Math.random() < 0.5 ? 1 : -1);
-            const diagonalAngleDeg = 28 + Math.random() * 40;
+            // 아예 뚜렷하고 예측 불가능한 대각선 각도 (32도 ~ 58도 대각선 반사)
+            const signY = ny !== 0 ? (Math.random() < 0.25 ? -Math.sign(ny) : Math.sign(ny)) : (Math.random() < 0.5 ? 1 : -1);
+            const diagonalAngleDeg = 32 + Math.random() * 26; // 32 ~ 58 deg
             const rad = (diagonalAngleDeg * Math.PI) / 180;
 
             const dirX = hitterIs1P ? -Math.cos(rad) : Math.cos(rad);
             const dirY = signY * Math.sin(rad);
 
-            pvx = dirX * obstacleBounceSpeed;
-            pvy = dirY * obstacleBounceSpeed;
+            pvx = dirX * obstacleHalfCourtSpeed;
+            pvy = dirY * obstacleHalfCourtSpeed;
 
-            // 마구 스핀 회전 부여 (공중에서 휘어지는 바나나 슛 궤적 + 상하 벽면 충돌 시 급격한 각도 변화 유도)
+            // 마구 스핀 회전 부여
             const spinSign = Math.random() < 0.5 ? 1 : -1;
-            spin = spinSign * (7.5 + Math.random() * 8.5);
+            spin = spinSign * (8.5 + Math.random() * 8.5);
 
             // Retain the last player hitter, but notify event as obstacle bounce
             events.push({
@@ -277,7 +288,7 @@ export function stepPuckPhysics(
               team: 'obstacle',
               x: px,
               y: py,
-              speed: obstacleBounceSpeed,
+              speed: obstacleHalfCourtSpeed,
             });
             continue; // Obstacle handled; avoid paddle hit branch and avoid overwriting lastHitTeam
           } else if (isLeftSide) {
@@ -334,9 +345,9 @@ export function stepPuckPhysics(
     }
   }
 
-  // Speed clamping to terminal velocity (1600 px/s, or 1680 when superCharged)
+  // Speed clamping to terminal velocity (스피커 반사 시 초광속 2450 px/s 폭풍 반사 완벽 지원)
   let speed = Math.hypot(pvx, pvy);
-  const MAX_SPEED = superCharged ? 1680 : 1550;
+  const MAX_SPEED = superCharged ? 2450 : 1900;
   if (speed > MAX_SPEED) {
     const scale = MAX_SPEED / speed;
     pvx *= scale;
