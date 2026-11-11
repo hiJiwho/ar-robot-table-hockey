@@ -193,25 +193,37 @@ export function stepPuckPhysics(
 
       const vDotN = pvx * sNx + pvy * sNy;
       if (vDotN < 0) {
-        // High-elasticity speaker bounce (1.28x restitution)
-        const restitution = 1.28;
-        pvx -= (1 + restitution) * vDotN * sNx;
-        pvy -= (1 + restitution) * vDotN * sNy;
+        // [REQ] "스피커충돌시는마지막 부및친퍽주인이불리하게나오게하며 스피커반사시더가속"
+        // 1. Identify who hit the puck into the speaker:
+        //    If lastHitTeam === 'blue' or (pvx > 0 moving towards right/2P): 1P was the hitter!
+        //    If lastHitTeam === 'red' or (pvx < 0 moving towards left/1P): 2P was the hitter!
+        const hitterIs1P = lastHitTeam === 'blue' || (lastHitTeam !== 'red' && pvx > 0);
 
-        let curSpeed = Math.hypot(pvx, pvy);
-        const minBounceSpeed = 580;
-        if (curSpeed < minBounceSpeed) {
-          const boost = minBounceSpeed / (curSpeed || 1);
-          pvx *= boost;
-          pvy *= boost;
-          curSpeed = minBounceSpeed;
+        // 2. Extra Acceleration ("스피커 반사시 더 가속", high elasticity boost)
+        const incomingSpeed = Math.hypot(pvx, pvy);
+        const boostedSpeed = Math.min(1680, Math.max(incomingSpeed * 1.55, 880));
+
+        // 3. Directional penalty: Deflect back towards the last hitter's own goal!
+        //    1P's goal is on the left (-X, x=0), 2P's goal is on the right (+X, x=TABLE_WIDTH).
+        let reboundDirX = hitterIs1P ? -Math.abs(sNx) : Math.abs(sNx);
+        if (Math.abs(reboundDirX) < 0.45) {
+          reboundDirX = hitterIs1P ? -0.7 : 0.7;
         }
+
+        let reboundDirY = sNy;
+        if (Math.abs(reboundDirY) < 0.2) {
+          reboundDirY = sDy >= 0 ? 0.35 : -0.35;
+        }
+
+        const dirLen = Math.hypot(reboundDirX, reboundDirY) || 1;
+        pvx = (reboundDirX / dirLen) * boostedSpeed;
+        pvy = (reboundDirY / dirLen) * boostedSpeed;
 
         events.push({
           type: 'SPEAKER',
           x: px,
           y: py,
-          speed: curSpeed,
+          speed: boostedSpeed,
           combo: rallyCount,
         });
       }
@@ -236,21 +248,38 @@ export function stepPuckPhysics(
           const isLeftSide = robot.tableX < TABLE_WIDTH / 2;
 
           if (isObstacle) {
-            // [시안(Cyan) 로봇 장애물]: 물리적 장애물처럼 360도 전방향으로 탄력 있게 튕겨냄 (이동 중이면 속도 전달)
+            // [REQ] "장애물 충돌시는 마지막 부딪친 퍽 주인이 불리하게 나오게"
             px = robot.tableX + nx * (minDist + 1.2);
             py = robot.tableY + ny * (minDist + 1.2);
 
-            const relVx = pvx - (robot.vx || 0);
-            const relVy = pvy - (robot.vy || 0);
-            const vDotN = relVx * nx + relVy * ny;
-            if (vDotN < 0) {
-              const restitution = 1.35;
-              pvx -= (1 + restitution) * vDotN * nx;
-              pvy -= (1 + restitution) * vDotN * ny;
-            } else {
-              pvx = nx * 560 + (robot.vx || 0) * 0.4;
-              pvy = ny * 560 + (robot.vy || 0) * 0.4;
+            const hitterIs1P = lastHitTeam === 'blue' || (lastHitTeam !== 'red' && pvx > 0);
+            const incomingSpeed = Math.hypot(pvx, pvy);
+            const obstacleBounceSpeed = Math.min(1550, Math.max(incomingSpeed * 1.25, 720));
+
+            // Deflect back towards the last hitter's own goal!
+            let reboundDirX = hitterIs1P ? -Math.abs(nx) : Math.abs(nx);
+            if (Math.abs(reboundDirX) < 0.45) {
+              reboundDirX = hitterIs1P ? -0.7 : 0.7;
             }
+
+            let reboundDirY = ny + (robot.vy ? robot.vy * 0.001 : 0);
+            if (Math.abs(reboundDirY) < 0.2) {
+              reboundDirY = dy >= 0 ? 0.35 : -0.35;
+            }
+
+            const dirLen = Math.hypot(reboundDirX, reboundDirY) || 1;
+            pvx = (reboundDirX / dirLen) * obstacleBounceSpeed;
+            pvy = (reboundDirY / dirLen) * obstacleBounceSpeed;
+
+            // Retain the last player hitter, but notify event as obstacle bounce
+            events.push({
+              type: 'ROBOT',
+              team: 'obstacle',
+              x: px,
+              y: py,
+              speed: obstacleBounceSpeed,
+            });
+            continue; // Obstacle handled; avoid paddle hit branch and avoid overwriting lastHitTeam
           } else if (isLeftSide) {
             // [1P 패들]: 왼쪽 골대 반대 방향인 오른쪽(+X)으로 무조건 밀어냄 (자책골 방지)
             if (nx < 0.2) {

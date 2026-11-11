@@ -2,7 +2,7 @@
   "name": "ar-robot-air-hotkey",
   "productName": "AR Robot air hotkey",
   "private": true,
-  "version": "1.7.3",
+  "version": "1.7.4",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {

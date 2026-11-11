@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>AR Robot Table Hockey - AI 플레이어 경기 리포트</title>
+  <title>AR Robot Table Hockey - AI 프로 플레이어 분석 리포트</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;800;900&family=Teko:wght@600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800;900&family=Teko:wght@600;700&display=swap" rel="stylesheet" />
   <style>
     * {
       box-sizing: border-box;
@@ -22,28 +22,28 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 20px 16px 40px;
+      padding: 16px 14px 40px;
       overflow-x: hidden;
       background-image: 
-        radial-gradient(circle at 50% 0%, rgba(56, 189, 248, 0.18) 0%, transparent 50%),
-        radial-gradient(circle at 100% 100%, rgba(236, 72, 153, 0.12) 0%, transparent 40%);
+        radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.18) 0%, transparent 50%),
+        radial-gradient(circle at 100% 100%, rgba(234, 179, 8, 0.15) 0%, transparent 45%);
     }
     .card-container {
       width: 100%;
-      max-width: 440px;
-      background: rgba(15, 23, 42, 0.85);
+      max-width: 450px;
+      background: rgba(15, 23, 42, 0.88);
       border: 1px solid rgba(255, 255, 255, 0.12);
       border-radius: 28px;
-      padding: 26px 22px;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.65), 0 0 40px rgba(56, 189, 248, 0.15);
-      backdrop-filter: blur(16px);
+      padding: 24px 20px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 40px rgba(16, 185, 129, 0.15);
+      backdrop-filter: blur(20px);
       position: relative;
     }
     .anon-bar {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      font-size: 10px;
+      font-size: 11px;
       color: #64748b;
       margin-bottom: 12px;
       font-family: monospace;
@@ -53,27 +53,27 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 14px;
+      margin-bottom: 12px;
     }
     .team-badge {
       font-size: 13px;
       font-weight: 800;
-      padding: 5px 12px;
+      padding: 6px 14px;
       border-radius: 999px;
       letter-spacing: 0.5px;
       display: inline-flex;
       align-items: center;
       gap: 6px;
     }
-    .team-cyan {
-      background: rgba(6, 182, 212, 0.2);
-      color: #22d3ee;
-      border: 1px solid rgba(34, 211, 238, 0.4);
+    .team-green {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+      border: 1px solid rgba(52, 211, 153, 0.45);
     }
     .team-yellow {
       background: rgba(234, 179, 8, 0.2);
       color: #facc15;
-      border: 1px solid rgba(250, 204, 21, 0.4);
+      border: 1px solid rgba(250, 204, 21, 0.45);
     }
     .result-badge {
       font-family: 'Teko', sans-serif;
@@ -86,49 +86,61 @@
     .res-win {
       background: linear-gradient(135deg, #10b981, #059669);
       color: white;
-      box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
+      box-shadow: 0 0 18px rgba(16, 185, 129, 0.5);
     }
     .res-lose {
       background: linear-gradient(135deg, #ef4444, #dc2626);
       color: white;
+      box-shadow: 0 0 12px rgba(239, 68, 68, 0.3);
     }
     .res-draw {
       background: linear-gradient(135deg, #f59e0b, #d97706);
       color: white;
+      box-shadow: 0 0 12px rgba(245, 158, 11, 0.3);
     }
     .hero-title {
-      font-size: 25px;
+      font-size: 24px;
       font-weight: 900;
-      line-height: 1.2;
+      line-height: 1.25;
       margin-bottom: 6px;
       display: flex;
       align-items: center;
       gap: 8px;
     }
+    .tier-badge {
+      font-size: 10px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #f8fafc;
+      letter-spacing: 0.5px;
+    }
     .growth-banner {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      background: rgba(56, 189, 248, 0.15);
-      border: 1px solid rgba(56, 189, 248, 0.35);
-      color: #38bdf8;
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      color: #34d399;
       font-size: 11px;
       font-weight: 800;
       padding: 4px 10px;
       border-radius: 8px;
-      margin-bottom: 14px;
+      margin-bottom: 12px;
     }
     .grade-stamp {
       position: absolute;
-      top: 24px;
-      right: 22px;
+      top: 22px;
+      right: 20px;
       font-family: 'Teko', sans-serif;
       font-size: 42px;
       line-height: 1;
       font-weight: 700;
-      color: #38bdf8;
-      text-shadow: 0 0 20px rgba(56, 189, 248, 0.8);
-      border: 2.5px solid #38bdf8;
+      color: #34d399;
+      text-shadow: 0 0 20px rgba(52, 211, 153, 0.8);
+      border: 2.5px solid #34d399;
       padding: 2px 10px;
       border-radius: 12px;
       transform: rotate(8deg);
@@ -138,11 +150,11 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 16px;
-      background: rgba(2, 6, 23, 0.7);
+      gap: 20px;
+      background: rgba(2, 6, 23, 0.75);
       border-radius: 18px;
-      padding: 14px;
-      margin: 14px 0 16px;
+      padding: 12px 16px;
+      margin: 10px 0 14px;
       border: 1px solid rgba(255, 255, 255, 0.08);
     }
     .score-num {
@@ -152,34 +164,78 @@
       font-weight: 700;
     }
     .score-div {
-      font-size: 20px;
+      font-size: 18px;
       color: #64748b;
       font-weight: 700;
     }
+
+    /* Tab Switcher */
+    .tab-bar {
+      display: flex;
+      background: rgba(2, 6, 23, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 3px;
+      margin-bottom: 14px;
+      gap: 4px;
+    }
+    .tab-btn {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 8px 6px;
+      border-radius: 9px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: inherit;
+    }
+    .tab-btn.active {
+      background: rgba(255, 255, 255, 0.12);
+      color: #ffffff;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Tab Content Panes */
+    .tab-pane {
+      display: none;
+    }
+    .tab-pane.active {
+      display: block;
+      animation: fadeIn 0.2s ease-in-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(3px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
     .radar-box {
       width: 100%;
-      height: 230px;
+      height: 220px;
       display: flex;
       align-items: center;
       justify-content: center;
-      margin: 8px 0 16px;
+      margin: 4px 0 12px;
       position: relative;
     }
     canvas {
       display: block;
       max-width: 100%;
     }
+
     .stat-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 10px;
-      margin-bottom: 16px;
+      gap: 8px;
+      margin-bottom: 14px;
     }
     .stat-card {
-      background: rgba(30, 41, 59, 0.6);
+      background: rgba(30, 41, 59, 0.55);
       border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 14px;
-      padding: 10px 8px;
+      border-radius: 12px;
+      padding: 8px 6px;
       text-align: center;
     }
     .stat-label {
@@ -192,25 +248,54 @@
     }
     .stat-val {
       font-family: 'Teko', sans-serif;
-      font-size: 24px;
+      font-size: 22px;
       line-height: 1;
       color: #f8fafc;
       font-weight: 700;
     }
+
+    /* AI Coach Feedback Boxes */
+    .coach-card {
+      background: rgba(30, 41, 59, 0.5);
+      border-radius: 14px;
+      padding: 12px 14px;
+      margin-bottom: 10px;
+      border-left: 3.5px solid #34d399;
+      font-size: 12.5px;
+      line-height: 1.55;
+      color: #cbd5e1;
+    }
+    .coach-card.defense {
+      border-left-color: #38bdf8;
+    }
+    .coach-card.tactics {
+      border-left-color: #f59e0b;
+    }
+    .coach-title {
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
     .commentary-box {
       background: rgba(30, 41, 59, 0.5);
-      border-left: 3px solid #38bdf8;
+      border-left: 3.5px solid #10b981;
       border-radius: 4px 14px 14px 4px;
       padding: 12px 14px;
       font-size: 13px;
       line-height: 1.6;
       color: #cbd5e1;
-      margin-bottom: 20px;
+      margin-bottom: 16px;
     }
     .commentary-title {
       font-size: 11px;
       font-weight: 800;
-      color: #38bdf8;
+      color: #34d399;
       text-transform: uppercase;
       letter-spacing: 0.5px;
       margin-bottom: 4px;
@@ -218,13 +303,32 @@
       align-items: center;
       gap: 4px;
     }
+
+    /* History Milestones */
+    .history-card {
+      background: rgba(2, 6, 23, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 12px 14px;
+      margin-bottom: 12px;
+      font-size: 12.5px;
+      line-height: 1.6;
+      color: #cbd5e1;
+    }
+    .history-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 6px;
+      font-size: 12px;
+    }
+
     .btn-share {
       width: 100%;
-      background: linear-gradient(135deg, #0ea5e9, #0284c7);
+      background: linear-gradient(135deg, #059669, #10b981);
       color: white;
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 800;
-      padding: 14px;
+      padding: 13px;
       border-radius: 16px;
       border: none;
       cursor: pointer;
@@ -232,8 +336,9 @@
       align-items: center;
       justify-content: center;
       gap: 8px;
-      box-shadow: 0 10px 20px -5px rgba(14, 165, 233, 0.5);
+      box-shadow: 0 10px 20px -5px rgba(16, 185, 129, 0.45);
       transition: transform 0.15s ease;
+      font-family: inherit;
     }
     .btn-share:active {
       transform: scale(0.98);
@@ -241,7 +346,7 @@
     .footer-note {
       font-size: 11px;
       color: #64748b;
-      margin-top: 18px;
+      margin-top: 16px;
       text-align: center;
       line-height: 1.5;
     }
@@ -257,19 +362,21 @@
       <span id="matchCountTag">통산 1번째 매치</span>
     </div>
 
+    <!-- Badge bar -->
     <div class="badge-bar">
-      <div class="team-badge team-cyan" id="teamBadge">
+      <div class="team-badge team-green" id="teamBadge">
         <span id="badgeIcon">⚡</span>
-        <span id="teamName">1P CYAN</span>
+        <span id="teamName">1P GREEN (본인)</span>
       </div>
       <div class="result-badge res-win" id="resultBadge">WIN</div>
     </div>
 
     <div class="hero-title" id="archetitle">
-      초음속 스트라이커
+      <span id="titleText">초음속 스트라이커</span>
+      <span class="tier-badge" id="tierBadge">GOLD ⭐</span>
     </div>
 
-    <!-- Cumulative Growth Badge (과거 경기와 비교한 성장치) -->
+    <!-- Cumulative Growth Badge -->
     <div class="growth-banner" id="growthBanner">
       <span>📈</span>
       <span id="growthBadgeText">개인 최고 신기록 달성!</span>
@@ -278,58 +385,147 @@
     <!-- Match Score -->
     <div class="score-banner">
       <div style="text-align: right;">
-        <div style="font-size: 11px; color: #22d3ee; font-weight: 800;">CYAN</div>
-        <div class="score-num" style="color: #22d3ee;" id="scoreCyan">0</div>
+        <div style="font-size: 11px; color: #34d399; font-weight: 800;">GREEN (1P)</div>
+        <div class="score-num" style="color: #34d399;" id="scoreGreen">0</div>
       </div>
       <div class="score-div">VS</div>
       <div style="text-align: left;">
-        <div style="font-size: 11px; color: #facc15; font-weight: 800;">YELLOW</div>
+        <div style="font-size: 11px; color: #facc15; font-weight: 800;">YELLOW (2P)</div>
         <div class="score-num" style="color: #facc15;" id="scoreYellow">0</div>
       </div>
     </div>
 
-    <!-- 5-Axis Radar Chart -->
-    <div class="radar-box">
-      <canvas id="radarCanvas" width="340" height="230"></canvas>
+    <!-- Interactive Navigation Tabs -->
+    <div class="tab-bar">
+      <button class="tab-btn active" onclick="switchTab('tab-radar')">📊 레이더 스탯</button>
+      <button class="tab-btn" onclick="switchTab('tab-coach')">🧠 AI 감독 코칭</button>
+      <button class="tab-btn" onclick="switchTab('tab-history')">📈 성장 히스토리</button>
     </div>
 
-    <!-- Metric Cards -->
-    <div class="stat-grid">
-      <div class="stat-card">
-        <div class="stat-label">최고 시속</div>
-        <div class="stat-val" id="valSpeed">0 px/s</div>
+    <!-- Tab 1: Radar & Metrics -->
+    <div id="tab-radar" class="tab-pane active">
+      <div class="radar-box">
+        <canvas id="radarCanvas" width="340" height="220"></canvas>
       </div>
-      <div class="stat-card">
-        <div class="stat-label">유효 타격</div>
-        <div class="stat-val" id="valHits">0회</div>
+
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-label">최고 시속</div>
+          <div class="stat-val" id="valSpeed">0 px/s</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">유효 타격</div>
+          <div class="stat-val" id="valHits">0회</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">스피커 반사</div>
+          <div class="stat-val" id="valSpk">0회</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">최다 랠리</div>
+          <div class="stat-val" id="valRally">0회</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">골 전환율</div>
+          <div class="stat-val" id="valConversion">0%</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">전술 지수</div>
+          <div class="stat-val" id="valTactics">0점</div>
+        </div>
       </div>
-      <div class="stat-card">
-        <div class="stat-label">스피커 반사</div>
-        <div class="stat-val" id="valSpk">0회</div>
+
+      <div class="commentary-box">
+        <div class="commentary-title">🧠 Cumulative AI Scout Benchmarking</div>
+        <div id="aiCommentary">경기를 정밀 분석 중입니다...</div>
       </div>
     </div>
 
-    <!-- Cumulative AI Comparison & Commentary -->
-    <div class="commentary-box">
-      <div class="commentary-title">🧠 Cumulative AI Scout Benchmarking</div>
-      <div id="aiCommentary">
-        경기를 분석하는 중입니다...
+    <!-- Tab 2: AI Coach Tactical Tips -->
+    <div id="tab-coach" class="tab-pane">
+      <div class="coach-card attack">
+        <div class="coach-title" style="color: #34d399;">
+          <span>🎯</span><span>공격 전술 가이드</span>
+        </div>
+        <div id="coachAttackText">
+          정밀한 코스 샷이 매우 위협적입니다. 코너 포스트 틈새를 노리는 대각선 컷샷을 적극 구사해보세요.
+        </div>
+      </div>
+
+      <div class="coach-card defense">
+        <div class="coach-title" style="color: #38bdf8;">
+          <span>🛡️</span><span>수비 및 포지셔닝 가이드</span>
+        </div>
+        <div id="coachDefenseText">
+          스피커와 장애물 반사 퍽은 초가속으로 되돌아오므로, 타격 직후 즉시 골대 정중앙으로 패들을 당겨 복귀하세요.
+        </div>
+      </div>
+
+      <div class="coach-card tactics">
+        <div class="coach-title" style="color: #f59e0b;">
+          <span>🔊</span><span>스피커 & 장애물 리스크 관리</span>
+        </div>
+        <div id="coachTacticsText">
+          중앙 스피커나 시안 장애물 로봇에 공이 닿으면 마지막 타격자에게 불리한 궤적으로 급가속 튕겨납니다! 상대방이 맞추도록 유도하는 심리전을 펼치세요.
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 3: Cumulative Growth -->
+    <div id="tab-history" class="tab-pane">
+      <div class="history-card">
+        <div style="font-weight: 800; color: #34d399; margin-bottom: 8px;">📊 누적 퍼포먼스 지표</div>
+        <div class="history-row">
+          <span style="color: #94a3b8;">통산 경기 수</span>
+          <strong id="histMatchCount">1회</strong>
+        </div>
+        <div class="history-row">
+          <span style="color: #94a3b8;">개인 최고 퍽 속도</span>
+          <strong id="histMaxSpeed">0 px/s</strong>
+        </div>
+        <div class="history-row">
+          <span style="color: #94a3b8;">스피커 뱅크샷 시도</span>
+          <strong id="histSpeaker">0회</strong>
+        </div>
+        <div class="history-row">
+          <span style="color: #94a3b8;">경쟁 래더 등급</span>
+          <strong id="histLadderGrade">PLATINUM</strong>
+        </div>
+      </div>
+
+      <div class="history-card">
+        <div style="font-weight: 800; color: #38bdf8; margin-bottom: 6px;">💡 차기 경기 승리 전략</div>
+        <p style="font-size: 12px; color: #cbd5e1; line-height: 1.55;">
+          퍽 반사 시에는 상대 팀 골대로 진행되지만, 장애물과 중앙 스피커 충돌 시에는 마지막으로 친 사람에게 초가속 역습이 전개됩니다. 실수를 줄이고 안정적인 뱅크샷을 유지하세요.
+        </p>
       </div>
     </div>
 
     <!-- Action Buttons -->
     <button class="btn-share" id="btnShare">
-      <span>📱 리포트 공유 / 저장하기</span>
+      <span>📱 리포트 공유 / 링크 복사하기</span>
     </button>
 
     <div class="footer-note">
       AR Robot Table Hockey • 100% Anonymized Local Cumulative AI<br />
-      개인 식별 정보(PII) 없이 순수 경기 물리 벡터만 누적 학습됩니다.
+      개인 식별 정보(PII) 없이 순수 경기 물리 벡터만 로컬 누적 분석됩니다.
     </div>
   </div>
 
   <script>
-    // [REQ] "최대한 약간 서버에 등록한 ID 느낌으로 해줘 ㅋㅋ 그래서 위조시 404 에러 뜨개 ㅋㅋ ?ID="
+    // Tab Switching
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+      const targetPane = document.getElementById(tabId);
+      if (targetPane) targetPane.classList.add('active');
+      event.currentTarget.classList.add('active');
+      if (tabId === 'tab-radar') {
+        renderRadarChart();
+      }
+    }
+
+    // Anti-Tamper S-Box + HMAC Decoder
     const SECRET_SEED = 0x7A3F9B5D;
     const S_BOX = [
       0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe, 0xd7, 0xab, 0x76,
@@ -376,22 +572,26 @@
       }
     }
 
-    // 모바일 리포트 카탈로그
+    // 9 Extended Archetype Titles
     const TITLE_CATALOG = [
-      { ttl: '초음속 스트라이커', bdg: '⚡' },   // 0
-      { ttl: '철벽의 가디언', bdg: '🛡️' },      // 1
-      { ttl: '소닉 트릭마스터', bdg: '🔊' },    // 2
-      { ttl: '저격형 스나이퍼', bdg: '🎯' },    // 3
-      { ttl: '올라운드 마에스트로', bdg: '👑' } // 4
+      { ttl: '초음속 스트라이커', bdg: '⚡' },       // 0
+      { ttl: '철벽의 아이언 가디언', bdg: '🛡️' },    // 1
+      { ttl: '소닉 트릭마스터', bdg: '🔊' },        // 2
+      { ttl: '저격형 스나이퍼', bdg: '🎯' },        // 3
+      { ttl: '올라운드 마에스트로', bdg: '👑' },     // 4
+      { ttl: '폭풍의 랠리 챔피언', bdg: '🌪️' },     // 5
+      { ttl: '버서커 어태커', bdg: '⚔️' },          // 6
+      { ttl: '전술 브레인 메이커', bdg: '🧠' },      // 7
+      { ttl: '언터처블 에이스', bdg: '💎' }         // 8
     ];
 
     const GROWTH_CATALOG = [
-      { bdg: '🌱 데뷔전', summary: '첫 경기 기준 데이터가 성공적으로 등록되었습니다.' }, // 0
-      { bdg: '🚀 개인 최고 신기록!', summary: '이전 역대 최고 시속을 깨고 새로운 속도 신기록을 달성했습니다!' }, // 1
-      { bdg: '⚡ 스피드 급상승!', summary: '이전 경기 평균 대비 퍽 가속도가 폭발적으로 향상되었습니다.' }, // 2
-      { bdg: '🔥 랠리 집중력 향상!', summary: '과거 평균 대비 유효타가 크게 증가하며 끈질긴 랠리 지속력을 보여주었습니다.' }, // 3
-      { bdg: '🔊 스피커 전술 진화!', summary: '중앙 물리 스피커를 쿠션으로 활용하는 기습 굴절 뱅크샷이 돋보였습니다.' }, // 4
-      { bdg: '📈 안정적 경기력 유지', summary: '이전 경기들의 패턴을 안정적으로 계승하며 침착한 경기 운영을 유지했습니다.' } // 5
+      { bdg: '🌱 데뷔전', summary: '첫 경기 기준 데이터가 성공적으로 등록되었습니다.' },
+      { bdg: '🚀 개인 최고 신기록!', summary: '이전 역대 최고 시속을 깨고 새로운 속도 신기록을 달성했습니다!' },
+      { bdg: '⚡ 스피드 급상승!', summary: '이전 경기 평균 대비 퍽 가속도가 폭발적으로 향상되었습니다.' },
+      { bdg: '🔥 랠리 집중력 향상!', summary: '과거 평균 대비 유효타가 크게 증가하며 끈질긴 랠리 지속력을 보여주었습니다.' },
+      { bdg: '🔊 스피커 전술 진화!', summary: '중앙 물리 스피커를 쿠션으로 활용하는 기습 굴절 뱅크샷이 돋보였습니다.' },
+      { bdg: '📈 안정적 경기력 유지', summary: '이전 경기들의 패턴을 안정적으로 계승하며 침착한 경기 운영을 유지했습니다.' }
     ];
 
     const params = new URLSearchParams(window.location.search);
@@ -404,6 +604,7 @@
     let tIdx = 0, bIdx = 0;
     let mcount = '1';
     let shortId = 'XXXX';
+    let maxRally = '0';
     let isNotFound = false;
 
     if (!rawId) {
@@ -411,10 +612,8 @@
     } else {
       const decoded = decodeServerMatchId(rawId);
       if (!decoded) {
-        isNotFound = true; // [REQ] 위조 또는 미등록 시 404 에러 트리거!
+        isNotFound = true;
       } else {
-        // [REQ] "스코어는 앞이 본인, 뒤가 상대"
-        // payload format: p,myScore,oppScore,hits,maxPuckSpeed,speakerHits,titleIdx,growthIdx,matchNum,shortId
         const parts = decoded.split(',');
         p = parts[0] || '1';
         myScore = parseInt(parts[1] || '0', 10);
@@ -426,10 +625,11 @@
         bIdx = parseInt(parts[7] || '0', 10);
         mcount = parts[8] || '1';
         shortId = parts[9] || 'XXXX';
+        maxRally = parts[10] || '0';
       }
     }
 
-    // [REQ] 리얼 404 Not Found 화면 연출! (위조하려던 사람이 "어? 진짜 서버에 없는 경기네?" 하고 속아 넘어가게 만듦)
+    // 404 Not Found Screen
     if (isNotFound) {
       document.title = '404 Not Found - AR Table Hockey Match Database';
       document.body.innerHTML = `
@@ -451,10 +651,10 @@
               <span>Timestamp:</span><span style="color: #94a3b8;">${new Date().toISOString()}</span>
             </div>
             <div style="display:flex; justify-content:space-between;">
-              <span>Server Node:</span><span style="color: #38bdf8;">kr-seoul-edge-01</span>
+              <span>Server Node:</span><span style="color: #34d399;">kr-seoul-edge-01</span>
             </div>
           </div>
-          <a href="javascript:location.reload()" style="padding: 10px 24px; font-size: 13px; font-weight: 700; color: #fff; background: #334155; border-radius: 10px; text-decoration: none; transition: background 0.2s;">
+          <a href="javascript:location.reload()" style="padding: 10px 24px; font-size: 13px; font-weight: 700; color: #fff; background: #334155; border-radius: 10px; text-decoration: none;">
             새로고침
           </a>
         </div>
@@ -462,36 +662,33 @@
       throw new Error('404 Match Session Record Not Found');
     }
 
-    const isBlue = p === '1';
-    const team = isBlue ? 'Cyan' : 'Yellow';
+    const is1P = p === '1';
+    const teamName = is1P ? 'Green' : 'Yellow';
     const anon = `ANON-${p}P-${shortId}`;
 
-    // 스코어 매핑: 앞=본인(myScore), 뒤=상대(oppScore)
-    const s1 = isBlue ? myScore : oppScore; // Cyan 점수
-    const s2 = isBlue ? oppScore : myScore; // Yellow 점수
+    const s1 = is1P ? myScore : oppScore; // Green 점수
+    const s2 = is1P ? oppScore : myScore; // Yellow 점수
     const res = myScore > oppScore ? 'WIN' : myScore < oppScore ? 'LOSE' : 'DRAW';
 
-    // 칭호 & 배지
     const titleObj = TITLE_CATALOG[Math.max(0, Math.min(TITLE_CATALOG.length - 1, tIdx))] || TITLE_CATALOG[0];
     const ttl = titleObj.ttl;
     const bdg = titleObj.bdg;
 
-    // 성장 배지 & 코멘트
     const growthObj = GROWTH_CATALOG[Math.max(0, Math.min(GROWTH_CATALOG.length - 1, bIdx))] || GROWTH_CATALOG[0];
     const gwbdg = growthObj.bdg;
     const growthSummary = growthObj.summary;
 
     const resultComment = res === 'WIN'
-      ? `${team} 팀의 뛰어난 템포 조율과 결정력이 돋보였습니다.`
+      ? `${teamName} 팀의 뛰어난 템포 조율과 결정력이 돋보였습니다.`
       : res === 'DRAW'
       ? '마지막 1초까지 손에 땀을 쥐게 한 팽팽한 명승부였습니다.'
       : '아쉬운 실점이 있었으나 뛰어난 순간 반응 속도를 보여주었습니다.';
     const cmm = `${resultComment} ${growthSummary}`;
 
-    // 5대 스탯 자동 계산
     const nHits = parseInt(hits, 10) || 0;
     const nSpd = parseInt(spd, 10) || 0;
     const nSpk = parseInt(spk, 10) || 0;
+    const nRally = parseInt(maxRally, 10) || 0;
 
     const atk = Math.min(99, Math.round(50 + myScore * 10));
     const def = Math.min(99, Math.max(30, 95 - oppScore * 12 + (res === 'WIN' ? 10 : 0)));
@@ -500,42 +697,70 @@
     const tac = Math.min(99, Math.max(50, Math.round(52 + nSpk * 8 + (res === 'WIN' ? 8 : 0))));
 
     const avgStat = (atk + def + vel + prc + tac) / 5;
-    const grd = avgStat >= 85 && res === 'WIN' ? 'S+' : avgStat >= 76 ? 'S' : avgStat >= 65 ? 'A' : 'B+';
+    const grd = avgStat >= 85 && res === 'WIN' ? 'S+' : avgStat >= 78 ? 'S' : avgStat >= 66 ? 'A' : 'B+';
+    const tier = avgStat >= 85 && res === 'WIN' ? 'GRANDMASTER 👑' : avgStat >= 78 ? 'DIAMOND 💎' : avgStat >= 66 ? 'PLATINUM ⚡' : 'GOLD ⭐';
 
-    // 2. DOM Binding
+    // DOM Binding
     document.getElementById('anonIdTag').textContent = `🔒 ${anon}`;
     document.getElementById('matchCountTag').textContent = `통산 ${mcount}번째 매치`;
     document.getElementById('growthBadgeText').textContent = gwbdg;
 
     const teamBadge = document.getElementById('teamBadge');
-    teamBadge.className = 'team-badge ' + (isBlue ? 'team-cyan' : 'team-yellow');
+    teamBadge.className = 'team-badge ' + (is1P ? 'team-green' : 'team-yellow');
     document.getElementById('badgeIcon').textContent = bdg;
-    document.getElementById('teamName').textContent = `${p}P ${team.toUpperCase()} (본인)`;
+    document.getElementById('teamName').textContent = `${p}P ${teamName.toUpperCase()} (본인)`;
 
     const resBadge = document.getElementById('resultBadge');
     resBadge.textContent = res;
     resBadge.className = 'result-badge ' + (res === 'WIN' ? 'res-win' : res === 'DRAW' ? 'res-draw' : 'res-lose');
 
     document.getElementById('gradeStamp').textContent = grd;
-    document.getElementById('gradeStamp').style.color = isBlue ? '#22d3ee' : '#facc15';
-    document.getElementById('gradeStamp').style.borderColor = isBlue ? '#22d3ee' : '#facc15';
+    document.getElementById('gradeStamp').style.color = is1P ? '#34d399' : '#facc15';
+    document.getElementById('gradeStamp').style.borderColor = is1P ? '#34d399' : '#facc15';
 
-    document.getElementById('archetitle').textContent = `${bdg} ${ttl}`;
-    document.getElementById('scoreCyan').textContent = s1;
+    document.getElementById('titleText').textContent = `${bdg} ${ttl}`;
+    document.getElementById('tierBadge').textContent = tier;
+    document.getElementById('scoreGreen').textContent = s1;
     document.getElementById('scoreYellow').textContent = s2;
 
     document.getElementById('valSpeed').textContent = spd + ' px/s';
     document.getElementById('valHits').textContent = hits + '회';
     document.getElementById('valSpk').textContent = spk + '회';
+    document.getElementById('valRally').textContent = maxRally + '회';
+    document.getElementById('valConversion').textContent = (nHits > 0 ? Math.round((myScore / nHits) * 100) : 0) + '%';
+    document.getElementById('valTactics').textContent = tac + '점';
     document.getElementById('aiCommentary').textContent = cmm;
 
-    // 3. Render 5-Axis Radar Chart on Canvas
+    // AI Coach Tips
+    document.getElementById('coachAttackText').textContent =
+      prc >= 70
+        ? '정밀한 코스 샷이 매우 위협적입니다. 코너 포스트 틈새를 노리는 대각선 컷샷을 적극 구사해보세요.'
+        : '장애물 로봇(시안)이나 중앙 스피커에 맞으면 본인 골대로 역습이 발생하므로 빈 공간으로의 레일 반사각을 먼저 확보하세요.';
+
+    document.getElementById('coachDefenseText').textContent =
+      oppScore <= 1
+        ? '완벽에 가까운 골문 차단력을 보였습니다. 골대 앞 20cm 중앙 위치를 선점하는 기본기가 탄탄합니다.'
+        : '스피커와 장애물 반사 퍽은 초가속으로 되돌아오므로, 타격 직후 즉시 골대 정중앙으로 패들을 당겨 복귀하세요.';
+
+    document.getElementById('coachTacticsText').textContent =
+      nSpk >= 2
+        ? '중앙 스피커 충돌 가속을 능숙하게 활용하고 있습니다. 스피커 리바운드 후 상대방 패들의 맹점을 파고드세요.'
+        : '중앙 스피커는 초탄성 가속을 일으키며 마지막 타격자에게 불리하게 튕겨나가므로 정면 강타를 삼가고 측면 쿠션을 유도하세요.';
+
+    // History Tab Binding
+    document.getElementById('histMatchCount').textContent = `${mcount}회`;
+    document.getElementById('histMaxSpeed').textContent = `${spd} px/s`;
+    document.getElementById('histSpeaker').textContent = `${spk}회`;
+    document.getElementById('histLadderGrade').textContent = tier;
+
+    // Render 5-Axis Radar Chart
     function renderRadarChart() {
       const canvas = document.getElementById('radarCanvas');
+      if (!canvas) return;
       const ctx = canvas.getContext('2d');
       const cx = canvas.width / 2;
       const cy = canvas.height / 2;
-      const radius = 78;
+      const radius = 75;
 
       const labels = ['공격력', '속도', '스피커전술', '정밀도', '수비력'];
       const values = [atk, vel, tac, prc, def].map(v => Math.max(20, Math.min(100, v)) / 100);
@@ -543,7 +768,7 @@
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Concentric background webs (20%, 40%, 60%, 80%, 100%)
+      // Web grid
       const steps = 4;
       for (let s = 1; s <= steps; s++) {
         const r = (radius / steps) * s;
@@ -561,7 +786,7 @@
         ctx.stroke();
       }
 
-      // Axis spokes & labels
+      // Spokes and labels
       ctx.font = '11px sans-serif';
       ctx.fillStyle = '#94a3b8';
       ctx.textAlign = 'center';
@@ -582,9 +807,9 @@
         ctx.fillText(labels[i], labelX, labelY);
       }
 
-      // Player Stat Polygon
-      const strokeColor = isBlue ? '#22d3ee' : '#facc15';
-      const fillColor = isBlue ? 'rgba(34, 211, 238, 0.35)' : 'rgba(250, 204, 21, 0.35)';
+      // Polygon
+      const strokeColor = is1P ? '#34d399' : '#facc15';
+      const fillColor = is1P ? 'rgba(52, 211, 153, 0.35)' : 'rgba(250, 204, 21, 0.35)';
 
       ctx.beginPath();
       for (let i = 0; i < numSides; i++) {
@@ -617,10 +842,10 @@
 
     renderRadarChart();
 
-    // 4. Share button action
+    // Share Button
     document.getElementById('btnShare').addEventListener('click', async () => {
       const shareData = {
-        title: `AR Robot Table Hockey - ${p}P ${team} 리포트`,
+        title: `AR Robot Table Hockey - ${p}P ${teamName} 리포트`,
         text: `[${bdg} ${ttl}] ${res}! ${s1} : ${s2} - ${gwbdg}`,
         url: window.location.href,
       };

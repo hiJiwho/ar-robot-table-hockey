@@ -99,9 +99,16 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
           <div className="p-3.5 bg-slate-950/90 rounded-2xl border border-emerald-500/40 flex flex-col items-center text-center space-y-2">
             <div className="flex items-center justify-between w-full px-1">
               <span className="text-xs font-extrabold text-emerald-400">1P Green 리포트</span>
-              <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800/60 font-bold">
-                {blueReport?.grade || 'S'}
-              </span>
+              <div className="flex items-center gap-1">
+                {blueReport?.tierBadge && (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 font-bold">
+                    {blueReport.tierBadge}
+                  </span>
+                )}
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800/60 font-bold">
+                  {blueReport?.grade || 'S'}
+                </span>
+              </div>
             </div>
 
             <div className="text-xs font-black text-slate-200">
@@ -145,9 +152,16 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
           <div className="p-3.5 bg-slate-950/90 rounded-2xl border border-yellow-500/40 flex flex-col items-center text-center space-y-2">
             <div className="flex items-center justify-between w-full px-1">
               <span className="text-xs font-extrabold text-yellow-400">2P Yellow 리포트</span>
-              <span className="text-[11px] px-2 py-0.5 rounded-full bg-yellow-950 text-yellow-300 border border-yellow-800/60 font-bold">
-                {redReport?.grade || 'S'}
-              </span>
+              <div className="flex items-center gap-1">
+                {redReport?.tierBadge && (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 font-bold">
+                    {redReport.tierBadge}
+                  </span>
+                )}
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-yellow-950 text-yellow-300 border border-yellow-800/60 font-bold">
+                  {redReport?.grade || 'S'}
+                </span>
+              </div>
             </div>
 
             <div className="text-xs font-black text-slate-200">

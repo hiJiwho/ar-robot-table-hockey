@@ -22,12 +22,19 @@ export interface AIPlayerReport {
   hits: number;
   maxSpeed: number;
   speakerHits: number;
+  maxRally: number;
   title: string;
   badge: string;
+  tierBadge: string;
   grade: 'S+' | 'S' | 'A' | 'B+';
   matchCount: number;
   growthBadge: string;
   growthSummary: string;
+  coachTips: {
+    attack: string;
+    defense: string;
+    tactics: string;
+  };
   radar: {
     attack: number;
     defense: number;
@@ -126,6 +133,7 @@ export function encodeServerMatchId(payload: string): string {
   }
   return 'REC-' + chunks.join('-');
 }
+
 export function generateAIPlayerReport(
   player: 'blue' | 'red',
   score: MatchScore,
@@ -140,6 +148,7 @@ export function generateAIPlayerReport(
   const totalHits = myHits + oppHits;
   const maxPuckSpeed = Math.round(stats.maxPuckSpeed || 0);
   const speakerHits = stats.speakerHits || 0;
+  const maxRally = stats.maxRally || stats.currentRally || 0;
 
   const result: 'WIN' | 'LOSE' | 'DRAW' =
     myScore > oppScore ? 'WIN' : myScore < oppScore ? 'LOSE' : 'DRAW';
@@ -161,42 +170,65 @@ export function generateAIPlayerReport(
   // 5. Tactics score (0..100)
   const tactics = Math.min(99, Math.max(50, Math.round(52 + speakerHits * 8 + (result === 'WIN' ? 8 : 0))));
 
-  // Classify AI Archetype Title & Compact Numeric Index
+  // Expanded AI Archetype Titles (0..8)
   let titleIdx = 4; // 올라운드 마에스트로
   let title = '올라운드 마에스트로';
   let badge = '👑';
-  if (speed >= 82) {
+  if (result === 'WIN' && myScore - oppScore >= 3 && oppScore === 0) {
+    titleIdx = 8;
+    title = '언터처블 에이스';
+    badge = '💎';
+  } else if (speed >= 82) {
     titleIdx = 0;
     title = '초음속 스트라이커';
     badge = '⚡';
   } else if (defense >= 80 && oppScore <= 1) {
     titleIdx = 1;
-    title = '철벽의 가디언';
+    title = '철벽의 아이언 가디언';
     badge = '🛡️';
   } else if (speakerHits >= 2) {
     titleIdx = 2;
     title = '소닉 트릭마스터';
     badge = '🔊';
+  } else if (maxRally >= 6) {
+    titleIdx = 5;
+    title = '폭풍의 랠리 챔피언';
+    badge = '🌪️';
+  } else if (myHits >= 18) {
+    titleIdx = 6;
+    title = '버서커 어태커';
+    badge = '⚔️';
+  } else if (tactics >= 75) {
+    titleIdx = 7;
+    title = '전술 브레인 메이커';
+    badge = '🧠';
   } else if (attack >= 78) {
     titleIdx = 3;
     title = '저격형 스나이퍼';
     badge = '🎯';
   }
 
-  // Calculate Overall Grade
+  // Calculate Overall Grade & Competitive Tier
   const avgStat = (attack + defense + speed + precision + tactics) / 5;
   let grade: 'S+' | 'S' | 'A' | 'B+' = 'B+';
-  if (avgStat >= 85 && result === 'WIN') grade = 'S+';
-  else if (avgStat >= 76) grade = 'S';
-  else if (avgStat >= 65) grade = 'A';
+  let tierBadge = 'GOLD ⭐';
+  if (avgStat >= 85 && result === 'WIN') {
+    grade = 'S+';
+    tierBadge = 'GRANDMASTER 👑';
+  } else if (avgStat >= 78) {
+    grade = 'S';
+    tierBadge = 'DIAMOND 💎';
+  } else if (avgStat >= 66) {
+    grade = 'A';
+    tierBadge = 'PLATINUM ⚡';
+  }
 
   // -------------------------------------------------------------------------
-  // [NEW] Cumulative Online Learning & Benchmarking (이때까지 경기와 비교)
+  // Cumulative Online Learning & Benchmarking
   // -------------------------------------------------------------------------
   const history = loadAnonymousHistory(player);
   const matchNum = history.totalMatches + 1;
 
-  // Calculate average of previous matches
   const prevAvgSpeed =
     history.recentSpeeds.length > 0
       ? Math.round(history.recentSpeeds.reduce((a, b) => a + b, 0) / history.recentSpeeds.length)
@@ -252,6 +284,22 @@ export function generateAIPlayerReport(
   };
   saveAnonymousHistory(player, updatedHistory);
 
+  // [NEW] AI Tactical Coach Tips (공격 / 수비 / 전술 맞춤형 원포인트 레슨)
+  const coachTips = {
+    attack:
+      precision >= 70
+        ? '정밀한 코스 샷이 매우 위협적입니다. 코너 포스트 틈새를 노리는 대각선 컷샷을 적극 구사해보세요.'
+        : '장애물 로봇(시안)이나 중앙 스피커에 맞으면 본인 골대로 역습이 발생하므로 빈 공간으로의 레일 반사각을 먼저 확보하세요.',
+    defense:
+      oppScore <= 1
+        ? '완벽에 가까운 골문 차단력을 보였습니다. 골대 앞 20cm 중앙 위치를 선점하는 기본기가 탄탄합니다.'
+        : '스피커와 장애물 반사 퍽은 초가속으로 되돌아오므로, 타격 직후 즉시 골대 정중앙으로 패들을 당겨 복귀하세요.',
+    tactics:
+      speakerHits >= 2
+        ? '중앙 스피커 충돌 가속을 능숙하게 활용하고 있습니다. 스피커 리바운드 후 상대방 패들의 맹점을 파고드세요.'
+        : '중앙 스피커는 초탄성 가속을 일으키며 마지막 타격자에게 불리하게 튕겨나가므로 정면 강타를 삼가고 측면 쿠션을 유도하세요.',
+  };
+
   // Personalized Match Commentary
   const commentaries: string[] = [];
   if (result === 'WIN') {
@@ -265,13 +313,11 @@ export function generateAIPlayerReport(
 
   const summary = commentaries.join(' ');
 
-  // [REQ] "스코어는 앞이 본인, 뒤가 상대? + 쿼터스트링 ID 를 다 섞어서 조작 불가능하게 해줘"
-  // 스코어 순서: 앞=본인점수(myScore), 뒤=상대점수(oppScore)
-  // Secret Key 기반 XOR + Checksum 암호화 토큰 (단 42자) -> 위변조 100% 차단 & 초경량 굵은 도트 QR 유지
+  // Secret Key 기반 XOR + Checksum 암호화 토큰
   const baseUrl = customBaseUrl || DEFAULT_GITHUB_PAGES_BASE;
   const shortId = history.anonId.split('-').pop() || '0000';
   const pCode = isBlue ? '1' : '2';
-  const payload = `${pCode},${myScore},${oppScore},${myHits},${maxPuckSpeed},${speakerHits},${titleIdx},${growthIdx},${matchNum},${shortId}`;
+  const payload = `${pCode},${myScore},${oppScore},${myHits},${maxPuckSpeed},${speakerHits},${titleIdx},${growthIdx},${matchNum},${shortId},${maxRally}`;
   const matchSessionId = encodeServerMatchId(payload);
   const reportUrl = `${baseUrl}?ID=${matchSessionId}`;
 
@@ -285,12 +331,15 @@ export function generateAIPlayerReport(
     hits: myHits,
     maxSpeed: maxPuckSpeed,
     speakerHits,
+    maxRally,
     title,
     badge,
+    tierBadge,
     grade,
     matchCount: matchNum,
     growthBadge,
     growthSummary,
+    coachTips,
     radar: { attack, defense, speed, precision, tactics },
     summary,
     reportUrl,

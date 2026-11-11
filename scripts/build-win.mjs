@@ -38,10 +38,11 @@ fs.mkdirSync(resourcesAppDir, { recursive: true });
 fs.cpSync(path.join(rootDir, 'dist'), path.join(resourcesAppDir, 'dist'), { recursive: true });
 fs.cpSync(path.join(rootDir, 'electron'), path.join(resourcesAppDir, 'electron'), { recursive: true });
 
+const rootPkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf-8'));
 const appPackageJson = {
   name: 'ar-robot-air-hotkey',
   productName: 'AR Robot air hotkey',
-  version: '1.6.1',
+  version: rootPkg.version || '1.7.4',
   main: 'electron/main.cjs',
 };
 fs.writeFileSync(

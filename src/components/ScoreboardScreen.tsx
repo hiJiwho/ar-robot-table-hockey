@@ -157,9 +157,9 @@ export const ScoreboardScreen: React.FC = () => {
   const currentRally = puckInfo.rallyCount ?? stats.currentRally ?? 0;
 
   return (
-    <div className="w-screen h-screen bg-slate-950 text-white flex flex-col items-center justify-between p-6 sm:p-10 select-none font-sans overflow-hidden">
+    <div className="w-screen h-screen bg-slate-950 text-white flex flex-col items-center justify-between p-3 sm:p-5 lg:p-6 select-none font-sans overflow-hidden">
       {/* Top Header */}
-      <header className="w-full max-w-6xl flex items-center justify-between border-b border-slate-800/80 pb-4">
+      <header className="w-full max-w-6xl flex items-center justify-between border-b border-slate-800/80 pb-2 sm:pb-3 shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400">
             <Trophy className="w-5 h-5" />
@@ -220,9 +220,9 @@ export const ScoreboardScreen: React.FC = () => {
 
       {/* [REQ] 게임 대기/준비 시: "게임 플레이 가능" 배너 표시 */}
       {isReady && (
-        <div className="w-full max-w-6xl my-2 py-3 px-6 rounded-2xl bg-gradient-to-r from-emerald-950/80 via-emerald-900/60 to-emerald-950/80 border-2 border-emerald-500/70 shadow-[0_0_40px_rgba(16,185,129,0.3)] flex items-center justify-center gap-3 animate-pulse">
-          <CheckCircle2 className="w-6 h-6 text-emerald-400" />
-          <span className="text-xl sm:text-2xl font-black uppercase tracking-wider text-emerald-200">
+        <div className="w-full max-w-6xl my-1 py-1.5 sm:py-2 px-4 rounded-xl sm:rounded-2xl bg-gradient-to-r from-emerald-950/80 via-emerald-900/60 to-emerald-950/80 border border-emerald-500/70 shadow-[0_0_30px_rgba(16,185,129,0.3)] flex items-center justify-center gap-2 sm:gap-3 shrink-0 animate-pulse">
+          <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />
+          <span className="text-base sm:text-lg font-black uppercase tracking-wider text-emerald-200">
             게임 플레이 가능 (READY TO PLAY)
           </span>
         </div>
@@ -230,11 +230,11 @@ export const ScoreboardScreen: React.FC = () => {
 
       {/* [REQ] 게임 종료시 서브는 점수판 크게 뜨고 */}
       {isTimeUp && (
-        <div className="w-full max-w-6xl my-2 py-3.5 px-6 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-2 border-indigo-500 shadow-[0_0_50px_rgba(99,102,241,0.4)] flex flex-col items-center justify-center text-center">
-          <span className="text-2xl sm:text-3xl font-black uppercase tracking-wider text-white">
+        <div className="w-full max-w-6xl my-1 py-1.5 sm:py-2 px-4 rounded-xl sm:rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-indigo-500 shadow-[0_0_30px_rgba(99,102,241,0.4)] flex flex-col items-center justify-center text-center shrink-0">
+          <span className="text-lg sm:text-xl font-black uppercase tracking-wider text-white">
             🏆 경기 종료 (FINAL RESULT)
           </span>
-          <span className="text-base sm:text-lg font-bold text-slate-200 mt-1">
+          <span className="text-xs sm:text-sm font-bold text-slate-200 mt-0.5">
             {score.blue > score.red
               ? 'GREEN 초록 팀 승리!!'
               : score.red > score.blue
@@ -324,25 +324,25 @@ export const ScoreboardScreen: React.FC = () => {
         </div>
       )}
 
-      {/* Main Giant Scoreboard Arena */}
-      <main className="w-full max-w-6xl flex-1 flex flex-col lg:flex-row items-center justify-center gap-6 sm:gap-10 my-4">
+      {/* Main Giant Scoreboard Arena - 항상 가로(Side-by-Side) 균등 배치로 초록/노랑 동시 표시 보장 */}
+      <main className="w-full max-w-6xl flex-1 flex flex-row items-stretch justify-center gap-2 sm:gap-4 lg:gap-6 my-2 min-h-0">
         {/* Green Team Scoreboard Card (1P) */}
-        <div className="flex-1 w-full flex flex-col items-center justify-center p-6 sm:p-10 rounded-3xl bg-gradient-to-b from-emerald-950/50 via-slate-900/80 to-slate-900 border-2 border-emerald-500/50 shadow-[0_0_60px_rgba(34,197,94,0.3)] relative overflow-hidden group">
-          <div className="absolute top-0 inset-x-0 h-2 bg-gradient-to-r from-emerald-600 via-emerald-400 to-emerald-600" />
-          <span className="text-sm sm:text-base font-extrabold text-emerald-400 uppercase tracking-widest mb-1 flex items-center gap-2">
+        <div className="flex-1 min-w-0 flex flex-col items-center justify-center p-3 sm:p-5 lg:p-8 rounded-2xl sm:rounded-3xl bg-gradient-to-b from-emerald-950/50 via-slate-900/80 to-slate-900 border-2 border-emerald-500/50 shadow-[0_0_50px_rgba(34,197,94,0.3)] relative overflow-hidden group">
+          <div className="absolute top-0 inset-x-0 h-1.5 sm:h-2 bg-gradient-to-r from-emerald-600 via-emerald-400 to-emerald-600" />
+          <span className="text-xs sm:text-sm md:text-base font-extrabold text-emerald-400 uppercase tracking-widest mb-0.5 sm:mb-1 flex items-center gap-1.5 sm:gap-2">
             <span>GREEN 초록 팀 (1P)</span>
             {(botTeam === 'BLUE' || botTeam === 'BOTH') && (
-              <span className="px-2 py-0.5 text-[10px] rounded bg-emerald-500/20 border border-emerald-400 text-emerald-200">
+              <span className="px-1.5 py-0.5 text-[9px] sm:text-[10px] rounded bg-emerald-500/20 border border-emerald-400 text-emerald-200">
                 AI BOT
               </span>
             )}
           </span>
-          <div className="text-[110px] sm:text-[150px] lg:text-[190px] font-black font-mono tracking-tight text-white leading-none my-2 drop-shadow-[0_4px_28px_rgba(34,197,94,0.6)]">
+          <div className="text-5xl sm:text-7xl md:text-8xl lg:text-[110px] xl:text-[140px] font-black font-mono tracking-tight text-white leading-none my-1 sm:my-2 drop-shadow-[0_4px_28px_rgba(34,197,94,0.6)]">
             {score.blue}
           </div>
-          <div className="flex items-center gap-3 text-xs text-emerald-300/80 font-mono mt-1">
+          <div className="flex flex-wrap justify-center items-center gap-2 sm:gap-3 text-[10px] sm:text-xs text-emerald-300/80 font-mono mt-0.5 sm:mt-1">
             <span className="flex items-center gap-1">
-              <Activity className="w-3.5 h-3.5 text-emerald-400" />
+              <Activity className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-400" />
               타격: {stats.blueHits}회
             </span>
             <span className="text-slate-500">|</span>
@@ -351,14 +351,14 @@ export const ScoreboardScreen: React.FC = () => {
         </div>
 
         {/* Center Clock & VS Tower */}
-        <div className="flex flex-col items-center justify-center px-6 py-6 rounded-3xl bg-slate-900/90 border border-slate-800 shadow-2xl min-w-[250px] sm:min-w-[290px]">
-          <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-2">
-            <Clock className="w-4 h-4 text-indigo-400" />
-            <span>{matchMode === 'TARGET_N' ? `선승 목표: ${targetPoints}점` : '경기 잔여 시간'}</span>
+        <div className="w-36 sm:w-48 md:w-56 lg:w-64 shrink-0 flex flex-col items-center justify-center p-2.5 sm:p-4 rounded-2xl sm:rounded-3xl bg-slate-900/90 border border-slate-800 shadow-2xl">
+          <div className="flex items-center gap-1.5 text-slate-400 text-[10px] sm:text-xs font-semibold mb-1">
+            <Clock className="w-3.5 h-3.5 text-indigo-400" />
+            <span>{matchMode === 'TARGET_N' ? `목표: ${targetPoints}점` : '경기 시간'}</span>
           </div>
 
           <div
-            className={`font-mono font-black text-6xl sm:text-7xl tracking-tight my-1 ${
+            className={`font-mono font-black text-3xl sm:text-4xl md:text-5xl lg:text-6xl tracking-tight my-0.5 sm:my-1 ${
               timeLeft <= 10 && gamePhase === 'PLAYING'
                 ? 'text-rose-400 animate-pulse'
                 : 'text-white'
@@ -368,7 +368,7 @@ export const ScoreboardScreen: React.FC = () => {
           </div>
 
           {/* Clock Progress Track */}
-          <div className="w-full bg-slate-800 rounded-full h-2.5 mt-3 overflow-hidden">
+          <div className="w-full bg-slate-800 rounded-full h-1.5 sm:h-2 mt-1 sm:mt-2 overflow-hidden">
             <div
               className={`h-full transition-all duration-300 ${
                 timeLeft <= 10 ? 'bg-rose-500' : 'bg-indigo-500'
@@ -379,27 +379,27 @@ export const ScoreboardScreen: React.FC = () => {
 
           {/* Super Puck x2 / Rally Combo Live Badges */}
           {puckInfo.superCharged && (
-            <div className="mt-3 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-400 text-amber-300 text-xs font-black flex items-center gap-1.5 animate-pulse">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>★ 슈퍼 퍽 충전됨 (골 x2점!)</span>
+            <div className="mt-1.5 px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400 text-amber-300 text-[9px] sm:text-[11px] font-black flex items-center gap-1 animate-pulse">
+              <Sparkles className="w-3 h-3 text-amber-400" />
+              <span>슈퍼 퍽 (x2점!)</span>
             </div>
           )}
 
           {currentRally >= 3 && (
-            <div className="mt-2 px-3 py-1 rounded-full bg-pink-500/20 border border-pink-400/60 text-pink-300 text-xs font-black flex items-center gap-1">
-              <Flame className="w-3.5 h-3.5 text-pink-400" />
-              <span>{currentRally} RALLY COMBO!</span>
+            <div className="mt-1 px-2 py-0.5 rounded-full bg-pink-500/20 border border-pink-400/60 text-pink-300 text-[9px] sm:text-[11px] font-black flex items-center gap-1">
+              <Flame className="w-3 h-3 text-pink-400" />
+              <span>{currentRally} RALLY!</span>
             </div>
           )}
 
           {/* Dominance Bar */}
-          <div className="w-full mt-4 flex flex-col gap-1">
-            <div className="flex justify-between text-[10px] font-mono text-slate-400">
-              <span className="text-emerald-400">{blueHitShare}%</span>
-              <span>공격 주도권</span>
-              <span className="text-yellow-400">{100 - blueHitShare}%</span>
+          <div className="w-full mt-2 sm:mt-3 flex flex-col gap-0.5">
+            <div className="flex justify-between text-[9px] sm:text-[10px] font-mono text-slate-400">
+              <span className="text-emerald-400 font-bold">{blueHitShare}%</span>
+              <span>주도권</span>
+              <span className="text-yellow-400 font-bold">{100 - blueHitShare}%</span>
             </div>
-            <div className="w-full h-2 rounded-full bg-yellow-500/70 overflow-hidden flex">
+            <div className="w-full h-1.5 sm:h-2 rounded-full bg-yellow-500/70 overflow-hidden flex">
               <div
                 className="h-full bg-emerald-400 transition-all duration-300"
                 style={{ width: `${blueHitShare}%` }}
@@ -408,23 +408,23 @@ export const ScoreboardScreen: React.FC = () => {
           </div>
         </div>
 
-        {/* Yellow Team Scoreboard Card */}
-        <div className="flex-1 w-full flex flex-col items-center justify-center p-6 sm:p-10 rounded-3xl bg-gradient-to-b from-yellow-950/50 via-slate-900/80 to-slate-900 border-2 border-yellow-500/50 shadow-[0_0_60px_rgba(234,179,8,0.3)] relative overflow-hidden group">
-          <div className="absolute top-0 inset-x-0 h-2 bg-gradient-to-r from-yellow-600 via-amber-400 to-yellow-600" />
-          <span className="text-sm sm:text-base font-extrabold text-yellow-400 uppercase tracking-widest mb-1 flex items-center gap-2">
+        {/* Yellow Team Scoreboard Card (2P) */}
+        <div className="flex-1 min-w-0 flex flex-col items-center justify-center p-3 sm:p-5 lg:p-8 rounded-2xl sm:rounded-3xl bg-gradient-to-b from-yellow-950/50 via-slate-900/80 to-slate-900 border-2 border-yellow-500/50 shadow-[0_0_50px_rgba(234,179,8,0.3)] relative overflow-hidden group">
+          <div className="absolute top-0 inset-x-0 h-1.5 sm:h-2 bg-gradient-to-r from-yellow-600 via-amber-400 to-yellow-600" />
+          <span className="text-xs sm:text-sm md:text-base font-extrabold text-yellow-400 uppercase tracking-widest mb-0.5 sm:mb-1 flex items-center gap-1.5 sm:gap-2">
             <span>YELLOW 노랑 팀 (2P)</span>
             {(botTeam === 'RED' || botTeam === 'BOTH') && (
-              <span className="px-2 py-0.5 text-[10px] rounded bg-yellow-500/20 border border-yellow-400 text-yellow-200">
+              <span className="px-1.5 py-0.5 text-[9px] sm:text-[10px] rounded bg-yellow-500/20 border border-yellow-400 text-yellow-200">
                 AI BOT
               </span>
             )}
           </span>
-          <div className="text-[110px] sm:text-[150px] lg:text-[190px] font-black font-mono tracking-tight text-white leading-none my-2 drop-shadow-[0_4px_28px_rgba(234,179,8,0.6)]">
+          <div className="text-5xl sm:text-7xl md:text-8xl lg:text-[110px] xl:text-[140px] font-black font-mono tracking-tight text-white leading-none my-1 sm:my-2 drop-shadow-[0_4px_28px_rgba(234,179,8,0.6)]">
             {score.red}
           </div>
-          <div className="flex items-center gap-3 text-xs text-yellow-300/80 font-mono mt-1">
+          <div className="flex flex-wrap justify-center items-center gap-2 sm:gap-3 text-[10px] sm:text-xs text-yellow-300/80 font-mono mt-0.5 sm:mt-1">
             <span className="flex items-center gap-1">
-              <Activity className="w-3.5 h-3.5 text-yellow-400" />
+              <Activity className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-yellow-400" />
               타격: {stats.redHits}회
             </span>
             <span className="text-slate-500">|</span>
@@ -434,7 +434,7 @@ export const ScoreboardScreen: React.FC = () => {
       </main>
 
       {/* Footer Arena Status, Max Rally & Recent Goal History Ticker */}
-      <footer className="w-full max-w-6xl flex flex-wrap items-center justify-between gap-3 border-t border-slate-800/80 pt-3 text-xs text-slate-400">
+      <footer className="w-full max-w-6xl flex flex-wrap items-center justify-between gap-2 sm:gap-3 border-t border-slate-800/80 pt-2 sm:pt-3 text-[11px] sm:text-xs text-slate-400 shrink-0">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1.5">
             <Zap className="w-3.5 h-3.5 text-amber-400" />
