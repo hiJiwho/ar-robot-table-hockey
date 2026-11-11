@@ -194,30 +194,28 @@ export function stepPuckPhysics(
       const vDotN = pvx * sNx + pvy * sNy;
       if (vDotN < 0) {
         // [REQ] "스피커충돌시는마지막 부및친퍽주인이불리하게나오게하며 스피커반사시더가속"
-        // 1. Identify who hit the puck into the speaker:
-        //    If lastHitTeam === 'blue' or (pvx > 0 moving towards right/2P): 1P was the hitter!
-        //    If lastHitTeam === 'red' or (pvx < 0 moving towards left/1P): 2P was the hitter!
+        // [REQ] "공이예측못하게대각선둥.장애물땡기게 엉둥하게되게해뤄"
         const hitterIs1P = lastHitTeam === 'blue' || (lastHitTeam !== 'red' && pvx > 0);
 
-        // 2. Extra Acceleration ("스피커 반사시 더 가속", high elasticity boost)
+        // 1. Extra Acceleration (초탄성 가속 부스트)
         const incomingSpeed = Math.hypot(pvx, pvy);
-        const boostedSpeed = Math.min(1680, Math.max(incomingSpeed * 1.55, 880));
+        const boostedSpeed = Math.min(1680, Math.max(incomingSpeed * 1.6, 920 + Math.random() * 240));
 
-        // 3. Directional penalty: Deflect back towards the last hitter's own goal!
-        //    1P's goal is on the left (-X, x=0), 2P's goal is on the right (+X, x=TABLE_WIDTH).
-        let reboundDirX = hitterIs1P ? -Math.abs(sNx) : Math.abs(sNx);
-        if (Math.abs(reboundDirX) < 0.45) {
-          reboundDirX = hitterIs1P ? -0.7 : 0.7;
-        }
+        // 2. Unpredictable Chaotic Diagonal Deflection (예측 불가능한 엉뚱한 대각선 굴절 각도)
+        // 28도~68도의 가파른 대각선 뱅크 샷 궤적으로 꺾임
+        const signY = sNy !== 0 ? (Math.random() < 0.2 ? -Math.sign(sNy) : Math.sign(sNy)) : (Math.random() < 0.5 ? 1 : -1);
+        const diagonalAngleDeg = 28 + Math.random() * 40; // 28 ~ 68 deg steep diagonal
+        const rad = (diagonalAngleDeg * Math.PI) / 180;
 
-        let reboundDirY = sNy;
-        if (Math.abs(reboundDirY) < 0.2) {
-          reboundDirY = sDy >= 0 ? 0.35 : -0.35;
-        }
+        const dirX = hitterIs1P ? -Math.cos(rad) : Math.cos(rad);
+        const dirY = signY * Math.sin(rad);
 
-        const dirLen = Math.hypot(reboundDirX, reboundDirY) || 1;
-        pvx = (reboundDirX / dirLen) * boostedSpeed;
-        pvy = (reboundDirY / dirLen) * boostedSpeed;
+        pvx = dirX * boostedSpeed;
+        pvy = dirY * boostedSpeed;
+
+        // 강력한 마구 스핀 회전(Magnus Curve Force) 부여 -> 비행 중 공이 휘어지며 레일 충돌 시 엉뚱하게 튕김
+        const spinSign = Math.random() < 0.5 ? 1 : -1;
+        spin = spinSign * (8.0 + Math.random() * 9.0);
 
         events.push({
           type: 'SPEAKER',
@@ -248,28 +246,30 @@ export function stepPuckPhysics(
           const isLeftSide = robot.tableX < TABLE_WIDTH / 2;
 
           if (isObstacle) {
-            // [REQ] "장애물 충돌시는 마지막 부딪친 퍽 주인이 불리하게 나오게"
+            // [REQ] "공이예측못하게대각선둥.장애물땡기게 엉둥하게되게해뤄"
+            // [장애물(시안) 충돌]: 예측 불가능하고 엉뚱한 대각선 굴절 & 마구 회전(Spin)으로 마지막 타격자에게 날아감
             px = robot.tableX + nx * (minDist + 1.2);
             py = robot.tableY + ny * (minDist + 1.2);
 
             const hitterIs1P = lastHitTeam === 'blue' || (lastHitTeam !== 'red' && pvx > 0);
             const incomingSpeed = Math.hypot(pvx, pvy);
-            const obstacleBounceSpeed = Math.min(1550, Math.max(incomingSpeed * 1.25, 720));
+            const obstacleBounceSpeed = Math.min(1580, Math.max(incomingSpeed * 1.35, 780 + Math.random() * 260));
 
-            // Deflect back towards the last hitter's own goal!
-            let reboundDirX = hitterIs1P ? -Math.abs(nx) : Math.abs(nx);
-            if (Math.abs(reboundDirX) < 0.45) {
-              reboundDirX = hitterIs1P ? -0.7 : 0.7;
-            }
+            // 가파른 엉뚱한 대각선 굴절 각도 (28도 ~ 68도 대각선 급반사)
+            // 22% 확률로 반대 Y 방향으로 꺾이는 불규칙 리바운드 연출
+            const signY = ny !== 0 ? (Math.random() < 0.22 ? -Math.sign(ny) : Math.sign(ny)) : (Math.random() < 0.5 ? 1 : -1);
+            const diagonalAngleDeg = 28 + Math.random() * 40;
+            const rad = (diagonalAngleDeg * Math.PI) / 180;
 
-            let reboundDirY = ny + (robot.vy ? robot.vy * 0.001 : 0);
-            if (Math.abs(reboundDirY) < 0.2) {
-              reboundDirY = dy >= 0 ? 0.35 : -0.35;
-            }
+            const dirX = hitterIs1P ? -Math.cos(rad) : Math.cos(rad);
+            const dirY = signY * Math.sin(rad);
 
-            const dirLen = Math.hypot(reboundDirX, reboundDirY) || 1;
-            pvx = (reboundDirX / dirLen) * obstacleBounceSpeed;
-            pvy = (reboundDirY / dirLen) * obstacleBounceSpeed;
+            pvx = dirX * obstacleBounceSpeed;
+            pvy = dirY * obstacleBounceSpeed;
+
+            // 마구 스핀 회전 부여 (공중에서 휘어지는 바나나 슛 궤적 + 상하 벽면 충돌 시 급격한 각도 변화 유도)
+            const spinSign = Math.random() < 0.5 ? 1 : -1;
+            spin = spinSign * (7.5 + Math.random() * 8.5);
 
             // Retain the last player hitter, but notify event as obstacle bounce
             events.push({
