@@ -1,4 +1,5 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
+import QRCode from 'qrcode';
 import {
   FourCorners,
   GamePhase,
@@ -13,7 +14,7 @@ import {
   ImpactRipple,
 } from '../types/hockey';
 import { PerspectiveTransformer } from '../utils/perspective';
-import { generateAIPlayerReport, generateQRCode } from '../utils/aiAnalytics';
+import { generateAIPlayerReport } from '../utils/aiAnalytics';
 
 interface GameCanvasProps {
   normalizedCorners: FourCorners;
@@ -58,34 +59,47 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
     transformerRef.current.updateCorners(pixelCorners);
   }, [normalizedCorners, containerWidth, containerHeight]);
 
-  const blueQrImgRef = useRef<HTMLImageElement | null>(null);
-  const redQrImgRef = useRef<HTMLImageElement | null>(null);
+  const blueQrCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const redQrCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // [REQ] 경기 종료 시 1P/2P 양끝 AI 리포트 QR 코드 비동기 생성 및 캐싱
+  // [REQ] 경기 종료 시 1P(초록)/2P(노랑) 양끝 AI 리포트 QR 코드 초고속 캔버스 비동기 생성 및 영구 캐싱
+  const generateGoalQRCodes = useCallback(() => {
+    const score = propsRef.current.score || { blue: 0, red: 0 };
+    const stats = propsRef.current.stats || { blueHits: 0, redHits: 0, maxPuckSpeed: 0, lastScoredTeam: null };
+    const report1 = generateAIPlayerReport('blue', score, stats);
+    const report2 = generateAIPlayerReport('red', score, stats);
+
+    // 1P 초록 팀 고화질 QR 캔버스
+    const c1 = document.createElement('canvas');
+    c1.width = 256;
+    c1.height = 256;
+    QRCode.toCanvas(c1, report1.reportUrl, {
+      margin: 1,
+      width: 256,
+      color: { dark: '#15803d', light: '#ffffff' },
+      errorCorrectionLevel: 'M',
+    }).then(() => {
+      blueQrCanvasRef.current = c1;
+    }).catch((err) => console.warn('P1 QR generate error:', err));
+
+    // 2P 노랑 팀 고화질 QR 캔버스
+    const c2 = document.createElement('canvas');
+    c2.width = 256;
+    c2.height = 256;
+    QRCode.toCanvas(c2, report2.reportUrl, {
+      margin: 1,
+      width: 256,
+      color: { dark: '#a16207', light: '#ffffff' },
+      errorCorrectionLevel: 'M',
+    }).then(() => {
+      redQrCanvasRef.current = c2;
+    }).catch((err) => console.warn('P2 QR generate error:', err));
+  }, []);
+
+  // 마운트 시 초기 1회 사전 생성 + 경기 종료(TIME_UP) 및 스코어 변경 시마다 즉시 갱신
   useEffect(() => {
-    if (props.gamePhase === 'TIME_UP') {
-      const score = props.score || { blue: 0, red: 0 };
-      const stats = props.stats || { blueHits: 0, redHits: 0, maxPuckSpeed: 0, lastScoredTeam: null };
-      const report1 = generateAIPlayerReport('blue', score, stats);
-      const report2 = generateAIPlayerReport('red', score, stats);
-
-      generateQRCode(report1.reportUrl, '#9333ea', '#ffffff').then((dataUrl) => {
-        if (dataUrl) {
-          const img = new Image();
-          img.src = dataUrl;
-          img.onload = () => { blueQrImgRef.current = img; };
-        }
-      });
-
-      generateQRCode(report2.reportUrl, '#d97706', '#ffffff').then((dataUrl) => {
-        if (dataUrl) {
-          const img = new Image();
-          img.src = dataUrl;
-          img.onload = () => { redQrImgRef.current = img; };
-        }
-      });
-    }
-  }, [normalizedCorners, containerWidth, containerHeight]);
+    generateGoalQRCodes();
+  }, [generateGoalQRCodes, props.gamePhase, props.score?.blue, props.score?.red]);
 
   // High-performance continuous render loop (60-144 FPS)
   useEffect(() => {
@@ -220,8 +234,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
         ctx.lineTo(rightBot.x, rightBot.y);
         ctx.stroke();
 
-        // Left Goal Post Net Arc (Purple 보라 팀)
-        ctx.strokeStyle = isGameOver ? primaryLine : '#a855f7';
+        // Left Goal Post Net Arc (Green 초록 팀)
+        ctx.strokeStyle = isGameOver ? primaryLine : '#22c55e';
         ctx.lineWidth = 4;
         ctx.beginPath();
         const leftNetBack = tf.tableToScreen(-45, TABLE_HEIGHT / 2);
@@ -238,12 +252,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
         ctx.quadraticCurveTo(rightNetBack.x, rightNetBack.y, rightGoalPostBot.x, rightGoalPostBot.y);
         ctx.stroke();
 
-        // Goal Crease Semi-Circles (골대 앞 반원 수비 구역: 좌측 Purple, 우측 Yellow)
+        // Goal Crease Semi-Circles (골대 앞 반원 수비 구역: 좌측 Green 초록, 우측 Yellow 노랑)
         ctx.lineWidth = 2.5;
         ctx.setLineDash([6, 5]);
 
-        // Left Crease (Purple)
-        ctx.strokeStyle = isGameOver ? secondaryLine : 'rgba(168, 85, 247, 0.75)';
+        // Left Crease (Green)
+        ctx.strokeStyle = isGameOver ? secondaryLine : 'rgba(34, 197, 94, 0.75)';
         ctx.beginPath();
         const creaseRadius = goalHalf + 25;
         for (let i = -16; i <= 16; i++) {
@@ -326,7 +340,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       if (!isGameOver) {
-        ctx.shadowColor = isLight ? 'rgba(147, 51, 234, 0.6)' : 'rgba(192, 132, 252, 0.75)';
+        ctx.shadowColor = isLight ? 'rgba(22, 163, 74, 0.6)' : 'rgba(74, 222, 128, 0.75)';
         ctx.shadowBlur = 18;
       }
       ctx.fillStyle = isGameOver
@@ -334,8 +348,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
           ? 'rgba(203, 213, 225, 0.28)'
           : 'rgba(63, 63, 70, 0.22)'
         : isLight
-        ? 'rgba(147, 51, 234, 0.90)'
-        : 'rgba(192, 132, 252, 0.95)';
+        ? 'rgba(22, 163, 74, 0.90)'
+        : 'rgba(74, 222, 128, 0.95)';
       ctx.fillText(String(score.blue), 0, 0);
       ctx.restore();
 
@@ -354,8 +368,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
         : isUrgent
         ? '#ef4444'
         : isLight
-        ? '#9333ea'
-        : '#c084fc';
+        ? '#16a34a'
+        : '#4ade80';
       ctx.lineWidth = 3;
       const clockW = 150;
       const clockH = 46;
@@ -368,7 +382,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       if (!isGameOver) {
-        ctx.shadowColor = isUrgent ? '#ef4444' : isLight ? '#7e22ce' : '#c084fc';
+        ctx.shadowColor = isUrgent ? '#ef4444' : isLight ? '#16a34a' : '#4ade80';
         ctx.shadowBlur = 10;
       }
       ctx.fillStyle = isGameOver
@@ -378,8 +392,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
         : isUrgent
         ? '#ef4444'
         : isLight
-        ? '#7e22ce'
-        : '#c084fc';
+        ? '#16a34a'
+        : '#4ade80';
       ctx.fillText(timeStr, 0, 1);
       ctx.restore();
       }
@@ -519,7 +533,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
 
       // 10. [REQ] "1p 2p 양끝에 qr 다 보야줘" - 경기 종료 시 양쪽 골대 앞에 모바일 AI 리포트 QR 투사
       if (gamePhase === 'TIME_UP') {
-        renderDualGoalQRCodes(ctx, tf, score, blueQrImgRef.current, redQrImgRef.current, isLight);
+        renderDualGoalQRCodes(ctx, tf, score, blueQrCanvasRef.current, redQrCanvasRef.current, isLight);
       }
 
       ctx.restore();
@@ -555,33 +569,33 @@ function renderRealisticMal(
   if (!robot.detected && Date.now() - robot.lastSeenTime > 500) return;
   const screenPos = tf.tableToScreen(robot.tableX, robot.tableY);
   const outerRadius = 32;
-  const isPurple = robot.team === 'blue';
+  const isGreen = robot.team === 'blue';
 
   ctx.save();
   ctx.translate(screenPos.x, screenPos.y);
 
   const primary = isGameOver
     ? '#52525b'
-    : isPurple
-    ? '#c084fc'
+    : isGreen
+    ? '#4ade80'
     : '#facc15';
 
   const rimFill = isGameOver
     ? 'rgba(82, 82, 91, 0.25)'
-    : isPurple
-    ? 'rgba(168, 85, 247, 0.35)'
+    : isGreen
+    ? 'rgba(34, 197, 94, 0.35)'
     : 'rgba(234, 179, 8, 0.35)';
 
   const knobFill = isGameOver
     ? '#3f3f46'
-    : isPurple
-    ? '#9333ea'
+    : isGreen
+    ? '#16a34a'
     : '#ca8a04';
 
   const innerRingColor = isGameOver
     ? '#52525b'
-    : isPurple
-    ? '#d8b4fe'
+    : isGreen
+    ? '#86efac'
     : '#fde047';
 
   if (!isGameOver && isAiBot) {
@@ -617,7 +631,7 @@ function renderRealisticMal(
   ctx.stroke();
 
   if (isAiBot && !isGameOver) {
-    ctx.rotate(isPurple ? Math.PI / 2 : -Math.PI / 2);
+    ctx.rotate(isGreen ? Math.PI / 2 : -Math.PI / 2);
     ctx.font = '900 10px system-ui, sans-serif';
     ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'center';
@@ -715,7 +729,7 @@ function renderCenterSpeakerZone(
   ctx.save();
   ctx.translate(centerPos.x, centerPos.y);
 
-  // 1. 은은한 사운드 웨이브 펄스 링 (서브우퍼 베이스 진동 효과)
+  // 1. 은은한 사운드 웨이브 펄스 링 (서브우퍼 베이스 진동 효과 - 중립 화이트/슬레이트)
   const time = Date.now() / 1000;
   const pulse = Math.sin(time * 3.5) * 0.5 + 0.5;
   const outerPulseR = screenRadius + 4 + pulse * 6;
@@ -723,8 +737,8 @@ function renderCenterSpeakerZone(
   ctx.strokeStyle = isGameOver
     ? 'rgba(100, 116, 139, 0.25)'
     : isLight
-    ? 'rgba(14, 165, 233, 0.35)'
-    : 'rgba(56, 189, 248, 0.35)';
+    ? 'rgba(100, 116, 139, 0.35)'
+    : 'rgba(255, 255, 255, 0.35)';
   ctx.lineWidth = 1.5;
   ctx.setLineDash([4, 4]);
   ctx.beginPath();
@@ -732,29 +746,29 @@ function renderCenterSpeakerZone(
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // 2. 스피커 안착 원형 가이드 라인 (Speaker Dock Guide Ring)
+  // 2. 스피커 안착 원형 가이드 라인 (Speaker Dock Guide Ring - 파란색 배제, 고대비 실버/화이트)
   ctx.strokeStyle = isGameOver
     ? '#475569'
     : isLight
-    ? '#0284c7'
-    : '#38bdf8';
+    ? '#64748b'
+    : '#e2e8f0';
   ctx.lineWidth = 2.5;
-  ctx.shadowColor = isLight ? '#38bdf8' : '#0ea5e9';
+  ctx.shadowColor = isLight ? '#94a3b8' : '#ffffff';
   ctx.shadowBlur = isGameOver ? 0 : 8;
 
   ctx.beginPath();
   ctx.arc(0, 0, screenRadius, 0, Math.PI * 2);
   ctx.stroke();
 
-  // 3. 중심 스피커 마크 (음파 코어 아이콘)
+  // 3. 중심 스피커 마크 (음파 코어 아이콘 - 실버/화이트)
   ctx.shadowBlur = 0;
-  ctx.strokeStyle = isGameOver ? '#64748b' : (isLight ? '#0369a1' : '#7dd3fc');
+  ctx.strokeStyle = isGameOver ? '#64748b' : (isLight ? '#475569' : '#cbd5e1');
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.arc(0, 0, screenRadius * 0.45, 0, Math.PI * 2);
   ctx.stroke();
 
-  ctx.fillStyle = isGameOver ? '#64748b' : (isLight ? '#0284c7' : '#38bdf8');
+  ctx.fillStyle = isGameOver ? '#64748b' : (isLight ? '#334155' : '#f8fafc');
   ctx.beginPath();
   ctx.arc(0, 0, 3, 0, Math.PI * 2);
   ctx.fill();
@@ -796,8 +810,8 @@ function renderDualGoalQRCodes(
   ctx: CanvasRenderingContext2D,
   tf: PerspectiveTransformer,
   score: MatchScore,
-  blueImg: HTMLImageElement | null,
-  redImg: HTMLImageElement | null,
+  blueCanvas: HTMLCanvasElement | HTMLImageElement | null,
+  redCanvas: HTMLCanvasElement | HTMLImageElement | null,
   _isLight: boolean
 ) {
   // [REQ] "QR 조금 더 크게 뜨게 해줘 (QR자체도 고화질로 랜더링 되게)"
@@ -808,7 +822,7 @@ function renderDualGoalQRCodes(
   // -----------------------------------------------------------------
   const p1Pos = tf.tableToScreen(TABLE_WIDTH / 2 - 250, TABLE_HEIGHT / 2);
   const p1Outcome = score.blue > score.red ? 'WIN' : score.blue < score.red ? 'LOSE' : 'DRAW';
-  const p1Color = p1Outcome === 'WIN' ? '#a855f7' : p1Outcome === 'LOSE' ? '#ef4444' : '#f59e0b';
+  const p1Color = p1Outcome === 'WIN' ? '#22c55e' : p1Outcome === 'LOSE' ? '#ef4444' : '#f59e0b';
 
   ctx.save();
   ctx.translate(p1Pos.x, p1Pos.y);
@@ -831,12 +845,20 @@ function renderDualGoalQRCodes(
   ctx.roundRect(-qrBox / 2, 6, qrBox, qrBox, 10);
   ctx.fill();
 
-  if (blueImg && blueImg.complete) {
+  if (blueCanvas) {
     ctx.save();
     // [REQ] 고화질 선명 렌더링 (도트 블러/흐림 원천 차단)
     ctx.imageSmoothingEnabled = false;
     ctx.shadowBlur = 0;
-    ctx.drawImage(blueImg, -qrBox / 2 + 5, 11, qrBox - 10, qrBox - 10);
+    ctx.drawImage(blueCanvas, -qrBox / 2 + 5, 11, qrBox - 10, qrBox - 10);
+    ctx.restore();
+  } else {
+    ctx.save();
+    ctx.fillStyle = '#15803d';
+    ctx.font = 'bold 12px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('QR 생성 중...', 0, 6 + qrBox / 2);
     ctx.restore();
   }
 
@@ -846,7 +868,7 @@ function renderDualGoalQRCodes(
   ctx.fillStyle = p1Color;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
-  ctx.fillText('📱 1P (보라) AI 리포트', 0, 6 + qrBox + 7);
+  ctx.fillText('📱 1P (초록) AI 리포트', 0, 6 + qrBox + 7);
   ctx.restore();
 
   // -----------------------------------------------------------------
@@ -877,11 +899,19 @@ function renderDualGoalQRCodes(
   ctx.roundRect(-qrBox / 2, 6, qrBox, qrBox, 10);
   ctx.fill();
 
-  if (redImg && redImg.complete) {
+  if (redCanvas) {
     ctx.save();
     ctx.imageSmoothingEnabled = false;
     ctx.shadowBlur = 0;
-    ctx.drawImage(redImg, -qrBox / 2 + 5, 11, qrBox - 10, qrBox - 10);
+    ctx.drawImage(redCanvas, -qrBox / 2 + 5, 11, qrBox - 10, qrBox - 10);
+    ctx.restore();
+  } else {
+    ctx.save();
+    ctx.fillStyle = '#a16207';
+    ctx.font = 'bold 12px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('QR 생성 중...', 0, 6 + qrBox / 2);
     ctx.restore();
   }
 

@@ -999,7 +999,7 @@ export const ConsoleScreen: React.FC = () => {
               {/* Goal Openings (Only when playing) */}
               {!isReady && (
                 <>
-                  <rect x="0" y={TABLE_HEIGHT / 2 - goalSize / 2} width="12" height={goalSize} fill="#a855f7" />
+                  <rect x="0" y={TABLE_HEIGHT / 2 - goalSize / 2} width="12" height={goalSize} fill="#22c55e" />
                   <rect x={TABLE_WIDTH - 12} y={TABLE_HEIGHT / 2 - goalSize / 2} width="12" height={goalSize} fill="#facc15" />
                 </>
               )}
@@ -1012,7 +1012,7 @@ export const ConsoleScreen: React.FC = () => {
                   <g>
                     <polyline
                       fill="none"
-                      stroke={stats.goalHistory[selectedGoalReplayIndex].team === 'blue' ? '#c084fc' : '#facc15'}
+                      stroke={stats.goalHistory[selectedGoalReplayIndex].team === 'blue' ? '#4ade80' : '#facc15'}
                       strokeWidth="6"
                       strokeDasharray="10 6"
                       strokeLinecap="round"
@@ -1030,7 +1030,7 @@ export const ConsoleScreen: React.FC = () => {
                 cy={blueRobot.tableY}
                 r="34"
                 fill="none"
-                stroke={botTeam === 'BLUE' || botTeam === 'BOTH' ? '#a855f7' : '#ffffff'}
+                stroke={botTeam === 'BLUE' || botTeam === 'BOTH' ? '#22c55e' : '#ffffff'}
                 strokeWidth="4"
               />
               <circle cx={blueRobot.tableX} cy={blueRobot.tableY} r="12" fill="#ffffff" />
@@ -1066,19 +1066,19 @@ export const ConsoleScreen: React.FC = () => {
                 strokeWidth="3"
               />
 
-              {/* Center Speaker Physical Zone */}
+              {/* Center Speaker Physical Zone - 중립 실버/슬레이트 (파란색 배제) */}
               <g>
                 <circle
                   cx="500"
                   cy="300"
                   r={CENTER_SPEAKER_RADIUS}
-                  fill="rgba(56, 189, 248, 0.15)"
-                  stroke="#38bdf8"
+                  fill="rgba(148, 163, 184, 0.15)"
+                  stroke="#94a3b8"
                   strokeWidth="2.5"
                   strokeDasharray="5 3"
                 />
-                <circle cx="500" cy="300" r="16" fill="rgba(56, 189, 248, 0.3)" stroke="#38bdf8" strokeWidth="1.5" />
-                <circle cx="500" cy="300" r="4" fill="#38bdf8" />
+                <circle cx="500" cy="300" r="16" fill="rgba(148, 163, 184, 0.3)" stroke="#cbd5e1" strokeWidth="1.5" />
+                <circle cx="500" cy="300" r="4" fill="#f8fafc" />
               </g>
 
               {/* Dynamic 0..10 Cyan Obstacle Robots (보고서 미생성, 360도 반사 장애물) */}
@@ -1123,11 +1123,11 @@ export const ConsoleScreen: React.FC = () => {
                       isSelected
                         ? 'bg-indigo-600 text-white border-indigo-400'
                         : g.team === 'blue'
-                        ? 'bg-cyan-950/60 text-cyan-300 border-cyan-500/40 hover:bg-cyan-900/60'
+                        ? 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40 hover:bg-emerald-900/60'
                         : 'bg-yellow-950/60 text-yellow-300 border-yellow-500/40 hover:bg-yellow-900/60'
                     }`}
                   >
-                    {g.team === 'blue' ? 'Cyan' : 'Yellow'} +{g.points}점 ({Math.round(g.speed * 0.08)}km/h)
+                    {g.team === 'blue' ? 'Green' : 'Yellow'} +{g.points}점 ({Math.round(g.speed * 0.08)}km/h)
                   </button>
                 );
               })}
@@ -1142,12 +1142,12 @@ export const ConsoleScreen: React.FC = () => {
             </div>
           )}
 
-          {/* 패들 1 (Purple), 패들 2 (Yellow) 상태창 */}
+          {/* 패들 1 (Green), 패들 2 (Yellow) 상태창 */}
           <div className="grid grid-cols-2 gap-2 text-xs">
-            <div className="bg-slate-950/80 border border-purple-500/30 rounded-lg p-2.5 flex items-center justify-between">
-              <span className="font-bold text-purple-300 flex items-center gap-2">
-                <span className={`w-2.5 h-2.5 rounded-full ${blueRobot.detected ? 'bg-purple-400 shadow-[0_0_8px_rgba(168,85,247,0.8)]' : 'bg-slate-600'}`} />
-                Purple 보라 팀 (1P) {botTeam === 'BLUE' || botTeam === 'BOTH' ? `[AI:${botDifficulty}]` : ''}
+            <div className="bg-slate-950/80 border border-emerald-500/30 rounded-lg p-2.5 flex items-center justify-between">
+              <span className="font-bold text-emerald-300 flex items-center gap-2">
+                <span className={`w-2.5 h-2.5 rounded-full ${blueRobot.detected ? 'bg-emerald-400 shadow-[0_0_8px_rgba(34,197,94,0.8)]' : 'bg-slate-600'}`} />
+                Green 초록 팀 (1P) {botTeam === 'BLUE' || botTeam === 'BOTH' ? `[AI:${botDifficulty}]` : ''}
               </span>
               <span className="font-mono text-slate-400">
                 {blueRobot.detected ? `${Math.round(blueRobot.tableX)}, ${Math.round(blueRobot.tableY)}` : '미감지'}
@@ -1170,10 +1170,10 @@ export const ConsoleScreen: React.FC = () => {
         <div className="lg:col-span-6 flex flex-col gap-2.5 overflow-y-auto pr-1">
           {/* Sports Scoreboard */}
           <div className="grid grid-cols-3 gap-2 bg-slate-900 border border-slate-800 rounded-2xl p-3 text-center">
-            {/* Player 1 Score (Purple) */}
-            <div className="flex flex-col items-center justify-center p-2 rounded-xl bg-slate-950/60 border border-purple-500/30">
-              <span className="text-xs font-bold text-purple-400 mb-1">Purple 보라 팀 (1P)</span>
-              <div className="text-4xl sm:text-5xl font-black font-mono text-purple-300">{score.blue}</div>
+            {/* Player 1 Score (Green) */}
+            <div className="flex flex-col items-center justify-center p-2 rounded-xl bg-slate-950/60 border border-emerald-500/30">
+              <span className="text-xs font-bold text-emerald-400 mb-1">Green 초록 팀 (1P)</span>
+              <div className="text-4xl sm:text-5xl font-black font-mono text-emerald-300">{score.blue}</div>
               <div className="flex items-center gap-1 mt-2">
                 <button
                   onClick={() => handleAdjustScore('blue', -1)}
@@ -1183,7 +1183,7 @@ export const ConsoleScreen: React.FC = () => {
                 </button>
                 <button
                   onClick={() => handleAdjustScore('blue', 1)}
-                  className="w-7 h-7 rounded bg-purple-700 hover:bg-purple-600 text-white flex items-center justify-center text-xs font-bold shadow-sm"
+                  className="w-7 h-7 rounded bg-emerald-700 hover:bg-emerald-600 text-white flex items-center justify-center text-xs font-bold shadow-sm"
                 >
                   <Plus className="w-3.5 h-3.5" />
                 </button>
@@ -1914,13 +1914,13 @@ export const ConsoleScreen: React.FC = () => {
                       {/* 1P 검출 상태 (마젠타 마커 #1) */}
                       <div className={`p-3 rounded-xl border flex flex-col gap-1.5 transition-all ${
                         visionDiagnostics?.blueConfidence > 0.3
-                          ? 'bg-purple-950/40 border-purple-500/50 shadow-sm'
+                          ? 'bg-emerald-950/40 border-emerald-500/50 shadow-sm'
                           : 'bg-slate-900/60 border-slate-800'
                       }`}>
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-black text-purple-400 flex items-center gap-1.5">
+                          <span className="text-xs font-black text-emerald-400 flex items-center gap-1.5">
                             <span className={`w-2.5 h-2.5 rounded-full ${visionDiagnostics?.blueConfidence > 0.3 ? 'bg-pink-400 animate-ping' : 'bg-slate-600'}`} />
-                            1P 플레이어 (보라 팀 / 마젠타 #1)
+                            1P 플레이어 (초록 팀 / 마젠타 #1)
                           </span>
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                             visionDiagnostics?.blueConfidence > 0.3

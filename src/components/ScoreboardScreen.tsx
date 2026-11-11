@@ -236,9 +236,9 @@ export const ScoreboardScreen: React.FC = () => {
           </span>
           <span className="text-base sm:text-lg font-bold text-slate-200 mt-1">
             {score.blue > score.red
-              ? 'CYAN TEAM 승리!!'
+              ? 'GREEN 초록 팀 승리!!'
               : score.red > score.blue
-              ? 'YELLOW TEAM 승리!!'
+              ? 'YELLOW 노랑 팀 승리!!'
               : '무승부 (DRAW MATCH)!'}
           </span>
         </div>
@@ -250,7 +250,7 @@ export const ScoreboardScreen: React.FC = () => {
           <div
             className={`px-12 py-8 rounded-3xl border-4 shadow-2xl text-center transform scale-105 flex flex-col items-center gap-4 ${
               goalAnnouncement.team === 'blue'
-                ? 'bg-cyan-950/95 border-cyan-400 shadow-[0_0_90px_rgba(6,182,212,0.85)]'
+                ? 'bg-emerald-950/95 border-emerald-400 shadow-[0_0_90px_rgba(34,197,94,0.85)]'
                 : 'bg-yellow-950/95 border-yellow-400 shadow-[0_0_90px_rgba(234,179,8,0.85)]'
             }`}
           >
@@ -265,10 +265,10 @@ export const ScoreboardScreen: React.FC = () => {
             </div>
             <div
               className={`text-lg sm:text-2xl font-bold ${
-                goalAnnouncement.team === 'blue' ? 'text-cyan-300' : 'text-yellow-300'
+                goalAnnouncement.team === 'blue' ? 'text-emerald-300' : 'text-yellow-300'
               }`}
             >
-              {goalAnnouncement.team === 'blue' ? 'CYAN TEAM 득점!' : 'YELLOW TEAM 득점!'}{' '}
+              {goalAnnouncement.team === 'blue' ? 'GREEN 초록 팀 득점!' : 'YELLOW 노랑 팀 득점!'}{' '}
               {latestGoal ? `(${latestGoal.speed} px/s)` : ''}
             </div>
 
@@ -301,7 +301,7 @@ export const ScoreboardScreen: React.FC = () => {
                   />
                   <polyline
                     fill="none"
-                    stroke={goalAnnouncement.team === 'blue' ? '#22d3ee' : '#facc15'}
+                    stroke={goalAnnouncement.team === 'blue' ? '#22c55e' : '#facc15'}
                     strokeWidth="12"
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -326,23 +326,23 @@ export const ScoreboardScreen: React.FC = () => {
 
       {/* Main Giant Scoreboard Arena */}
       <main className="w-full max-w-6xl flex-1 flex flex-col lg:flex-row items-center justify-center gap-6 sm:gap-10 my-4">
-        {/* Cyan Team Scoreboard Card */}
-        <div className="flex-1 w-full flex flex-col items-center justify-center p-6 sm:p-10 rounded-3xl bg-gradient-to-b from-cyan-950/50 via-slate-900/80 to-slate-900 border-2 border-cyan-500/50 shadow-[0_0_60px_rgba(6,182,212,0.3)] relative overflow-hidden group">
-          <div className="absolute top-0 inset-x-0 h-2 bg-gradient-to-r from-cyan-600 via-cyan-400 to-cyan-600" />
-          <span className="text-sm sm:text-base font-extrabold text-cyan-400 uppercase tracking-widest mb-1 flex items-center gap-2">
-            <span>CYAN TEAM (1P)</span>
+        {/* Green Team Scoreboard Card (1P) */}
+        <div className="flex-1 w-full flex flex-col items-center justify-center p-6 sm:p-10 rounded-3xl bg-gradient-to-b from-emerald-950/50 via-slate-900/80 to-slate-900 border-2 border-emerald-500/50 shadow-[0_0_60px_rgba(34,197,94,0.3)] relative overflow-hidden group">
+          <div className="absolute top-0 inset-x-0 h-2 bg-gradient-to-r from-emerald-600 via-emerald-400 to-emerald-600" />
+          <span className="text-sm sm:text-base font-extrabold text-emerald-400 uppercase tracking-widest mb-1 flex items-center gap-2">
+            <span>GREEN 초록 팀 (1P)</span>
             {(botTeam === 'BLUE' || botTeam === 'BOTH') && (
-              <span className="px-2 py-0.5 text-[10px] rounded bg-cyan-500/20 border border-cyan-400 text-cyan-200">
+              <span className="px-2 py-0.5 text-[10px] rounded bg-emerald-500/20 border border-emerald-400 text-emerald-200">
                 AI BOT
               </span>
             )}
           </span>
-          <div className="text-[110px] sm:text-[150px] lg:text-[190px] font-black font-mono tracking-tight text-white leading-none my-2 drop-shadow-[0_4px_28px_rgba(6,182,212,0.6)]">
+          <div className="text-[110px] sm:text-[150px] lg:text-[190px] font-black font-mono tracking-tight text-white leading-none my-2 drop-shadow-[0_4px_28px_rgba(34,197,94,0.6)]">
             {score.blue}
           </div>
-          <div className="flex items-center gap-3 text-xs text-cyan-300/80 font-mono mt-1">
+          <div className="flex items-center gap-3 text-xs text-emerald-300/80 font-mono mt-1">
             <span className="flex items-center gap-1">
-              <Activity className="w-3.5 h-3.5 text-cyan-400" />
+              <Activity className="w-3.5 h-3.5 text-emerald-400" />
               타격: {stats.blueHits}회
             </span>
             <span className="text-slate-500">|</span>
@@ -395,13 +395,13 @@ export const ScoreboardScreen: React.FC = () => {
           {/* Dominance Bar */}
           <div className="w-full mt-4 flex flex-col gap-1">
             <div className="flex justify-between text-[10px] font-mono text-slate-400">
-              <span className="text-cyan-400">{blueHitShare}%</span>
+              <span className="text-emerald-400">{blueHitShare}%</span>
               <span>공격 주도권</span>
               <span className="text-yellow-400">{100 - blueHitShare}%</span>
             </div>
             <div className="w-full h-2 rounded-full bg-yellow-500/70 overflow-hidden flex">
               <div
-                className="h-full bg-cyan-400 transition-all duration-300"
+                className="h-full bg-emerald-400 transition-all duration-300"
                 style={{ width: `${blueHitShare}%` }}
               />
             </div>
@@ -412,7 +412,7 @@ export const ScoreboardScreen: React.FC = () => {
         <div className="flex-1 w-full flex flex-col items-center justify-center p-6 sm:p-10 rounded-3xl bg-gradient-to-b from-yellow-950/50 via-slate-900/80 to-slate-900 border-2 border-yellow-500/50 shadow-[0_0_60px_rgba(234,179,8,0.3)] relative overflow-hidden group">
           <div className="absolute top-0 inset-x-0 h-2 bg-gradient-to-r from-yellow-600 via-amber-400 to-yellow-600" />
           <span className="text-sm sm:text-base font-extrabold text-yellow-400 uppercase tracking-widest mb-1 flex items-center gap-2">
-            <span>YELLOW TEAM (2P)</span>
+            <span>YELLOW 노랑 팀 (2P)</span>
             {(botTeam === 'RED' || botTeam === 'BOTH') && (
               <span className="px-2 py-0.5 text-[10px] rounded bg-yellow-500/20 border border-yellow-400 text-yellow-200">
                 AI BOT
@@ -459,16 +459,16 @@ export const ScoreboardScreen: React.FC = () => {
                 key={g.id}
                 className={`px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold border ${
                   g.team === 'blue'
-                    ? 'bg-cyan-950/70 border-cyan-500/40 text-cyan-300'
+                    ? 'bg-emerald-950/70 border-emerald-500/40 text-emerald-300'
                     : 'bg-yellow-950/70 border-yellow-500/40 text-yellow-300'
                 }`}
               >
-                {g.team === 'blue' ? 'CYAN' : 'YELLOW'} +{g.points} ({g.speed}px/s)
+                {g.team === 'blue' ? 'GREEN' : 'YELLOW'} +{g.points} ({g.speed}px/s)
               </span>
             ))
           ) : (
             <span className="text-slate-500 font-mono">
-              마지막 득점: {stats.lastScoredTeam ? (stats.lastScoredTeam === 'blue' ? 'CYAN 팀' : 'YELLOW 팀') : '대기 중'}
+              마지막 득점: {stats.lastScoredTeam ? (stats.lastScoredTeam === 'blue' ? 'GREEN 초록 팀' : 'YELLOW 노랑 팀') : '대기 중'}
             </span>
           )}
         </div>

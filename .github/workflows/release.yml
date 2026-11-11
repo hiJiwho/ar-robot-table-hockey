@@ -41,5 +41,11 @@ jobs:
         shell: pwsh
         run: |
           $tag = "${{ github.ref_name }}"
-          if (-not $tag.StartsWith("v")) { $tag = "v1.7.1" }
-          gh release upload $tag "release/AR-Robot-Table-Hockey-$tag-win-x64.zip" --clobber
+          if (-not $tag.StartsWith("v")) { $tag = "v1.7.3" }
+          $asset = "release/AR-Robot-Table-Hockey-$tag-win-x64.zip"
+          try {
+            gh release view $tag
+            gh release upload $tag $asset --clobber
+          } catch {
+            gh release create $tag $asset --title "$tag - AR Robot Table Hockey Windows Portable" --notes "Windows Portable x64 Release $tag"
+          }

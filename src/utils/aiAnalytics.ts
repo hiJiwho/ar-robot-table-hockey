@@ -255,7 +255,7 @@ export function generateAIPlayerReport(
   // Personalized Match Commentary
   const commentaries: string[] = [];
   if (result === 'WIN') {
-    commentaries.push(`${isBlue ? 'Cyan' : 'Yellow'} 팀의 뛰어난 템포 조율과 결정력이 돋보였습니다.`);
+    commentaries.push(`${isBlue ? 'Green' : 'Yellow'} 팀의 뛰어난 템포 조율과 결정력이 돋보였습니다.`);
   } else if (result === 'DRAW') {
     commentaries.push('마지막 1초까지 손에 땀을 쥐게 한 팽팽한 명승부였습니다.');
   } else {
@@ -278,7 +278,7 @@ export function generateAIPlayerReport(
   return {
     player,
     anonId: history.anonId,
-    name: isBlue ? '1P Cyan' : '2P Yellow',
+    name: isBlue ? '1P Green' : '2P Yellow',
     result,
     score: myScore,
     opponentScore: oppScore,

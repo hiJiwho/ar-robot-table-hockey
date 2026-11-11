@@ -75,14 +75,14 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
         <div className="flex items-center gap-3 shrink-0">
           <div className="flex flex-col">
             <h1 className="text-sm font-bold tracking-tight text-white flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-purple-500 inline-block shadow-[0_0_8px_rgba(168,85,247,0.8)]" />
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block shadow-[0_0_8px_rgba(34,197,94,0.8)]" />
               테이블 에어하키
               <span className="w-2.5 h-2.5 rounded-full bg-yellow-400 inline-block shadow-[0_0_8px_rgba(250,204,21,0.8)]" />
             </h1>
             <div className="flex items-center gap-2 text-xs text-slate-400">
               <span className="text-pink-400 font-medium">마젠타(1P·2P) + 시안(로봇)</span>
               <span aria-hidden="true">·</span>
-              <span>골대: 보라 / 노랑</span>
+              <span>골대: 초록 / 노랑</span>
             </div>
           </div>
 
@@ -107,21 +107,21 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
 
         {/* Center: Match Score & Match Countdown */}
         <div className="flex items-center gap-5 sm:gap-7 mx-auto">
-          {/* Purple Team Score (1P) */}
+          {/* Green Team Score (1P) */}
           <div className="flex items-center gap-2">
             <div className="text-right">
-              <div className="text-xs font-semibold text-purple-400 tracking-wide uppercase">
-                Purple 보라 팀 (1P)
+              <div className="text-xs font-semibold text-emerald-400 tracking-wide uppercase">
+                Green 초록 팀 (1P)
               </div>
               <div className="text-[11px] text-slate-400">
                 {blueRobot.detected ? (
-                  <span className="text-purple-300">마젠타 1 ({(blueRobot.confidence * 100).toFixed(0)}%)</span>
+                  <span className="text-emerald-300">마젠타 1 ({(blueRobot.confidence * 100).toFixed(0)}%)</span>
                 ) : (
                   <span className="text-slate-500">탐색 중...</span>
                 )}
               </div>
             </div>
-            <div className="w-11 h-11 rounded-lg bg-purple-950/90 border border-purple-500/50 flex items-center justify-center font-mono text-2xl font-bold text-purple-300 shadow-[0_0_12px_rgba(168,85,247,0.3)] tabular-nums">
+            <div className="w-11 h-11 rounded-lg bg-emerald-950/90 border border-emerald-500/50 flex items-center justify-center font-mono text-2xl font-bold text-emerald-300 shadow-[0_0_12px_rgba(34,197,94,0.3)] tabular-nums">
               {score.blue}
             </div>
           </div>
@@ -155,7 +155,7 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
             </div>
             <div className="text-left">
               <div className="text-xs font-semibold text-yellow-400 tracking-wide uppercase">
-                Yellow 팀 (2P)
+                Yellow 노랑 팀 (2P)
               </div>
               <div className="text-[11px] text-slate-400">
                 {redRobot.detected ? (

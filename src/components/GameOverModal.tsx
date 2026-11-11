@@ -55,7 +55,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
             <Trophy
               className={`w-7 h-7 ${
                 winner === 'blue'
-                  ? 'text-cyan-400'
+                  ? 'text-emerald-400'
                   : winner === 'red'
                   ? 'text-yellow-400'
                   : 'text-amber-400'
@@ -64,8 +64,8 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
           </div>
 
           <h2 className="text-2xl font-black tracking-tight text-white">
-            {winner === 'blue' && <span className="text-cyan-400">Cyan 팀 승리!</span>}
-            {winner === 'red' && <span className="text-yellow-400">Yellow 팀 승리!</span>}
+            {winner === 'blue' && <span className="text-emerald-400">Green 초록 팀 승리!</span>}
+            {winner === 'red' && <span className="text-yellow-400">Yellow 노랑 팀 승리!</span>}
             {winner === 'draw' && <span className="text-amber-400">무승부 (동점)!</span>}
           </h2>
 
@@ -77,15 +77,15 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
         {/* Final Scoreboard */}
         <div className="grid grid-cols-2 gap-3 p-3.5 bg-slate-950/80 rounded-2xl border border-slate-800">
           <div className="text-center">
-            <div className="text-xs font-bold text-cyan-400">Cyan 팀 (1P)</div>
-            <div className="font-mono text-3xl font-extrabold text-cyan-300 tabular-nums">
+            <div className="text-xs font-bold text-emerald-400">Green 초록 팀 (1P)</div>
+            <div className="font-mono text-3xl font-extrabold text-emerald-300 tabular-nums">
               {score.blue}
             </div>
             <div className="text-[11px] text-slate-500 mt-0.5">유효타 {stats.blueHits}회</div>
           </div>
 
           <div className="text-center">
-            <div className="text-xs font-bold text-yellow-400">Yellow 팀 (2P)</div>
+            <div className="text-xs font-bold text-yellow-400">Yellow 노랑 팀 (2P)</div>
             <div className="font-mono text-3xl font-extrabold text-yellow-300 tabular-nums">
               {score.red}
             </div>
@@ -95,11 +95,11 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
 
         {/* [REQ] 1P, 2P 양끝 AI 모바일 분석 QR 코드 공유 섹션 */}
         <div className="grid grid-cols-2 gap-4 text-left">
-          {/* 1P Cyan Card & QR */}
-          <div className="p-3.5 bg-slate-950/90 rounded-2xl border border-cyan-500/40 flex flex-col items-center text-center space-y-2">
+          {/* 1P Green Card & QR */}
+          <div className="p-3.5 bg-slate-950/90 rounded-2xl border border-emerald-500/40 flex flex-col items-center text-center space-y-2">
             <div className="flex items-center justify-between w-full px-1">
-              <span className="text-xs font-extrabold text-cyan-400">1P Cyan 리포트</span>
-              <span className="text-[11px] px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800/60 font-bold">
+              <span className="text-xs font-extrabold text-emerald-400">1P Green 리포트</span>
+              <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800/60 font-bold">
                 {blueReport?.grade || 'S'}
               </span>
             </div>
@@ -108,13 +108,13 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
               {blueReport?.badge} {blueReport?.title}
             </div>
             {blueReport?.growthBadge && (
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-950/80 border border-cyan-500/30 text-cyan-300 font-bold">
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-500/30 text-emerald-300 font-bold">
                 {blueReport.growthBadge}
               </span>
             )}
 
             {blueQr ? (
-              <div className="p-2 bg-white rounded-xl shadow-md border-2 border-cyan-400/80">
+              <div className="p-2 bg-white rounded-xl shadow-md border-2 border-emerald-400/80">
                 <img src={blueQr} alt="1P AI Report QR" className="w-28 h-28 object-contain" />
               </div>
             ) : (
@@ -124,7 +124,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
             )}
 
             <div className="text-[11px] text-slate-400 flex items-center gap-1 font-medium">
-              <QrCode className="w-3.5 h-3.5 text-cyan-400" />
+              <QrCode className="w-3.5 h-3.5 text-emerald-400" />
               <span>1P 폰 카메라로 스캔</span>
             </div>
 
@@ -133,7 +133,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
                 href={blueReport.reportUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="text-[10px] text-cyan-400/90 hover:underline flex items-center gap-1 pt-0.5"
+                className="text-[10px] text-emerald-400/90 hover:underline flex items-center gap-1 pt-0.5"
               >
                 <span>웹에서 바로보기</span>
                 <ExternalLink className="w-2.5 h-2.5" />
