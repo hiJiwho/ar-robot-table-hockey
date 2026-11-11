@@ -1,0 +1,45 @@
+name: Build and Attach Windows Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows Electron App
+        run: npm run build:win
+
+      - name: Package ZIP
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if (-not $tag.StartsWith("v")) { $tag = "v1.7.1" }
+          Compress-Archive -Path "release/AR-Robot-air-hotkey-win32-x64/*" -DestinationPath "release/AR-Robot-Table-Hockey-$tag-win-x64.zip" -Force
+
+      - name: Upload Release Asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if (-not $tag.StartsWith("v")) { $tag = "v1.7.1" }
+          gh release upload $tag "release/AR-Robot-Table-Hockey-$tag-win-x64.zip" --clobber
