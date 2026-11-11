@@ -1224,15 +1224,8 @@ export default function App() {
         const pCtx = pCanvas.getContext('2d', { willReadFrequently: true });
         if (pCtx) {
           pCtx.clearRect(0, 0, pCanvas.width, pCanvas.height);
-          if (isCameraMirroredRef.current) {
-            pCtx.save();
-            pCtx.translate(pCanvas.width, 0);
-            pCtx.scale(-1, 1);
-            pCtx.drawImage(video, 0, 0, pCanvas.width, pCanvas.height);
-            pCtx.restore();
-          } else {
-            pCtx.drawImage(video, 0, 0, pCanvas.width, pCanvas.height);
-          }
+          // Always draw native video frame to pCanvas so OpenCV, JS contours & ROI polygon match 100%
+          pCtx.drawImage(video, 0, 0, pCanvas.width, pCanvas.height);
           const imageData = pCtx.getImageData(0, 0, pCanvas.width, pCanvas.height);
 
           let debugMaskData: ImageData | null = null;
@@ -1289,7 +1282,9 @@ export default function App() {
           const updateTrackedRobot = (prev: RobotState, rawBlob: DetectedBlob | null): RobotState => {
             if (rawBlob) {
               const tablePos = cameraTf.screenToTable(rawBlob.x, rawBlob.y);
-              const clampedX = Math.max(ROBOT_RADIUS, Math.min(TABLE_WIDTH - ROBOT_RADIUS, tablePos.x));
+              // [REQ] 좌우 반전 시 X축 깔끔하게 미러링 (카메라 방향과 테이블 실제 이동 일치)
+              const mappedX = isCameraMirroredRef.current ? TABLE_WIDTH - tablePos.x : tablePos.x;
+              const clampedX = Math.max(ROBOT_RADIUS, Math.min(TABLE_WIDTH - ROBOT_RADIUS, mappedX));
               const clampedY = Math.max(ROBOT_RADIUS, Math.min(TABLE_HEIGHT - ROBOT_RADIUS, tablePos.y));
 
               const jumpDist = Math.hypot(clampedX - prev.tableX, clampedY - prev.tableY);
@@ -1351,7 +1346,7 @@ export default function App() {
             liveStateRef.current.redRobot = updateTrackedRobot(liveStateRef.current.redRobot, redBlob);
           }
 
-          // Map detected Cyan obstacle blobs (0..10 configurable, default 2) as physical obstacle robots (no AI report generated)
+          // Map detected Cyan obstacle blobs (0..10 configurable, default 2) as physical obstacle robots
           const prevObstacles = (liveStateRef.current.allRobots || []).filter(
             (r) => r.team === 'obstacle'
           );
@@ -1360,7 +1355,9 @@ export default function App() {
             .slice(0, maxObstacles)
             .map((blob, idx) => {
               const tablePos = cameraTf.screenToTable(blob.x, blob.y);
-              const clampedX = Math.max(ROBOT_RADIUS, Math.min(TABLE_WIDTH - ROBOT_RADIUS, tablePos.x));
+              // [REQ] Cyan 장애물 로봇 좌우 반전 보정 (카메라 미러 설정과 완전 일치)
+              const mappedX = isCameraMirroredRef.current ? TABLE_WIDTH - tablePos.x : tablePos.x;
+              const clampedX = Math.max(ROBOT_RADIUS, Math.min(TABLE_WIDTH - ROBOT_RADIUS, mappedX));
               const clampedY = Math.max(ROBOT_RADIUS, Math.min(TABLE_HEIGHT - ROBOT_RADIUS, tablePos.y));
               const curScreen = screenTf.tableToScreen(clampedX, clampedY);
 

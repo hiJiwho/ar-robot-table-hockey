@@ -1,5 +1,5 @@
 import { ColorSettings, FourCorners, EightPoints, CalibrationCorners, Point2D } from '../types/hockey';
-import { DetectedBlob, assignBlobs } from './vision';
+import { DetectedBlob, assignBlobs, rgbToHsv } from './vision';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type CV = any;
@@ -53,8 +53,8 @@ export interface OpenCVDetectResult {
 
 /**
  * Robust OpenCV Vision Engine:
- * - Pass A: Detects 2 Player Markers (Default: Magenta, or Camera-Sampled customSample) -> 1P & 2P (2 fixed)
- * - Pass B: Detects up to N Obstacle Robot Markers (Default: Cyan, or Camera-Sampled obstacleCustomSample, 0..10) -> Obstacle Robots
+ * - Pass A: Detects 2 Player Markers (Default: Magenta 240~35 deg, or Camera-Sampled customSample) -> 1P & 2P (2 fixed)
+ * - Pass B: Detects up to N Obstacle Robot Markers (Default: Cyan 160~220 deg, or Camera-Sampled obstacleCustomSample, 0..10) -> Obstacle Robots
  */
 export function detectTwoMagentaBlobsOpenCV(
   imageData: ImageData,
@@ -72,29 +72,45 @@ export function detectTwoMagentaBlobsOpenCV(
   const sens = settings.sensitivity || 3;
   const maxObstacles = Math.max(0, Math.min(10, settings.obstacleCount ?? 2));
 
-  // 1. Player Filter (Default: Magenta 255~25 deg)
-  const playerFilter = settings.customSample
-    ? settings.magenta
-    : {
-        hMin: 255,
-        hMax: 25,
-        sMin: isLowLight ? 0.08 : 0.12,
-        sMax: 1.0,
-        vMin: isLowLight ? 0.04 : 0.08,
-        vMax: 1.0,
-      };
+  // 1. Player Filter (Default: Magenta / Hot Pink 240~35 deg, or user customSample)
+  let playerFilter = {
+    hMin: 240,
+    hMax: 35,
+    sMin: isLowLight ? 0.03 : 0.05,
+    sMax: 1.0,
+    vMin: isLowLight ? 0.03 : 0.05,
+  };
 
-  // 2. Obstacle Robot Filter (Default: Cyan 165~215 deg)
-  const obstacleFilter = settings.obstacleCustomSample && settings.cyan
-    ? settings.cyan
-    : settings.cyan || {
-        hMin: 165,
-        hMax: 215,
-        sMin: isLowLight ? 0.10 : 0.15,
-        sMax: 1.0,
-        vMin: isLowLight ? 0.06 : 0.10,
-        vMax: 1.0,
-      };
+  if (settings.customSample) {
+    const cs = rgbToHsv(settings.customSample.r, settings.customSample.g, settings.customSample.b);
+    playerFilter = {
+      hMin: ((cs.h - 35) % 360 + 360) % 360,
+      hMax: (cs.h + 35) % 360,
+      sMin: Math.max(0.03, cs.s * 0.4),
+      sMax: 1.0,
+      vMin: Math.max(0.03, cs.v * 0.4),
+    };
+  }
+
+  // 2. Obstacle Robot Filter (Default: Cyan 160~220 deg, or user obstacleCustomSample)
+  let obstacleFilter = {
+    hMin: 160,
+    hMax: 220,
+    sMin: isLowLight ? 0.05 : 0.08,
+    sMax: 1.0,
+    vMin: isLowLight ? 0.04 : 0.07,
+  };
+
+  if (settings.obstacleCustomSample) {
+    const cs = rgbToHsv(settings.obstacleCustomSample.r, settings.obstacleCustomSample.g, settings.obstacleCustomSample.b);
+    obstacleFilter = {
+      hMin: ((cs.h - 35) % 360 + 360) % 360,
+      hMax: (cs.h + 35) % 360,
+      sMin: Math.max(0.04, cs.s * 0.4),
+      sMax: 1.0,
+      vMin: Math.max(0.03, cs.v * 0.4),
+    };
+  }
 
   const toH = (deg: number) => Math.round((((deg % 360) + 360) % 360) / 2);
 
@@ -121,7 +137,7 @@ export function detectTwoMagentaBlobsOpenCV(
     const hsv = track(new cv.Mat());
     cv.cvtColor(blurred, hsv, cv.COLOR_RGB2HSV);
 
-    // Prepare ROI polygon mask if courtPoints are provided
+    // Prepare ROI polygon mask if courtPoints are provided (With 45px safety buffer to prevent paddle clipping)
     let roiMask: any = null;
     if (courtPoints && courtPoints.length >= 4) {
       roiMask = track(cv.Mat.zeros(height, width, cv.CV_8UC1));
@@ -130,6 +146,9 @@ export function detectTwoMagentaBlobsOpenCV(
       const vec = track(new cv.MatVector());
       vec.push_back(ptsMat);
       cv.fillPoly(roiMask, vec, new cv.Scalar(255));
+      // 45px Dilate so paddles near goals/rails are never clipped out!
+      const dilateKernel = track(cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(45, 45)));
+      cv.dilate(roiMask, roiMask, dilateKernel);
     }
 
     const kernel = track(cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(3, 3)));
@@ -138,18 +157,18 @@ export function detectTwoMagentaBlobsOpenCV(
 
     // Helper to build HSV mask and extract contours
     const extractBlobsForFilter = (
-      f: { hMin: number; hMax: number; sMin: number; sMax: number; vMin: number; vMax: number },
+      f: { hMin: number; hMax: number; sMin: number; sMax: number; vMin: number },
       mode: 'PLAYER' | 'OBSTACLE',
       maxLimit: number
     ): DetectedBlob[] => {
       if (maxLimit <= 0) return [];
 
-      const sFloor = Math.max(0.06, f.sMin - (sens - 3) * 0.03);
-      const vFloor = Math.max(0.04, f.vMin - (sens - 3) * 0.025);
+      const sFloor = Math.max(0.04, f.sMin - (sens - 3) * 0.02);
+      const vFloor = Math.max(0.03, f.vMin - (sens - 3) * 0.02);
       const s0 = Math.round(Math.min(1, sFloor) * 255);
       const s1 = Math.round(Math.min(1, f.sMax) * 255);
       const v0 = Math.round(Math.min(1, vFloor) * 255);
-      const v1 = Math.round(Math.min(1, f.vMax) * 255);
+      const v1 = Math.round(Math.min(1, 1.0) * 255);
       const hMin = toH(f.hMin);
       const hMax = toH(f.hMax);
 
@@ -172,7 +191,7 @@ export function detectTwoMagentaBlobsOpenCV(
         cv.bitwise_or(m1, m2, mask);
       }
 
-      // Chromatic verification when using default Magenta or default Cyan
+      // Gentle chromatic verification when using default Magenta (R > G - 5) or default Cyan (B > R - 5)
       if (mode === 'PLAYER' && !settings.customSample) {
         const rgbPlanes = track(new cv.MatVector());
         cv.split(rgb, rgbPlanes);
@@ -181,7 +200,7 @@ export function detectTwoMagentaBlobsOpenCV(
         const diffRG = track(new cv.Mat());
         cv.subtract(rPlane, gPlane, diffRG);
         const threshRG = track(new cv.Mat());
-        cv.threshold(diffRG, threshRG, isLowLight ? 6 : 10, 255, cv.THRESH_BINARY);
+        cv.threshold(diffRG, threshRG, isLowLight ? 2 : 4, 255, cv.THRESH_BINARY);
         cv.bitwise_and(mask, threshRG, mask);
         rPlane.delete();
         gPlane.delete();
@@ -190,15 +209,14 @@ export function detectTwoMagentaBlobsOpenCV(
         const rgbPlanes = track(new cv.MatVector());
         cv.split(rgb, rgbPlanes);
         const rPlane = rgbPlanes.get(0);
-        const gPlane = rgbPlanes.get(1);
         const bPlane = rgbPlanes.get(2);
         const diffBR = track(new cv.Mat());
         cv.subtract(bPlane, rPlane, diffBR);
         const threshBR = track(new cv.Mat());
-        cv.threshold(diffBR, threshBR, isLowLight ? 6 : 10, 255, cv.THRESH_BINARY);
+        cv.threshold(diffBR, threshBR, isLowLight ? 3 : 6, 255, cv.THRESH_BINARY);
         cv.bitwise_and(mask, threshBR, mask);
         rPlane.delete();
-        gPlane.delete();
+        rgbPlanes.get(1).delete();
         bPlane.delete();
       }
 

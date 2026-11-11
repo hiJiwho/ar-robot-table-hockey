@@ -103,8 +103,14 @@ function isMagentaChromatic(
   customSample?: { r: number; g: number; b: number } | null,
   lowLightMode = false
 ): boolean {
+  // [REQ] Digital & physical hot-pink / magenta 100% instant detection:
+  // Pure Magenta (#FF00FF), Fuchsia, Hot-Pink (#FF1493), Neon Pink:
+  if (r > 120 && b > 75 && r > g * 1.10) {
+    return true;
+  }
+
   const sum = r + g + b;
-  const minSum = lowLightMode ? 12 : 28;
+  const minSum = lowLightMode ? 10 : 22;
   if (sum < minSum) return false;
 
   const rc = r / sum;
@@ -120,18 +126,18 @@ function isMagentaChromatic(
       const sbc = customSample.b / sSum;
 
       const dist = Math.hypot(rc - src, gc - sgc, bc - sbc);
-      const tolerance = (0.11 + sensitivity * 0.035) * (lowLightMode ? 1.25 : 1.0);
+      const tolerance = (0.13 + sensitivity * 0.04) * (lowLightMode ? 1.3 : 1.0);
       return dist < tolerance;
     }
   }
 
   // 1. Red must clearly exceed Green (magenta/pink characteristic)
-  if (r <= g + (lowLightMode ? 4 : 8)) {
+  if (r <= g + (lowLightMode ? 2 : 4)) {
     return false;
   }
 
   // 2. Reject skin tone / warm hands (hands have high R but very low B: B << G)
-  if (b < g - 25) {
+  if (b < g - 30) {
     return false;
   }
 
@@ -171,8 +177,13 @@ function isCyanChromatic(
   obstacleCustomSample?: { r: number; g: number; b: number } | null,
   lowLightMode = false
 ): boolean {
+  // [REQ] Digital & physical Cyan instant detection:
+  if (b > 100 && g > 90 && b > r * 1.10 && g > r * 1.05) {
+    return true;
+  }
+
   const sum = r + g + b;
-  const minSum = lowLightMode ? 12 : 28;
+  const minSum = lowLightMode ? 10 : 22;
   if (sum < minSum) return false;
 
   const rc = r / sum;
@@ -188,13 +199,13 @@ function isCyanChromatic(
       const sbc = obstacleCustomSample.b / sSum;
 
       const dist = Math.hypot(rc - src, gc - sgc, bc - sbc);
-      const tolerance = (0.11 + sensitivity * 0.035) * (lowLightMode ? 1.25 : 1.0);
+      const tolerance = (0.13 + sensitivity * 0.04) * (lowLightMode ? 1.3 : 1.0);
       return dist < tolerance;
     }
   }
 
   // Default Cyan characteristic: Blue and Green both clearly exceed Red
-  if (b <= r + (lowLightMode ? 5 : 10) || g <= r + (lowLightMode ? 4 : 8)) {
+  if (b <= r + (lowLightMode ? 3 : 6) || g <= r + (lowLightMode ? 2 : 5)) {
     return false;
   }
 
@@ -371,7 +382,18 @@ export const isPinkPixel = isMagentaPixel;
  * Point-in-Polygon test (Ray-Casting Algorithm)
  * Accurately supports both 4-point quadrilateral and 8-point mesh polygon calibration!
  */
-export function isPointInPolygon(px: number, py: number, polygon: Point2D[]): boolean {
+export function isPointInPolygon(px: number, py: number, polygon: Point2D[], margin = 45): boolean {
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const p of polygon) {
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+  if (px < minX - margin || px > maxX + margin || py < minY - margin || py > maxY + margin) {
+    return false;
+  }
+
   let inside = false;
   const n = polygon.length;
   for (let i = 0, j = n - 1; i < n; j = i++) {
@@ -383,7 +405,7 @@ export function isPointInPolygon(px: number, py: number, polygon: Point2D[]): bo
     const intersect = yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi;
     if (intersect) inside = !inside;
   }
-  return inside;
+  return inside || (px >= minX - 15 && px <= maxX + 15 && py >= minY - 15 && py <= maxY + 15);
 }
 
 /**

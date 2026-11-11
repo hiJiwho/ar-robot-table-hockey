@@ -69,7 +69,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
       const report1 = generateAIPlayerReport('blue', score, stats);
       const report2 = generateAIPlayerReport('red', score, stats);
 
-      generateQRCode(report1.reportUrl, '#0284c7', '#ffffff').then((dataUrl) => {
+      generateQRCode(report1.reportUrl, '#9333ea', '#ffffff').then((dataUrl) => {
         if (dataUrl) {
           const img = new Image();
           img.src = dataUrl;
@@ -220,8 +220,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
         ctx.lineTo(rightBot.x, rightBot.y);
         ctx.stroke();
 
-        // Left Goal Post Net Arc (Cyan 팀)
-        ctx.strokeStyle = isGameOver ? primaryLine : '#06b6d4';
+        // Left Goal Post Net Arc (Purple 보라 팀)
+        ctx.strokeStyle = isGameOver ? primaryLine : '#a855f7';
         ctx.lineWidth = 4;
         ctx.beginPath();
         const leftNetBack = tf.tableToScreen(-45, TABLE_HEIGHT / 2);
@@ -229,7 +229,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
         ctx.quadraticCurveTo(leftNetBack.x, leftNetBack.y, leftGoalPostBot.x, leftGoalPostBot.y);
         ctx.stroke();
 
-        // Right Goal Post Net Arc (Yellow 팀)
+        // Right Goal Post Net Arc (Yellow 노랑 팀)
         ctx.strokeStyle = isGameOver ? primaryLine : '#eab308';
         ctx.lineWidth = 4;
         ctx.beginPath();
@@ -238,12 +238,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
         ctx.quadraticCurveTo(rightNetBack.x, rightNetBack.y, rightGoalPostBot.x, rightGoalPostBot.y);
         ctx.stroke();
 
-        // Goal Crease Semi-Circles (골대 앞 반원 수비 구역: 좌측 Cyan, 우측 Yellow)
+        // Goal Crease Semi-Circles (골대 앞 반원 수비 구역: 좌측 Purple, 우측 Yellow)
         ctx.lineWidth = 2.5;
         ctx.setLineDash([6, 5]);
 
-        // Left Crease (Cyan)
-        ctx.strokeStyle = isGameOver ? secondaryLine : 'rgba(6, 182, 212, 0.75)';
+        // Left Crease (Purple)
+        ctx.strokeStyle = isGameOver ? secondaryLine : 'rgba(168, 85, 247, 0.75)';
         ctx.beginPath();
         const creaseRadius = goalHalf + 25;
         for (let i = -16; i <= 16; i++) {
@@ -326,7 +326,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       if (!isGameOver) {
-        ctx.shadowColor = isLight ? 'rgba(6, 182, 212, 0.6)' : 'rgba(34, 211, 238, 0.75)';
+        ctx.shadowColor = isLight ? 'rgba(147, 51, 234, 0.6)' : 'rgba(192, 132, 252, 0.75)';
         ctx.shadowBlur = 18;
       }
       ctx.fillStyle = isGameOver
@@ -334,8 +334,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
           ? 'rgba(203, 213, 225, 0.28)'
           : 'rgba(63, 63, 70, 0.22)'
         : isLight
-        ? 'rgba(6, 182, 212, 0.90)'
-        : 'rgba(34, 211, 238, 0.95)';
+        ? 'rgba(147, 51, 234, 0.90)'
+        : 'rgba(192, 132, 252, 0.95)';
       ctx.fillText(String(score.blue), 0, 0);
       ctx.restore();
 
@@ -354,8 +354,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
         : isUrgent
         ? '#ef4444'
         : isLight
-        ? '#06b6d4'
-        : '#22d3ee';
+        ? '#9333ea'
+        : '#c084fc';
       ctx.lineWidth = 3;
       const clockW = 150;
       const clockH = 46;
@@ -368,7 +368,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       if (!isGameOver) {
-        ctx.shadowColor = isUrgent ? '#ef4444' : isLight ? '#0891b2' : '#22d3ee';
+        ctx.shadowColor = isUrgent ? '#ef4444' : isLight ? '#7e22ce' : '#c084fc';
         ctx.shadowBlur = 10;
       }
       ctx.fillStyle = isGameOver
@@ -378,8 +378,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
         : isUrgent
         ? '#ef4444'
         : isLight
-        ? '#0891b2'
-        : '#22d3ee';
+        ? '#7e22ce'
+        : '#c084fc';
       ctx.fillText(timeStr, 0, 1);
       ctx.restore();
       }
@@ -555,33 +555,33 @@ function renderRealisticMal(
   if (!robot.detected && Date.now() - robot.lastSeenTime > 500) return;
   const screenPos = tf.tableToScreen(robot.tableX, robot.tableY);
   const outerRadius = 32;
-  const isCyan = robot.team === 'blue';
+  const isPurple = robot.team === 'blue';
 
   ctx.save();
   ctx.translate(screenPos.x, screenPos.y);
 
   const primary = isGameOver
     ? '#52525b'
-    : isCyan
-    ? '#22d3ee'
+    : isPurple
+    ? '#c084fc'
     : '#facc15';
 
   const rimFill = isGameOver
     ? 'rgba(82, 82, 91, 0.25)'
-    : isCyan
-    ? 'rgba(6, 182, 212, 0.35)'
+    : isPurple
+    ? 'rgba(168, 85, 247, 0.35)'
     : 'rgba(234, 179, 8, 0.35)';
 
   const knobFill = isGameOver
     ? '#3f3f46'
-    : isCyan
-    ? '#0891b2'
+    : isPurple
+    ? '#9333ea'
     : '#ca8a04';
 
   const innerRingColor = isGameOver
     ? '#52525b'
-    : isCyan
-    ? '#67e8f9'
+    : isPurple
+    ? '#d8b4fe'
     : '#fde047';
 
   if (!isGameOver && isAiBot) {
@@ -617,7 +617,7 @@ function renderRealisticMal(
   ctx.stroke();
 
   if (isAiBot && !isGameOver) {
-    ctx.rotate(isCyan ? Math.PI / 2 : -Math.PI / 2);
+    ctx.rotate(isPurple ? Math.PI / 2 : -Math.PI / 2);
     ctx.font = '900 10px system-ui, sans-serif';
     ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'center';
@@ -808,7 +808,7 @@ function renderDualGoalQRCodes(
   // -----------------------------------------------------------------
   const p1Pos = tf.tableToScreen(TABLE_WIDTH / 2 - 250, TABLE_HEIGHT / 2);
   const p1Outcome = score.blue > score.red ? 'WIN' : score.blue < score.red ? 'LOSE' : 'DRAW';
-  const p1Color = p1Outcome === 'WIN' ? '#06b6d4' : p1Outcome === 'LOSE' ? '#ef4444' : '#f59e0b';
+  const p1Color = p1Outcome === 'WIN' ? '#a855f7' : p1Outcome === 'LOSE' ? '#ef4444' : '#f59e0b';
 
   ctx.save();
   ctx.translate(p1Pos.x, p1Pos.y);
@@ -846,7 +846,7 @@ function renderDualGoalQRCodes(
   ctx.fillStyle = p1Color;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
-  ctx.fillText('📱 1P AI 리포트', 0, 6 + qrBox + 7);
+  ctx.fillText('📱 1P (보라) AI 리포트', 0, 6 + qrBox + 7);
   ctx.restore();
 
   // -----------------------------------------------------------------
@@ -891,6 +891,6 @@ function renderDualGoalQRCodes(
   ctx.fillStyle = p2Color;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
-  ctx.fillText('📱 2P AI 리포트', 0, 6 + qrBox + 7);
+  ctx.fillText('📱 2P (노랑) AI 리포트', 0, 6 + qrBox + 7);
   ctx.restore();
 }
