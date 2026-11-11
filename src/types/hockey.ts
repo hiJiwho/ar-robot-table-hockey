@@ -43,12 +43,12 @@ export interface PuckState {
   vx: number;
   vy: number;
   radius: number;
-  trail: Array<{ x: number; y: number; alpha: number }>;
-  lastHitTeam: 'blue' | 'red' | 'obstacle' | null;
   spin?: number;
   angle?: number;
   superCharged?: boolean;
   rallyCount?: number;
+  trail: Array<{ x: number; y: number; alpha: number }>;
+  lastHitTeam: 'blue' | 'red' | 'obstacle' | null;
 }
 
 export interface Particle {
@@ -77,7 +77,7 @@ export interface ImpactRipple {
 export interface LiveGameState {
   blueRobot: RobotState;
   redRobot: RobotState;
-  allRobots: RobotState[]; // [REQ] 2개에서 10개 사이로 유동적 인식된 모든 마젠타 로봇/블록 (장애물 로봇 포함)
+  allRobots: RobotState[]; // [REQ] 1P/2P 마젠타(2개 고정) + 시안 장애물 로봇(기본 2개, 0~10개 설정 가능)
   puck: PuckState;
   particles: Particle[];
   ripples?: ImpactRipple[];
@@ -114,12 +114,15 @@ export interface ColorFilter {
 export type VisionEngineType = 'OPENCV' | 'CHROMATIC' | 'YCRCB' | 'HSV' | 'ADAPTIVE_HSV';
 
 export interface ColorSettings {
-  magenta: ColorFilter;
+  magenta: ColorFilter; // 1P/2P 플레이어 마커 필터 (기본: 마젠타, 2개 고정)
+  cyan?: ColorFilter; // 로봇(장애물) 마커 필터 (기본: 시안)
+  obstacleCount?: number; // 로봇(장애물) 최대 인식 개수 (기본: 2개, 콘솔/옵션에서 0~10개 변경 가능)
   minBlobSize: number;
   maxBlobSize: number;
   visionEngine: VisionEngineType;
   sensitivity: number; // 1 (narrow) to 5 (wide), default 3
-  customSample?: { r: number; g: number; b: number; hex: string } | null;
+  customSample?: { r: number; g: number; b: number; hex: string } | null; // 플레이어(마젠타) 스포이트 샘플
+  obstacleCustomSample?: { r: number; g: number; b: number; hex: string } | null; // 장애물(시안) 스포이트 샘플
   lowLightMode?: boolean; // [REQ] 불 꺼도 인식 잘 되는 암실/저조도 감도 부스트 모드
 }
 
@@ -162,6 +165,8 @@ export type GameActionMessage = {
     | 'SET_LOW_LIGHT_MODE'
     | 'UPDATE_COLOR_SETTINGS'
     | 'SAMPLE_COLOR'
+    | 'SAMPLE_OBSTACLE_COLOR'
+    | 'SET_OBSTACLE_COUNT'
     | 'SET_BOT_CONFIG'
     | 'SET_AUDIO_CONFIG'
     | 'PLAY_SOUND_EFFECT'
@@ -180,15 +185,14 @@ export type GameActionMessage = {
   lowLightMode?: boolean;
   colorSettings?: Partial<ColorSettings>;
   customSample?: { r: number; g: number; b: number; hex: string } | null;
+  obstacleCustomSample?: { r: number; g: number; b: number; hex: string } | null;
+  obstacleCount?: number;
   botTeam?: BotTargetTeam;
   botDifficulty?: BotDifficulty;
-  volume?: number;
   isMuted?: boolean;
-  sound?: string;
-  soundEffect?: string;
-  deviceId?: string;
+  volume?: number;
+  soundEffect?: 'WHISTLE' | 'GOAL_HORN' | 'BUZZER' | 'BOOST';
   cameraDeviceId?: string;
-
 };
 
 export const DEFAULT_NORMALIZED_CORNERS: FourCorners = [
@@ -260,26 +264,32 @@ export const MATCH_MODES: Record<MatchMode, { label: string; duration: number; t
 };
 
 export interface SyncStatePayload {
-  type: 'SYNC_STATE';
+  type: 'SYNC_STATE' | 'UPDATE';
   score: MatchScore;
   timeLeft: number;
   gamePhase: GamePhase;
-  matchMode: MatchMode;
+  matchMode?: MatchMode;
   customDuration?: number;
   targetPoints?: number;
   goalSize?: number;
   theme?: 'dark' | 'light';
-  stats: MatchStats;
+  stats?: MatchStats;
   goalAnnouncement?: { team: 'blue' | 'red'; countdown: number; points?: number } | null;
   screenCorners?: CalibrationCorners;
   cameraCorners?: CalibrationCorners;
   isCameraMirrored?: boolean;
   lowLightMode?: boolean;
   colorSettings?: ColorSettings;
+  botTeam?: BotTargetTeam;
+  botDifficulty?: BotDifficulty;
+  isMuted?: boolean;
+  volume?: number;
+  cameraDeviceId?: string;
   visionDiagnostics?: {
     engine: VisionEngineType;
     isOpenCVActive: boolean;
     detectedBlobsCount: number;
+    obstacleBlobsCount?: number;
     blueConfidence: number;
     redConfidence: number;
   };

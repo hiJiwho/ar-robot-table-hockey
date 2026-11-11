@@ -11,7 +11,7 @@ export interface DetectedBlob {
 
 export const DEFAULT_COLOR_SETTINGS: ColorSettings = {
   magenta: {
-    // Magenta / Violet-Pink (wrap-around 275 to 20 deg)
+    // Magenta / Violet-Pink (wrap-around 275 to 20 deg) - 1P & 2P Players (2 fixed)
     hMin: 275,
     hMax: 20,
     sMin: 0.16,
@@ -19,12 +19,23 @@ export const DEFAULT_COLOR_SETTINGS: ColorSettings = {
     vMin: 0.14,
     vMax: 1.0,
   },
+  cyan: {
+    // Cyan / Sky-Aqua (165 to 215 deg) - Obstacle Robots (default 2, configurable 0..10)
+    hMin: 165,
+    hMax: 215,
+    sMin: 0.16,
+    sMax: 1.0,
+    vMin: 0.14,
+    vMax: 1.0,
+  },
+  obstacleCount: 2, // Default: 2 Cyan obstacle robots (+ 2 Magenta players = 4 total)
   minBlobSize: 8, // Support small physical Lego blocks (>= 8 pixels)
   maxBlobSize: 15000,
   visionEngine: 'OPENCV', // Default to OpenCV (opencv.js WASM); falls back to JS Chromatic engine while loading
   sensitivity: 3, // 1 to 5 (3 is optimal standard)
   lowLightMode: false,
   customSample: null,
+  obstacleCustomSample: null,
 };
 
 /**
@@ -82,13 +93,7 @@ export function matchesFilter(h: number, s: number, v: number, filter: ColorFilt
 
 /**
  * ENGINE 1: Smart Invariant Chromatic Index (OpenCV-Grade Projector-Proof Engine)
- * Enhanced with Low-Light & Anti-Jitter Verification:
- * - White projector light: R ≈ G ≈ B -> Excess Magenta ≈ 0 (REJECTED)
- * - Gray / white table: R ≈ G ≈ B -> Excess Magenta ≈ 0 (REJECTED)
- * - Green Lego blocks: G >> R, B -> Strongly Negative (REJECTED)
- * - Yellow / Orange Lego: B << G -> Strongly Negative (REJECTED)
- * - Hands / skin: R is high but B is low -> Near Zero / Negative (REJECTED)
- * - Magenta / Fuchsia Lego: R >> G and B >> G -> Strongly Positive (MATCHED)
+ * For Player Markers (Default: Magenta, or Camera-Sampled customSample)
  */
 function isMagentaChromatic(
   r: number,
@@ -98,14 +103,27 @@ function isMagentaChromatic(
   customSample?: { r: number; g: number; b: number } | null,
   lowLightMode = false
 ): boolean {
-  // [REQ] OBS 시뮬레이션 및 디지털/물리 마젠타 100% 즉시 인식:
-  // 순수 마젠타(#FF00FF), 핫핑크(#FF1493), 푸시아, 네온 핑크 등 디지털 RGB 즉각 수용
-  if (r > 130 && b > 85 && r > g * 1.15 && b > g * 0.75) {
-    return true;
-  }
   const sum = r + g + b;
   const minSum = lowLightMode ? 12 : 28;
   if (sum < minSum) return false;
+
+  const rc = r / sum;
+  const gc = g / sum;
+  const bc = b / sum;
+
+  // If user calibrated a specific physical sample from the camera feed for Player:
+  if (customSample) {
+    const sSum = customSample.r + customSample.g + customSample.b;
+    if (sSum > 16) {
+      const src = customSample.r / sSum;
+      const sgc = customSample.g / sSum;
+      const sbc = customSample.b / sSum;
+
+      const dist = Math.hypot(rc - src, gc - sgc, bc - sbc);
+      const tolerance = (0.11 + sensitivity * 0.035) * (lowLightMode ? 1.25 : 1.0);
+      return dist < tolerance;
+    }
+  }
 
   // 1. Red must clearly exceed Green (magenta/pink characteristic)
   if (r <= g + (lowLightMode ? 4 : 8)) {
@@ -115,25 +133,6 @@ function isMagentaChromatic(
   // 2. Reject skin tone / warm hands (hands have high R but very low B: B << G)
   if (b < g - 25) {
     return false;
-  }
-
-  const rc = r / sum;
-  const gc = g / sum;
-  const bc = b / sum;
-
-  // If user calibrated a specific physical sample from the camera feed:
-  if (customSample) {
-    const sSum = customSample.r + customSample.g + customSample.b;
-    if (sSum > 16) {
-      const src = customSample.r / sSum;
-      const sgc = customSample.g / sSum;
-      const sbc = customSample.b / sSum;
-
-      // Chromatic distance in normalized color space (invariant to lighting intensity)
-      const dist = Math.hypot(rc - src, (gc - sgc) * 1.2, bc - sbc);
-      const tolerance = (0.15 + sensitivity * 0.05) * (lowLightMode ? 1.3 : 1.0);
-      if (dist < tolerance) return true;
-    }
   }
 
   // Base threshold adjusted by sensitivity (1=strict, 5=lenient)
@@ -161,8 +160,63 @@ function isMagentaChromatic(
 }
 
 /**
+ * ENGINE 1-B: Smart Invariant Chromatic Index for Obstacle Robot Markers
+ * (Default: Cyan / Aqua, or Camera-Sampled obstacleCustomSample)
+ */
+function isCyanChromatic(
+  r: number,
+  g: number,
+  b: number,
+  sensitivity: number,
+  obstacleCustomSample?: { r: number; g: number; b: number } | null,
+  lowLightMode = false
+): boolean {
+  const sum = r + g + b;
+  const minSum = lowLightMode ? 12 : 28;
+  if (sum < minSum) return false;
+
+  const rc = r / sum;
+  const gc = g / sum;
+  const bc = b / sum;
+
+  // If user calibrated a specific physical sample from the camera feed for Obstacle Robot:
+  if (obstacleCustomSample) {
+    const sSum = obstacleCustomSample.r + obstacleCustomSample.g + obstacleCustomSample.b;
+    if (sSum > 16) {
+      const src = obstacleCustomSample.r / sSum;
+      const sgc = obstacleCustomSample.g / sSum;
+      const sbc = obstacleCustomSample.b / sSum;
+
+      const dist = Math.hypot(rc - src, gc - sgc, bc - sbc);
+      const tolerance = (0.11 + sensitivity * 0.035) * (lowLightMode ? 1.25 : 1.0);
+      return dist < tolerance;
+    }
+  }
+
+  // Default Cyan characteristic: Blue and Green both clearly exceed Red
+  if (b <= r + (lowLightMode ? 5 : 10) || g <= r + (lowLightMode ? 4 : 8)) {
+    return false;
+  }
+
+  let thresh = Math.max(0.05, 0.22 - sensitivity * 0.035);
+  if (lowLightMode) {
+    thresh *= 0.65;
+  }
+
+  // Normalized Excess Cyan (NEC): (gc + bc) - 2*rc
+  const nec = (gc + bc) - 2 * rc;
+  const maxRc = lowLightMode ? 0.30 : 0.27;
+  const minBc = lowLightMode ? 0.32 : 0.35;
+
+  if (nec > thresh && rc < maxRc && bc > minBc && gc > 0.28) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * ENGINE 2: OpenCV YCrCb Chrominance Separation Engine
- * Separates illumination (Y) from chrominance (Cr, Cb).
  */
 function isMagentaYCrCb(
   r: number,
@@ -179,8 +233,8 @@ function isMagentaYCrCb(
     const dCr = cr - s.cr;
     const dCb = cb - s.cb;
     const dist = Math.hypot(dCr, dCb);
-    const maxDist = (20 + sensitivity * 8) * (lowLightMode ? 1.3 : 1.0);
-    if (dist < maxDist) return true;
+    const maxDist = (18 + sensitivity * 7) * (lowLightMode ? 1.25 : 1.0);
+    return dist < maxDist;
   }
 
   const baseOffset = lowLightMode ? 10 : 0;
@@ -191,10 +245,36 @@ function isMagentaYCrCb(
   return cr >= crMin && cb >= cbMin && (cr + cb) > sumMin;
 }
 
+function isCyanYCrCb(
+  r: number,
+  g: number,
+  b: number,
+  sensitivity: number,
+  obstacleCustomSample?: { r: number; g: number; b: number } | null,
+  lowLightMode = false
+): boolean {
+  const { cr, cb } = rgbToYCrCb(r, g, b);
+
+  if (obstacleCustomSample) {
+    const s = rgbToYCrCb(obstacleCustomSample.r, obstacleCustomSample.g, obstacleCustomSample.b);
+    const dCr = cr - s.cr;
+    const dCb = cb - s.cb;
+    const dist = Math.hypot(dCr, dCb);
+    const maxDist = (18 + sensitivity * 7) * (lowLightMode ? 1.25 : 1.0);
+    return dist < maxDist;
+  }
+
+  const baseOffset = lowLightMode ? 8 : 0;
+  const crMax = 115 + sensitivity * 2.5 + baseOffset;
+  const cbMin = 136 - sensitivity * 2.5 - baseOffset;
+
+  return cr <= crMax && cb >= cbMin;
+}
+
 /**
  * ENGINE 3: Adaptive Wide-Spectrum HSV Engine
  */
-function isMagentaHsv(
+function isColorHsv(
   r: number,
   g: number,
   b: number,
@@ -222,7 +302,7 @@ function isMagentaHsv(
 }
 
 /**
- * Master Pixel Classifier based on active Vision Engine
+ * Master Pixel Classifier for 1P/2P Player Markers (Default: Magenta)
  */
 export function isMagentaPixelByEngine(
   r: number,
@@ -240,9 +320,37 @@ export function isMagentaPixelByEngine(
     case 'YCRCB':
       return isMagentaYCrCb(r, g, b, sensitivity, settings.customSample, lowLight);
     case 'HSV':
-      return isMagentaHsv(r, g, b, settings.magenta, sensitivity, lowLight);
+    case 'ADAPTIVE_HSV':
+      return isColorHsv(r, g, b, settings.magenta, sensitivity, lowLight);
     default:
       return isMagentaChromatic(r, g, b, sensitivity, settings.customSample, lowLight);
+  }
+}
+
+/**
+ * Master Pixel Classifier for Obstacle Robot Markers (Default: Cyan)
+ */
+export function isCyanPixelByEngine(
+  r: number,
+  g: number,
+  b: number,
+  settings: ColorSettings
+): boolean {
+  const engine = settings.visionEngine || 'CHROMATIC';
+  const sensitivity = settings.sensitivity || 3;
+  const lowLight = !!settings.lowLightMode;
+  const cyanFilter = settings.cyan || DEFAULT_COLOR_SETTINGS.cyan!;
+
+  switch (engine) {
+    case 'CHROMATIC':
+      return isCyanChromatic(r, g, b, sensitivity, settings.obstacleCustomSample, lowLight);
+    case 'YCRCB':
+      return isCyanYCrCb(r, g, b, sensitivity, settings.obstacleCustomSample, lowLight);
+    case 'HSV':
+    case 'ADAPTIVE_HSV':
+      return isColorHsv(r, g, b, cyanFilter, sensitivity, lowLight);
+    default:
+      return isCyanChromatic(r, g, b, sensitivity, settings.obstacleCustomSample, lowLight);
   }
 }
 
@@ -263,19 +371,7 @@ export const isPinkPixel = isMagentaPixel;
  * Point-in-Polygon test (Ray-Casting Algorithm)
  * Accurately supports both 4-point quadrilateral and 8-point mesh polygon calibration!
  */
-export function isPointInPolygon(px: number, py: number, polygon: Point2D[], margin = 45): boolean {
-  // [REQ] 골대 앞/테두리에 있는 말이 마스크로 잘리지 않도록 45px 버퍼 마진 지원
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  for (const p of polygon) {
-    if (p.x < minX) minX = p.x;
-    if (p.x > maxX) maxX = p.x;
-    if (p.y < minY) minY = p.y;
-    if (p.y > maxY) maxY = p.y;
-  }
-  if (px < minX - margin || px > maxX + margin || py < minY - margin || py > maxY + margin) {
-    return false;
-  }
-
+export function isPointInPolygon(px: number, py: number, polygon: Point2D[]): boolean {
   let inside = false;
   const n = polygon.length;
   for (let i = 0, j = n - 1; i < n; j = i++) {
@@ -287,7 +383,7 @@ export function isPointInPolygon(px: number, py: number, polygon: Point2D[], mar
     const intersect = yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi;
     if (intersect) inside = !inside;
   }
-  return inside || (px >= minX - 15 && px <= maxX + 15 && py >= minY - 15 && py <= maxY + 15);
+  return inside;
 }
 
 /**
@@ -332,95 +428,17 @@ interface ClusterInternal {
   score: number;
 }
 
-/**
- * High-performance OpenCV-style Blob Detection:
- * Detect TWO Magenta Blobs on the table and assign them to Blue (Left) and Red (Right) robots
- * using minimum distance tracking and spatial position.
- */
-export function detectTwoMagentaBlobs(
-  imageData: ImageData,
-  colorSettingsOrFilter: ColorSettings | ColorFilter,
-  minPixels: number,
-  maxPixels: number,
-  deskPolyPixels?: CalibrationCorners | Point2D[] | null,
-  debugMaskData?: ImageData | null,
-  lastBluePos?: Point2D | null,
-  lastRedPos?: Point2D | null
-): {
-  blueBlob: DetectedBlob | null;
-  redBlob: DetectedBlob | null;
-  allBlobs: DetectedBlob[];
-} {
-  const { data, width, height } = imageData;
-  const maskData = debugMaskData?.data;
-
-  // Normalize settings
-  const settings: ColorSettings =
-    'visionEngine' in colorSettingsOrFilter
-      ? (colorSettingsOrFilter as ColorSettings)
-      : {
-          magenta: colorSettingsOrFilter as ColorFilter,
-          minBlobSize: minPixels,
-          maxBlobSize: maxPixels,
-          visionEngine: 'CHROMATIC',
-          sensitivity: 3,
-          lowLightMode: false,
-        };
-
-  const candidatePoints: Array<[number, number]> = [];
-
-  // Calculate Bounding Box of deskPolyPixels to avoid scanning outside areas
-  let startX = 0;
-  let endX = width;
-  let startY = 0;
-  let endY = height;
-  if (deskPolyPixels && deskPolyPixels.length >= 4) {
-    const xs = deskPolyPixels.map((p) => p.x);
-    const ys = deskPolyPixels.map((p) => p.y);
-    startX = Math.max(0, Math.floor(Math.min(...xs)) - 4);
-    endX = Math.min(width, Math.ceil(Math.max(...xs)) + 4);
-    startY = Math.max(0, Math.floor(Math.min(...ys)) - 4);
-    endY = Math.min(height, Math.ceil(Math.max(...ys)) + 4);
+function clusterCandidatePoints(
+  candidatePoints: Array<[number, number]>,
+  effectiveMinPixels: number,
+  width: number,
+  height: number,
+  maxCount: number
+): DetectedBlob[] {
+  if (candidatePoints.length < effectiveMinPixels || maxCount <= 0) {
+    return [];
   }
 
-  const step = 2;
-  const effectiveMinPixels = Math.max(3, Math.floor(minPixels / 3));
-
-  // Pass 1: Ultra-fast pixel classification strictly inside calibrated court ROI
-  for (let y = startY; y < endY; y += step) {
-    const rowOffset = y * width;
-    for (let x = startX; x < endX; x += step) {
-      if (deskPolyPixels && !isPointInConvexQuad(x, y, deskPolyPixels, 6)) {
-        continue;
-      }
-
-      const idx = (rowOffset + x) * 4;
-      const r = data[idx];
-      const g = data[idx + 1];
-      const b = data[idx + 2];
-
-      if (isMagentaPixelByEngine(r, g, b, settings)) {
-        candidatePoints.push([x, y]);
-        if (maskData) {
-          for (let my = 0; my < step && y + my < height; my++) {
-            for (let mx = 0; mx < step && x + mx < width; mx++) {
-              const mIdx = ((y + my) * width + (x + mx)) * 4;
-              maskData[mIdx] = 244;
-              maskData[mIdx + 1] = 63;
-              maskData[mIdx + 2] = 142;
-              maskData[mIdx + 3] = 255;
-            }
-          }
-        }
-      }
-    }
-  }
-
-  if (candidatePoints.length < effectiveMinPixels) {
-    return { blueBlob: null, redBlob: null, allBlobs: [] };
-  }
-
-  // Pass 2: Spatial Grid Clustering (OpenCV Connected-Component approximation)
   const cellSize = 14;
   const grid = new Map<string, Array<[number, number]>>();
 
@@ -488,7 +506,6 @@ export function detectTwoMagentaBlobs(
       const bw = maxX - minX + 1;
       const bh = maxY - minY + 1;
 
-      // Discard giant light washes or table-wide projector artifacts (> 180px)
       if (bw > 180 || bh > 180) continue;
 
       const aspect = Math.min(bw, bh) / Math.max(bw, bh || 1);
@@ -508,14 +525,9 @@ export function detectTwoMagentaBlobs(
     }
   }
 
-  if (rawClusters.length === 0) {
-    return { blueBlob: null, redBlob: null, allBlobs: [] };
-  }
-
-  // Sort clusters by score descending
   rawClusters.sort((a, b) => b.score - a.score);
 
-  const clusterToBlob = (c: ClusterInternal): DetectedBlob => {
+  return rawClusters.slice(0, maxCount).map((c) => {
     const radius = Math.max(14, (c.maxX - c.minX + c.maxY - c.minY) / 4);
     return {
       x: c.cx,
@@ -530,16 +542,147 @@ export function detectTwoMagentaBlobs(
         maxY: c.maxY,
       },
     };
-  };
-
-  // Keep up to 10 detected clusters (2 players + up to 8 obstacle blocks/robots)
-  const allBlobs: DetectedBlob[] = rawClusters.slice(0, 10).map(clusterToBlob);
-  return assignBlobs(allBlobs, width, lastBluePos, lastRedPos);
+  });
 }
 
 /**
- * Pairs detected blobs with Blue (1P) and Red (2P) robots, and retains all intermediate
- * blobs (2..10 total) for dynamic physical obstacle robots.
+ * High-performance OpenCV-style Blob Detection:
+ * - Detects 2 Player Blobs (Default: Magenta, 2 fixed for 1P & 2P)
+ * - Simultaneously detects up to N Obstacle Robot Blobs (Default: Cyan, default 2, configurable 0..10)
+ */
+export function detectTwoMagentaBlobs(
+  imageData: ImageData,
+  colorSettingsOrFilter: ColorSettings | ColorFilter,
+  minPixels: number,
+  maxPixels: number,
+  deskPolyPixels?: CalibrationCorners | Point2D[] | null,
+  debugMaskData?: ImageData | null,
+  lastBluePos?: Point2D | null,
+  lastRedPos?: Point2D | null
+): {
+  blueBlob: DetectedBlob | null;
+  redBlob: DetectedBlob | null;
+  obstacleBlobs: DetectedBlob[];
+  allBlobs: DetectedBlob[];
+} {
+  const { data, width, height } = imageData;
+  const maskData = debugMaskData?.data;
+
+  // Normalize settings
+  const settings: ColorSettings =
+    'visionEngine' in colorSettingsOrFilter
+      ? (colorSettingsOrFilter as ColorSettings)
+      : {
+          magenta: colorSettingsOrFilter as ColorFilter,
+          cyan: DEFAULT_COLOR_SETTINGS.cyan,
+          obstacleCount: 2,
+          minBlobSize: minPixels,
+          maxBlobSize: maxPixels,
+          visionEngine: 'CHROMATIC',
+          sensitivity: 3,
+          lowLightMode: false,
+        };
+
+  const maxObstacles = Math.max(0, Math.min(10, settings.obstacleCount ?? 2));
+  const magentaPoints: Array<[number, number]> = [];
+  const cyanPoints: Array<[number, number]> = [];
+
+  // Calculate Bounding Box of deskPolyPixels to avoid scanning outside areas
+  let startX = 0;
+  let endX = width;
+  let startY = 0;
+  let endY = height;
+  if (deskPolyPixels && deskPolyPixels.length >= 4) {
+    const xs = deskPolyPixels.map((p) => p.x);
+    const ys = deskPolyPixels.map((p) => p.y);
+    startX = Math.max(0, Math.floor(Math.min(...xs)) - 4);
+    endX = Math.min(width, Math.ceil(Math.max(...xs)) + 4);
+    startY = Math.max(0, Math.floor(Math.min(...ys)) - 4);
+    endY = Math.min(height, Math.ceil(Math.max(...ys)) + 4);
+  }
+
+  const step = 2;
+  const effectiveMinPixels = Math.max(3, Math.floor(minPixels / 3));
+
+  // Pass 1: Ultra-fast pixel classification strictly inside calibrated court ROI
+  for (let y = startY; y < endY; y += step) {
+    const rowOffset = y * width;
+    for (let x = startX; x < endX; x += step) {
+      if (deskPolyPixels && !isPointInConvexQuad(x, y, deskPolyPixels, 6)) {
+        continue;
+      }
+
+      const idx = (rowOffset + x) * 4;
+      const r = data[idx];
+      const g = data[idx + 1];
+      const b = data[idx + 2];
+
+      if (isMagentaPixelByEngine(r, g, b, settings)) {
+        magentaPoints.push([x, y]);
+        if (maskData) {
+          for (let my = 0; my < step && y + my < height; my++) {
+            for (let mx = 0; mx < step && x + mx < width; mx++) {
+              const mIdx = ((y + my) * width + (x + mx)) * 4;
+              maskData[mIdx] = 244;
+              maskData[mIdx + 1] = 63;
+              maskData[mIdx + 2] = 142;
+              maskData[mIdx + 3] = 255;
+            }
+          }
+        }
+      } else if (maxObstacles > 0 && isCyanPixelByEngine(r, g, b, settings)) {
+        cyanPoints.push([x, y]);
+        if (maskData) {
+          for (let my = 0; my < step && y + my < height; my++) {
+            for (let mx = 0; mx < step && x + mx < width; mx++) {
+              const mIdx = ((y + my) * width + (x + mx)) * 4;
+              maskData[mIdx] = 6;
+              maskData[mIdx + 1] = 182;
+              maskData[mIdx + 2] = 212;
+              maskData[mIdx + 3] = 255;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const magentaBlobs = clusterCandidatePoints(magentaPoints, effectiveMinPixels, width, height, 2 + maxObstacles);
+  const cyanBlobs = clusterCandidatePoints(cyanPoints, effectiveMinPixels, width, height, maxObstacles);
+
+  const playerAssigned = assignBlobs(magentaBlobs, width, lastBluePos, lastRedPos);
+  const { blueBlob, redBlob } = playerAssigned;
+
+  // Collect Cyan obstacle blobs (excluding any accidental overlap with 1P/2P)
+  const obstacleBlobs: DetectedBlob[] = [];
+  for (const cb of cyanBlobs) {
+    if (obstacleBlobs.length >= maxObstacles) break;
+    const tooCloseBlue = blueBlob && Math.hypot(cb.x - blueBlob.x, cb.y - blueBlob.y) < 22;
+    const tooCloseRed = redBlob && Math.hypot(cb.x - redBlob.x, cb.y - redBlob.y) < 22;
+    if (!tooCloseBlue && !tooCloseRed) {
+      obstacleBlobs.push(cb);
+    }
+  }
+
+  // Fallback: if extra Magenta blobs (> 2) exist and obstacleBlobs < maxObstacles, include them too
+  for (const mb of magentaBlobs) {
+    if (obstacleBlobs.length >= maxObstacles) break;
+    if (mb !== blueBlob && mb !== redBlob) {
+      obstacleBlobs.push(mb);
+    }
+  }
+
+  const allBlobs: DetectedBlob[] = [
+    ...(blueBlob ? [blueBlob] : []),
+    ...(redBlob ? [redBlob] : []),
+    ...obstacleBlobs,
+  ];
+
+  return { blueBlob, redBlob, obstacleBlobs, allBlobs };
+}
+
+/**
+ * Pairs detected player blobs with Blue (1P) and Red (2P) robots (2 fixed).
  */
 export function assignBlobs(
   blobsInput: DetectedBlob[],
@@ -580,12 +723,11 @@ export function assignBlobs(
       : { blueBlob: null, redBlob: single, allBlobs };
   }
 
-  // 2 or more blobs detected (2 ~ 10):
+  // 2 or more blobs detected:
   let blueBlob: DetectedBlob | null = null;
   let redBlob: DetectedBlob | null = null;
 
   if (lastBluePos && lastRedPos) {
-    // Find best pair matching historical positions
     let bestDist = Infinity;
     let bestPair: [number, number] = [0, 1];
 
@@ -610,7 +752,6 @@ export function assignBlobs(
 
   // Fallback / spatial prior: leftmost is Blue (1P), rightmost is Red (2P)
   if (!blueBlob || !redBlob) {
-    // Sort copy by x coordinate
     const sortedByX = [...allBlobs].sort((a, b) => a.x - b.x);
     blueBlob = sortedByX[0];
     redBlob = sortedByX[sortedByX.length - 1];

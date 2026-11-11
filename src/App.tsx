@@ -19,9 +19,9 @@ import {
   DEFAULT_GOAL_SIZE,
   PUCK_RADIUS,
   ROBOT_RADIUS,
+  CENTER_SPEAKER_RADIUS,
   DEFAULT_NORMALIZED_CORNERS,
   LiveGameState,
-  CENTER_SPEAKER_RADIUS,
   BotTargetTeam,
   BotDifficulty,
   GoalLogEntry,
@@ -32,6 +32,7 @@ import {
   detectTwoMagentaBlobs,
   sampleColorAtPoint,
   createFilterFromSample,
+  rgbToHsv,
   DetectedBlob,
 } from './utils/vision';
 import { detectTwoMagentaBlobsOpenCV, loadOpenCV } from './utils/opencvVision';
@@ -109,8 +110,6 @@ export default function App() {
   const [isPickingColor, setIsPickingColor] = useState(false);
 
   // [REQ] 8점 보정은 카메라만. 경기장은 4점으로 해! (한 번 저장하면 다시 묻지 않고 자동 복원)
-  // 1. screenCorners: 4 corners of the game court on the screen/projector display (Pure Planar Homography)
-  // 2. cameraCorners: 8 calibration pins in the live camera video (Wide-angle Distortion Correction)
   const [screenCorners, setScreenCorners] = useState<FourCorners>(() => {
     try {
       const saved = localStorage.getItem('airhockey_screen_corners');
@@ -144,12 +143,8 @@ export default function App() {
   });
   const [isCalibrating, setIsCalibrating] = useState(false);
   const [draggingScreenCorner, setDraggingScreenCorner] = useState<number | null>(null);
-  const [obstaclesEnabled, setObstaclesEnabled] = useState(false);
-  const obstaclesEnabledRef = useRef(false);
-  obstaclesEnabledRef.current = obstaclesEnabled;
-  const obstaclesRef = useRef<any[]>([]);
 
-  // Restore saved calibration & settings from Electron disk storage on startup so it never resets or asks again
+  // Restore saved calibration & settings from Electron disk storage (./ar-data) on startup
   useEffect(() => {
     if (window.electronAPI?.loadSavedConfig) {
       window.electronAPI
@@ -200,12 +195,6 @@ export default function App() {
               localStorage.setItem('airhockey_theme', cfg.theme);
             } catch {}
           }
-          if (typeof cfg.obstaclesEnabled === 'boolean') {
-            setObstaclesEnabled(cfg.obstaclesEnabled);
-            try {
-              localStorage.setItem('airhockey_obstacles_enabled', String(cfg.obstaclesEnabled));
-            } catch {}
-          }
           if (typeof cfg.cameraDeviceId === 'string' && cfg.cameraDeviceId) {
             setCameraDeviceId(cfg.cameraDeviceId);
           }
@@ -214,7 +203,7 @@ export default function App() {
     }
   }, []);
 
-  // Automatically persist calibration & settings changes to localStorage & Electron userData file
+  // Automatically persist calibration & settings changes to localStorage & Electron ./ar-data file
   useEffect(() => {
     try {
       localStorage.setItem('airhockey_screen_corners', JSON.stringify(screenCorners));
@@ -223,7 +212,6 @@ export default function App() {
       localStorage.setItem('airhockey_camera_mirrored', String(isCameraMirrored));
       localStorage.setItem('airhockey_color_settings', JSON.stringify(colorSettings));
       localStorage.setItem('airhockey_theme', theme);
-      localStorage.setItem('airhockey_obstacles_enabled', String(obstaclesEnabled));
       window.electronAPI?.saveConfig?.({
         screenCorners,
         cameraCorners,
@@ -231,11 +219,10 @@ export default function App() {
         isCameraMirrored,
         colorSettings,
         theme,
-        obstaclesEnabled,
         cameraDeviceId,
       });
     } catch {}
-  }, [screenCorners, cameraCorners, goalSize, isCameraMirrored, colorSettings, theme, obstaclesEnabled, cameraDeviceId]);
+  }, [screenCorners, cameraCorners, goalSize, isCameraMirrored, colorSettings, theme, cameraDeviceId]);
 
   // Helper to convert normalized [0, 1] points to pixel coordinates
   const getPixelCorners4 = useCallback((corners: FourCorners, w: number, h: number): FourCorners => [
@@ -436,6 +423,8 @@ export default function App() {
 
   const sendFullSyncState = useCallback(() => {
     const live = liveStateRef.current;
+    const obsCount = (live.allRobots || []).filter((r) => r.team === 'obstacle' && r.detected).length;
+    const totalDetected = (live.blueRobot.detected ? 1 : 0) + (live.redRobot.detected ? 1 : 0) + obsCount;
     const payload = {
       type: 'SYNC_STATE' as const,
       score,
@@ -453,12 +442,18 @@ export default function App() {
       goalAnnouncement,
       lowLightMode: !!colorSettings.lowLightMode,
       colorSettings,
+      botTeam,
+      botDifficulty,
+      isMuted,
+      volume,
+      cameraDeviceId,
       allRobots: live.allRobots || [live.blueRobot, live.redRobot],
       centerSpeaker: { x: TABLE_WIDTH / 2, y: TABLE_HEIGHT / 2, radius: CENTER_SPEAKER_RADIUS },
       visionDiagnostics: {
         engine: colorSettings.visionEngine || 'OPENCV',
         isOpenCVActive: cvReadyRef.current,
-        detectedBlobsCount: (live.allRobots && live.allRobots.length) || ((live.blueRobot.detected ? 1 : 0) + (live.redRobot.detected ? 1 : 0)),
+        detectedBlobsCount: totalDetected,
+        obstacleBlobsCount: obsCount,
         blueConfidence: live.blueRobot.confidence,
         redConfidence: live.redRobot.confidence,
       },
@@ -489,7 +484,7 @@ export default function App() {
       broadcastRef.current?.postMessage(payload);
       localStorage.setItem('airhockey_sync', JSON.stringify(payload));
     } catch {}
-  }, [score, timeLeft, gamePhase, matchMode, customDuration, targetPoints, goalSize, screenCorners, cameraCorners, isCameraMirrored, theme, stats, goalAnnouncement, colorSettings]);
+  }, [score, timeLeft, gamePhase, matchMode, customDuration, targetPoints, goalSize, screenCorners, cameraCorners, isCameraMirrored, theme, stats, goalAnnouncement, colorSettings, botTeam, botDifficulty, isMuted, volume, cameraDeviceId]);
 
   // [REQ 1] 매인화면과 서브화면 점수/상태 실시간 완전 동기화: 상태 변경 시 즉시 전파
   useEffect(() => {
@@ -518,7 +513,6 @@ export default function App() {
         throw new Error('이 브라우저는 웹캠 접근을 지원하지 않습니다.');
       }
 
-      // [REQ] "아 그 OBS 우선하지 말고": 사용자가 선택한 카메라(또는 기본 카메라) 우선 사용
       const videoConstraints: MediaTrackConstraints = deviceId
         ? {
             deviceId: { exact: deviceId },
@@ -827,7 +821,69 @@ export default function App() {
         }
       } else if (msg.action === 'SAMPLE_COLOR') {
         if (msg.customSample) {
-          setColorSettings((prev) => ({ ...prev, customSample: msg.customSample }));
+          const hsv = rgbToHsv(msg.customSample.r, msg.customSample.g, msg.customSample.b);
+          const newFilter = createFilterFromSample(hsv, 32);
+          setColorSettings((prev) => ({
+            ...prev,
+            magenta: newFilter,
+            customSample: msg.customSample,
+          }));
+        } else {
+          setColorSettings((prev) => ({
+            ...prev,
+            magenta: DEFAULT_COLOR_SETTINGS.magenta,
+            customSample: null,
+          }));
+        }
+      } else if (msg.action === 'SAMPLE_OBSTACLE_COLOR') {
+        if (msg.obstacleCustomSample) {
+          const hsv = rgbToHsv(
+            msg.obstacleCustomSample.r,
+            msg.obstacleCustomSample.g,
+            msg.obstacleCustomSample.b
+          );
+          const newFilter = createFilterFromSample(hsv, 32);
+          setColorSettings((prev) => ({
+            ...prev,
+            cyan: newFilter,
+            obstacleCustomSample: msg.obstacleCustomSample,
+          }));
+        } else {
+          setColorSettings((prev) => ({
+            ...prev,
+            cyan: DEFAULT_COLOR_SETTINGS.cyan,
+            obstacleCustomSample: null,
+          }));
+        }
+      } else if (msg.action === 'SET_OBSTACLE_COUNT') {
+        if (typeof msg.obstacleCount === 'number') {
+          const clamped = Math.max(0, Math.min(10, Math.round(msg.obstacleCount)));
+          setColorSettings((prev) => ({ ...prev, obstacleCount: clamped }));
+        }
+      } else if (msg.action === 'SET_BOT_CONFIG') {
+        if (msg.botTeam) setBotTeam(msg.botTeam);
+        if (msg.botDifficulty) setBotDifficulty(msg.botDifficulty);
+      } else if (msg.action === 'SET_AUDIO_CONFIG') {
+        if (typeof msg.isMuted === 'boolean') {
+          setIsMuted(msg.isMuted);
+          soundManager.setMuted(msg.isMuted);
+        }
+        if (typeof msg.volume === 'number') {
+          setVolume(msg.volume);
+          soundManager.setVolume(msg.volume);
+        }
+      } else if (msg.action === 'PLAY_SOUND_EFFECT') {
+        if (msg.soundEffect === 'WHISTLE') soundManager.playWhistle();
+        else if (msg.soundEffect === 'GOAL_HORN') soundManager.playGoal();
+        else if (msg.soundEffect === 'BUZZER') soundManager.playGameOver();
+        else if (msg.soundEffect === 'BOOST') soundManager.playHighSpeedSmash();
+      } else if (msg.action === 'TRIGGER_SUPER_PUCK') {
+        liveStateRef.current.puck.superCharged = true;
+        setPuck((p) => ({ ...p, superCharged: true }));
+        soundManager.playHighSpeedSmash();
+      } else if (msg.action === 'SET_CAMERA_DEVICE') {
+        if (typeof msg.cameraDeviceId === 'string') {
+          setCameraDeviceId(msg.cameraDeviceId);
         }
       } else if (msg.action === 'UPDATE_GOAL_SIZE') {
         if (typeof msg.goalSize === 'number') {
@@ -1049,7 +1105,7 @@ export default function App() {
   };
 
   // ----------------------------------------------------
-  // Computer Vision (Magenta 2-Block Tracking) & Physics Loop
+  // Computer Vision (Magenta 2-Player + Cyan 0..10 Obstacle Robots) & Physics Loop
   // ----------------------------------------------------
   useEffect(() => {
     let animId: number;
@@ -1161,7 +1217,7 @@ export default function App() {
       const isBlueBot = curBotTeam === 'BLUE' || curBotTeam === 'BOTH';
       const isRedBot = curVirtualMode || curBotTeam === 'RED' || curBotTeam === 'BOTH';
 
-      // 1. Computer Vision Frame Processing (Two Magenta Blocks Tracking)
+      // 1. Computer Vision Frame Processing (2 Magenta Players + 0..10 Cyan Obstacle Robots)
       const isVisionTick = currentTime - lastVisionTimeRef.current >= 28;
       if (isVisionTick && video && cameraActive && video.readyState >= 2 && pCanvas) {
         lastVisionTimeRef.current = currentTime;
@@ -1211,7 +1267,7 @@ export default function App() {
                   lastRedCam
                 )
               : null;
-          const { blueBlob, redBlob } =
+          const { blueBlob, redBlob, obstacleBlobs } =
             cvResult ??
             detectTwoMagentaBlobs(
               imageData,
@@ -1295,38 +1351,60 @@ export default function App() {
             liveStateRef.current.redRobot = updateTrackedRobot(liveStateRef.current.redRobot, redBlob);
           }
 
-          // Map remaining detected magenta blobs as obstacle robots
-          const obstacleRobots: RobotState[] = [];
+          // Map detected Cyan obstacle blobs (0..10 configurable, default 2) as physical obstacle robots (no AI report generated)
+          const prevObstacles = (liveStateRef.current.allRobots || []).filter(
+            (r) => r.team === 'obstacle'
+          );
+          const maxObstacles = Math.max(0, Math.min(10, curColorSettings.obstacleCount ?? 2));
+          const obstacleRobots: RobotState[] = (obstacleBlobs || [])
+            .slice(0, maxObstacles)
+            .map((blob, idx) => {
+              const tablePos = cameraTf.screenToTable(blob.x, blob.y);
+              const clampedX = Math.max(ROBOT_RADIUS, Math.min(TABLE_WIDTH - ROBOT_RADIUS, tablePos.x));
+              const clampedY = Math.max(ROBOT_RADIUS, Math.min(TABLE_HEIGHT - ROBOT_RADIUS, tablePos.y));
+              const curScreen = screenTf.tableToScreen(clampedX, clampedY);
+
+              // Estimate velocity from closest previous obstacle robot for smooth momentum transfer
+              let vx = 0;
+              let vy = 0;
+              if (prevObstacles.length > 0) {
+                let bestPrev: RobotState | null = null;
+                let bestDist = 140;
+                for (const po of prevObstacles) {
+                  const d = Math.hypot(clampedX - po.tableX, clampedY - po.tableY);
+                  if (d < bestDist) {
+                    bestDist = d;
+                    bestPrev = po;
+                  }
+                }
+                if (bestPrev) {
+                  const timeStep = Math.max(0.015, dt);
+                  vx = Math.max(-1000, Math.min(1000, (clampedX - bestPrev.tableX) / timeStep));
+                  vy = Math.max(-1000, Math.min(1000, (clampedY - bestPrev.tableY) / timeStep));
+                }
+              }
+
+              return {
+                id: `obs-robot-${idx}`,
+                team: 'obstacle',
+                tableX: clampedX,
+                tableY: clampedY,
+                screenX: curScreen.x,
+                screenY: curScreen.y,
+                vx,
+                vy,
+                radius: ROBOT_RADIUS,
+                detected: true,
+                confidence: blob.confidence,
+                lastSeenTime: currentTime,
+              };
+            });
 
           liveStateRef.current.allRobots = [
             liveStateRef.current.blueRobot,
             liveStateRef.current.redRobot,
             ...obstacleRobots,
           ];
-
-          // Throttled sync to React state (~15fps) for UI indicators (Settings / PIP monitor / Console mirror)
-          if (currentTime - lastStateSyncTimeRef.current >= 66) {
-            lastStateSyncTimeRef.current = currentTime;
-            setBlueRobot({ ...liveStateRef.current.blueRobot });
-            setRedRobot({ ...liveStateRef.current.redRobot });
-
-            try {
-              const live = liveStateRef.current;
-              const livePosPayload = {
-                type: 'UPDATE',
-                score: scoreRef.current,
-                timeLeft: timeLeftRef.current,
-                gamePhase: gamePhaseRef.current,
-                allRobots: live.allRobots || [live.blueRobot, live.redRobot],
-                centerSpeaker: { x: TABLE_WIDTH / 2, y: TABLE_HEIGHT / 2, radius: CENTER_SPEAKER_RADIUS },
-                puck: { x: live.puck.x, y: live.puck.y, vx: live.puck.vx, vy: live.puck.vy },
-                blueRobot: { tableX: live.blueRobot.tableX, tableY: live.blueRobot.tableY, detected: live.blueRobot.detected, confidence: live.blueRobot.confidence },
-                redRobot: { tableX: live.redRobot.tableX, tableY: live.redRobot.tableY, detected: live.redRobot.detected, confidence: live.redRobot.confidence },
-              };
-              broadcastRef.current?.postMessage(livePosPayload);
-              window.electronAPI?.sendSyncState(livePosPayload as any);
-            } catch {}
-          }
         }
       }
 
@@ -1354,7 +1432,7 @@ export default function App() {
         }
       }
 
-      // Throttled sync to React state & Secondary Windows (~15fps) even when camera is off (for AI / Virtual mode!)
+      // Throttled sync to React state & Secondary Windows (~15fps)
       if (currentTime - lastStateSyncTimeRef.current >= 66) {
         lastStateSyncTimeRef.current = currentTime;
         setBlueRobot({ ...liveStateRef.current.blueRobot });
@@ -1362,15 +1440,25 @@ export default function App() {
 
         try {
           const live = liveStateRef.current;
+          const obsCount = (live.allRobots || []).filter((r) => r.team === 'obstacle' && r.detected).length;
+          const totalDetected = (live.blueRobot.detected ? 1 : 0) + (live.redRobot.detected ? 1 : 0) + obsCount;
           const livePosPayload = {
-            type: 'UPDATE',
+            type: 'UPDATE' as const,
             score: scoreRef.current,
             timeLeft: timeLeftRef.current,
             gamePhase: gamePhaseRef.current,
-            obstacles: obstaclesEnabledRef.current ? obstaclesRef.current : [],
-            obstaclesEnabled: obstaclesEnabledRef.current,
+            allRobots: live.allRobots || [live.blueRobot, live.redRobot],
+            centerSpeaker: { x: TABLE_WIDTH / 2, y: TABLE_HEIGHT / 2, radius: CENTER_SPEAKER_RADIUS },
             botTeam: botTeamRef.current,
             botDifficulty: botDifficultyRef.current,
+            visionDiagnostics: {
+              engine: curColorSettings.visionEngine || 'OPENCV',
+              isOpenCVActive: cvReadyRef.current,
+              detectedBlobsCount: totalDetected,
+              obstacleBlobsCount: obsCount,
+              blueConfidence: live.blueRobot.confidence,
+              redConfidence: live.redRobot.confidence,
+            },
             puck: {
               x: live.puck.x,
               y: live.puck.y,
@@ -1423,30 +1511,29 @@ export default function App() {
         // Process all collision feedback events
         for (const ev of events) {
           if (ev.type === 'GOAL' && (ev.team === 'blue' || ev.team === 'red')) {
-            handleGoalScored(ev.team);
+            handleGoalScored(ev.team, ev.speed);
           } else if (ev.type === 'SPEAKER') {
-            // [REQ] 경기장 정가운데 실제 물리 스피커 충돌 피드백 (묵직한 킥 타격음 + 스파크)
             soundManager.playSpeakerHit(Math.min(1.2, ev.speed / 450));
-            const screenHit = screenTf.tableToScreen(ev.x, ev.y);
-            spawnParticles(screenHit.x, screenHit.y, '#38bdf8', 12);
+            addImpactRipple(ev.x, ev.y, '#38bdf8', 54, 340, 'SPEAKER!');
             setStats((s) => ({ ...s, speakerHits: (s.speakerHits || 0) + 1 }));
           } else if (ev.type === 'ROBOT') {
             if (ev.team === 'obstacle') {
-              soundManager.playPaddleHit(Math.min(1.0, ev.speed / 450));
+              soundManager.playBumperHit(Math.min(1.2, ev.speed / 450), 1);
+              addImpactRipple(ev.x, ev.y, '#06b6d4', 48, 300, 'ROBOT!');
             } else {
               if (ev.speed > 550) {
                 soundManager.playHighSpeedSmash();
               } else {
                 soundManager.playRobotHit(Math.min(1.0, ev.speed / 500));
               }
+              addImpactRipple(
+                ev.x,
+                ev.y,
+                ev.team === 'blue' ? '#22d3ee' : '#facc15',
+                44,
+                280
+              );
             }
-            const screenHit = screenTf.tableToScreen(ev.x, ev.y);
-            spawnParticles(
-              screenHit.x,
-              screenHit.y,
-              ev.team === 'blue' ? '#2563eb' : (ev.team === 'red' ? '#dc2626' : '#ec4899'),
-              ev.speed > 550 ? 20 : 12
-            );
             if (ev.team && ev.team !== 'obstacle') {
               setStats((s) => ({
                 ...s,

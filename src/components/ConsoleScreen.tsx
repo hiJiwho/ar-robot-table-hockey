@@ -17,8 +17,8 @@ import {
   VisionEngineType,
   RobotState,
   CENTER_SPEAKER_RADIUS,
-  BotDifficulty,
   BotTargetTeam,
+  BotDifficulty,
 } from '../types/hockey';
 import {
   Clock,
@@ -125,23 +125,36 @@ export const ConsoleScreen: React.FC = () => {
       vMin: 0.08,
       vMax: 1.0,
     },
+    cyan: {
+      hMin: 165,
+      hMax: 215,
+      sMin: 0.15,
+      sMax: 1.0,
+      vMin: 0.12,
+      vMax: 1.0,
+    },
     minBlobSize: 8,
     maxBlobSize: 15000,
     visionEngine: 'OPENCV',
     sensitivity: 3,
     customSample: null,
+    obstacleCount: 2,
+    obstacleCustomSample: null,
     lowLightMode: false,
   });
+  const [samplingTarget, setSamplingTarget] = useState<'PLAYER' | 'OBSTACLE'>('PLAYER');
   const [visionDiagnostics, setVisionDiagnostics] = useState<{
     engine: VisionEngineType;
     isOpenCVActive: boolean;
     detectedBlobsCount: number;
+    obstacleBlobsCount?: number;
     blueConfidence: number;
     redConfidence: number;
   }>({
     engine: 'OPENCV',
     isOpenCVActive: true,
     detectedBlobsCount: 0,
+    obstacleBlobsCount: 0,
     blueConfidence: 0,
     redConfidence: 0,
   });
@@ -463,7 +476,7 @@ export const ConsoleScreen: React.FC = () => {
     } catch {}
   };
 
-  // [REQ] "스포이드로 클릭 가능하게": 좌우반전 보정 + 화면 비율 보정 + 5x5 평균 샘플링
+  // Eyedropper Color Sampler on Webcam Feed
   const handleEyedropperSample = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!consoleVideoRef.current || !camContainerRef.current) return;
     const video = consoleVideoRef.current;
@@ -529,13 +542,21 @@ export const ConsoleScreen: React.FC = () => {
     const hex = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`.toUpperCase();
 
     const sample = { r, g, b, hex };
-    setColorSettings((prev) => ({ ...prev, customSample: sample }));
-    sendAction({
-      type: 'GAME_ACTION',
-      action: 'SAMPLE_COLOR',
-      customSample: sample,
-    });
-    console.log('[Eyedropper] Successfully sampled color:', hex, 'RGB:', r, g, b);
+    if (samplingTarget === 'OBSTACLE') {
+      setColorSettings((prev) => ({ ...prev, obstacleCustomSample: sample }));
+      sendAction({
+        type: 'GAME_ACTION',
+        action: 'SAMPLE_OBSTACLE_COLOR',
+        obstacleCustomSample: sample,
+      });
+    } else {
+      setColorSettings((prev) => ({ ...prev, customSample: sample }));
+      sendAction({
+        type: 'GAME_ACTION',
+        action: 'SAMPLE_COLOR',
+        customSample: sample,
+      });
+    }
   };
 
   const handleClearSample = () => {
@@ -544,6 +565,25 @@ export const ConsoleScreen: React.FC = () => {
       type: 'GAME_ACTION',
       action: 'SAMPLE_COLOR',
       customSample: null,
+    });
+  };
+
+  const handleClearObstacleSample = () => {
+    setColorSettings((prev) => ({ ...prev, obstacleCustomSample: null }));
+    sendAction({
+      type: 'GAME_ACTION',
+      action: 'SAMPLE_OBSTACLE_COLOR',
+      obstacleCustomSample: null,
+    });
+  };
+
+  const handleUpdateObstacleCount = (rawCount: number) => {
+    const count = Math.max(0, Math.min(10, Math.round(Number(rawCount) || 0)));
+    setColorSettings((prev) => ({ ...prev, obstacleCount: count }));
+    sendAction({
+      type: 'GAME_ACTION',
+      action: 'SET_OBSTACLE_COUNT',
+      obstacleCount: count,
     });
   };
 
@@ -783,12 +823,31 @@ export const ConsoleScreen: React.FC = () => {
             <span>중앙 스피커 존: ON</span>
           </div>
 
+          {/* [REQ] 마젠타 플레이어(2개 고정) + 시안 로봇 장애물(기본 2개, 콘솔에서 0~10개 숫자 직접 입력 가능) */}
           <div
-            className="px-3 py-1.5 rounded-lg border border-pink-500/40 bg-pink-950/40 text-pink-300 text-xs font-bold flex items-center gap-1.5 shadow-sm"
-            title="마젠타 센서 블록 2~10개 유동 실시간 추적 중 (1P, 2P 및 장애물 로봇)"
+            className="px-2.5 py-1 rounded-lg border border-pink-500/40 bg-pink-950/40 text-pink-300 text-xs font-bold flex items-center gap-1.5 shadow-sm"
+            title="1P·2P 플레이어는 마젠타(2개 고정)로 추적하며 AI 리포트가 생성됩니다"
           >
             <Sparkles className="w-3.5 h-3.5 text-pink-300" />
-            <span>마젠타 센서: {allRobots.length > 0 ? allRobots.length : (blueRobot.detected ? 1 : 0) + (redRobot.detected ? 1 : 0)}개</span>
+            <span>마젠타(1P·2P): {(blueRobot.detected ? 1 : 0) + (redRobot.detected ? 1 : 0)}/2개</span>
+          </div>
+
+          <div
+            className="px-2.5 py-1 rounded-lg border border-cyan-500/50 bg-cyan-950/40 text-cyan-300 text-xs font-bold flex items-center gap-1.5 shadow-sm"
+            title="시안(Cyan) 마커는 로봇 장애물 취급 (보고서 미생성, 기본 2개 ~ 최대 10개 숫자 입력 가능)"
+          >
+            <Bot className="w-3.5 h-3.5 text-cyan-300" />
+            <span>시안(로봇 장애물): {allRobots.filter((r) => r.team === 'obstacle').length}/</span>
+            <input
+              type="number"
+              min={0}
+              max={10}
+              value={colorSettings.obstacleCount ?? 2}
+              onChange={(e) => handleUpdateObstacleCount(Number(e.target.value))}
+              className="w-11 px-1 py-0.5 rounded bg-slate-900 border border-cyan-400/60 text-cyan-200 text-center font-mono text-xs focus:outline-none focus:ring-1 focus:ring-cyan-400"
+              title="인식할 시안(로봇 장애물) 마커 최대 개수 입력 (0~10개, 기본 2개)"
+            />
+            <span>개</span>
           </div>
 
           {/* [REQ] 글고 불 꺼도 인식 잘 되게 해줘 (설정에 이거 인식용 하나 넣어주면 ㄱㅅ) */}
@@ -1008,18 +1067,28 @@ export const ConsoleScreen: React.FC = () => {
                 <circle cx="500" cy="300" r="4" fill="#38bdf8" />
               </g>
 
-              {/* Dynamic 2..10 Magenta Obstacle Robots */}
+              {/* Dynamic 0..10 Cyan Obstacle Robots (보고서 미생성, 360도 반사 장애물) */}
               {allRobots.filter((r) => r.team === 'obstacle').map((obs, idx) => (
                 <g key={obs.id || `obs-${idx}`}>
                   <circle
                     cx={obs.tableX}
                     cy={obs.tableY}
                     r="40"
-                    fill="rgba(236, 72, 153, 0.25)"
-                    stroke="#ec4899"
-                    strokeWidth="3"
+                    fill="rgba(6, 182, 212, 0.28)"
+                    stroke="#06b6d4"
+                    strokeWidth="3.5"
                   />
-                  <circle cx={obs.tableX} cy={obs.tableY} r="14" fill="#ec4899" />
+                  <circle cx={obs.tableX} cy={obs.tableY} r="14" fill="#06b6d4" />
+                  <text
+                    x={obs.tableX}
+                    y={obs.tableY + 4}
+                    textAnchor="middle"
+                    fill="#ffffff"
+                    fontSize="11"
+                    fontWeight="900"
+                  >
+                    R{idx + 1}
+                  </text>
                 </g>
               ))}
             </svg>
@@ -1815,72 +1884,108 @@ export const ConsoleScreen: React.FC = () => {
               {/* Tab: VISION - 전문 비전 인식 스튜디오 */}
               {settingsTab === 'VISION' && (
                 <div className="flex flex-col gap-4">
-                  {/* 1. 실시간 진단 HUD */}
+                  {/* 1. 실시간 진단 HUD (마젠타 2개 고정 + 시안 장애물 0~10개 설정) */}
                   <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 flex flex-col gap-3">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-bold text-pink-400 flex items-center gap-2">
                         <Cpu className="w-4 h-4 text-pink-400 animate-pulse" />
-                        실시간 비전 인식 상태 진단 (Live Vision HUD)
+                        실시간 비전 인식 상태 진단 (마젠타 2개 고정 + 시안 로봇 {colorSettings.obstacleCount ?? 2}개 = 총 {2 + (colorSettings.obstacleCount ?? 2)}개)
                       </span>
                       <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-pink-950 border border-pink-700 text-pink-300">
                         {visionDiagnostics?.engine || colorSettings.visionEngine} {visionDiagnostics?.isOpenCVActive ? '(WASM 활성)' : ''}
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                      {/* 1P 검출 상태 (Cyan) */}
+                    <div className="grid grid-cols-3 gap-3">
+                      {/* 1P 검출 상태 (마젠타 마커 #1) */}
                       <div className={`p-3 rounded-xl border flex flex-col gap-1.5 transition-all ${
                         visionDiagnostics?.blueConfidence > 0.3
-                          ? 'bg-cyan-950/40 border-cyan-500/50 shadow-sm'
+                          ? 'bg-pink-950/40 border-pink-500/50 shadow-sm'
                           : 'bg-slate-900/60 border-slate-800'
                       }`}>
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-black text-cyan-400 flex items-center gap-1.5">
-                            <span className={`w-2.5 h-2.5 rounded-full ${visionDiagnostics?.blueConfidence > 0.3 ? 'bg-cyan-400 animate-ping' : 'bg-slate-600'}`} />
-                            1P (Cyan) 패들 블록
+                          <span className="text-xs font-black text-pink-400 flex items-center gap-1.5">
+                            <span className={`w-2.5 h-2.5 rounded-full ${visionDiagnostics?.blueConfidence > 0.3 ? 'bg-pink-400 animate-ping' : 'bg-slate-600'}`} />
+                            1P 플레이어 (마젠타 고정)
                           </span>
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                             visionDiagnostics?.blueConfidence > 0.3
-                              ? 'bg-cyan-500 text-black'
+                              ? 'bg-pink-500 text-white'
                               : 'bg-slate-800 text-slate-400'
                           }`}>
                             {visionDiagnostics?.blueConfidence > 0.3 ? '감지 성공' : '미검출'}
                           </span>
                         </div>
                         <div className="text-[11px] font-mono text-slate-300">
-                          {visionDiagnostics?.blueConfidence > 0.3 ? '패들 추적 중 (동기화 완료)' : '패들 수색 중...'}
+                          {visionDiagnostics?.blueConfidence > 0.3 ? '1P 패들 추적 중 (리포트 O)' : '마젠타 #1 수색 중...'}
                         </div>
                         <div className="text-[10px] text-slate-400 flex justify-between">
                           <span>신뢰도: {Math.round((visionDiagnostics?.blueConfidence || 0) * 100)}%</span>
-                          <span>총 블롭 수: {visionDiagnostics?.detectedBlobsCount || 0}</span>
+                          <span>1P·2P: 2개 고정</span>
                         </div>
                       </div>
 
-                      {/* 2P 검출 상태 (Yellow) */}
+                      {/* 2P 검출 상태 (마젠타 마커 #2) */}
                       <div className={`p-3 rounded-xl border flex flex-col gap-1.5 transition-all ${
                         visionDiagnostics?.redConfidence > 0.3
-                          ? 'bg-yellow-950/40 border-yellow-500/50 shadow-sm'
+                          ? 'bg-pink-950/40 border-pink-500/50 shadow-sm'
                           : 'bg-slate-900/60 border-slate-800'
                       }`}>
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-black text-yellow-400 flex items-center gap-1.5">
-                            <span className={`w-2.5 h-2.5 rounded-full ${visionDiagnostics?.redConfidence > 0.3 ? 'bg-yellow-400 animate-ping' : 'bg-slate-600'}`} />
-                            2P (Yellow) 패들 블록
+                          <span className="text-xs font-black text-pink-400 flex items-center gap-1.5">
+                            <span className={`w-2.5 h-2.5 rounded-full ${visionDiagnostics?.redConfidence > 0.3 ? 'bg-pink-400 animate-ping' : 'bg-slate-600'}`} />
+                            2P 플레이어 (마젠타 고정)
                           </span>
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                             visionDiagnostics?.redConfidence > 0.3
-                              ? 'bg-yellow-500 text-black'
+                              ? 'bg-pink-500 text-white'
                               : 'bg-slate-800 text-slate-400'
                           }`}>
                             {visionDiagnostics?.redConfidence > 0.3 ? '감지 성공' : '미검출'}
                           </span>
                         </div>
                         <div className="text-[11px] font-mono text-slate-300">
-                          {visionDiagnostics?.redConfidence > 0.3 ? '패들 추적 중 (동기화 완료)' : '패들 수색 중...'}
+                          {visionDiagnostics?.redConfidence > 0.3 ? '2P 패들 추적 중 (리포트 O)' : '마젠타 #2 수색 중...'}
                         </div>
                         <div className="text-[10px] text-slate-400 flex justify-between">
                           <span>신뢰도: {Math.round((visionDiagnostics?.redConfidence || 0) * 100)}%</span>
-                          <span>총 블롭 수: {visionDiagnostics?.detectedBlobsCount || 0}</span>
+                          <span>1P·2P: 2개 고정</span>
+                        </div>
+                      </div>
+
+                      {/* 로봇 장애물 검출 상태 (시안 마커, 기본 2개 ~ 최대 10개) */}
+                      <div className={`p-3 rounded-xl border flex flex-col gap-1.5 transition-all ${
+                        (visionDiagnostics?.obstacleBlobsCount || 0) > 0
+                          ? 'bg-cyan-950/40 border-cyan-500/50 shadow-sm'
+                          : 'bg-slate-900/60 border-slate-800'
+                      }`}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-black text-cyan-400 flex items-center gap-1.5">
+                            <span className={`w-2.5 h-2.5 rounded-full ${(visionDiagnostics?.obstacleBlobsCount || 0) > 0 ? 'bg-cyan-400 animate-ping' : 'bg-slate-600'}`} />
+                            로봇 장애물 (시안·보고서X)
+                          </span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            (visionDiagnostics?.obstacleBlobsCount || 0) > 0
+                              ? 'bg-cyan-500 text-black'
+                              : 'bg-slate-800 text-slate-400'
+                          }`}>
+                            {allRobots.filter((r) => r.team === 'obstacle').length} / {colorSettings.obstacleCount ?? 2}개 감지
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2 pt-0.5">
+                          <span className="text-[11px] text-slate-300 font-bold">최대 인식 수 (0~10):</span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={10}
+                            value={colorSettings.obstacleCount ?? 2}
+                            onChange={(e) => handleUpdateObstacleCount(Number(e.target.value))}
+                            className="w-16 px-2 py-0.5 rounded-lg bg-slate-950 border border-cyan-500/60 text-cyan-300 font-mono text-xs font-black text-center focus:outline-none focus:ring-1 focus:ring-cyan-400"
+                          />
+                        </div>
+                        <div className="text-[10px] text-slate-400 flex justify-between">
+                          <span>장애물 반사 전용 (QR 리포트 미생성)</span>
+                          <span>총 감지 블롭: {visionDiagnostics?.detectedBlobsCount || 0}</span>
                         </div>
                       </div>
                     </div>
@@ -1919,36 +2024,56 @@ export const ConsoleScreen: React.FC = () => {
                         className="py-2.5 px-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-pink-700/60 text-xs font-bold text-pink-300 flex flex-col items-center gap-1 transition-all active:scale-95"
                       >
                         <Sparkles className="w-4 h-4 text-pink-400" />
-                        <span>초고감도 마젠타</span>
+                        <span>초고감도 마젠타·시안</span>
                       </button>
                     </div>
                   </div>
 
-                  {/* 3. 웹캠 화면 인터랙티브 스포이트 (Eyedropper) */}
+                  {/* 3. 웹캠 화면 인터랙티브 스포이트 (마젠타 플레이어 / 시안 로봇 장애물 카메라 색 찍기) */}
                   <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 flex flex-col gap-3">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
                       <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
                         <Pipette className="w-4 h-4 text-pink-400" />
-                        실시간 웹캠 화면 & 원클릭 스포이트 색상 학습
+                        실시간 웹캠 스포이트 — 마젠타(플레이어) & 시안(로봇 장애물) 색 찍기
                       </span>
-                      {colorSettings.customSample && (
+
+                      {/* 스포이트 대상 선택 토글 */}
+                      <div className="flex items-center gap-1.5">
                         <button
-                          onClick={handleClearSample}
-                          className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors"
+                          onClick={() => setSamplingTarget('PLAYER')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1.5 border transition-all ${
+                            samplingTarget === 'PLAYER'
+                              ? 'bg-pink-600 text-white border-pink-400 shadow-[0_0_12px_rgba(236,72,153,0.45)]'
+                              : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-slate-200'
+                          }`}
                         >
-                          학습 초기화
+                          <Pipette className="w-3.5 h-3.5" />
+                          <span>🎯 마젠타 (플레이어 1P·2P) 색 찍기</span>
                         </button>
-                      )}
+                        <button
+                          onClick={() => setSamplingTarget('OBSTACLE')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1.5 border transition-all ${
+                            samplingTarget === 'OBSTACLE'
+                              ? 'bg-cyan-600 text-white border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.45)]'
+                              : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-slate-200'
+                          }`}
+                        >
+                          <Bot className="w-3.5 h-3.5" />
+                          <span>🤖 시안 (로봇 장애물) 색 찍기</span>
+                        </button>
+                      </div>
                     </div>
 
                     <p className="text-[11px] text-slate-400">
-                      💡 아래 웹캠 화면에서 실제 레고 블록/패들을 마우스로 <strong>클릭</strong>하면 그 지점의 색상을 즉시 학습하여 인식률을 극대화합니다.
+                      💡 위에서 <strong>[{samplingTarget === 'PLAYER' ? '마젠타 (플레이어 1P·2P)' : '시안 (로봇 장애물)'}]</strong> 모드를 선택한 뒤 아래 카메라 화면에서 해당 마커를 <strong>클릭</strong>하면 그 색상을 즉시 추출·저장합니다.
                     </p>
 
                     {/* 인터랙티브 웹캠 화면 */}
                     <div
                       ref={camContainerRef}
-                      className="relative w-full aspect-video bg-black rounded-xl overflow-hidden border border-slate-700 cursor-crosshair select-none"
+                      className={`relative w-full aspect-video bg-black rounded-xl overflow-hidden border-2 cursor-crosshair select-none ${
+                        samplingTarget === 'OBSTACLE' ? 'border-cyan-500/70' : 'border-pink-500/70'
+                      }`}
                       onClick={handleEyedropperSample}
                     >
                       <video
@@ -1959,29 +2084,69 @@ export const ConsoleScreen: React.FC = () => {
                         className={`w-full h-full object-contain ${isCameraMirrored ? '-scale-x-100' : ''}`}
                       />
                       {/* 스포이트 타겟 오버레이 안내 */}
-                      <div className="absolute top-2 right-2 px-2.5 py-1 rounded-lg bg-black/75 backdrop-blur-sm border border-slate-600 text-[11px] text-white font-bold flex items-center gap-1.5 pointer-events-none">
-                        <Pipette className="w-3.5 h-3.5 text-pink-400 animate-bounce" />
-                        <span>클릭한 위치의 색상을 즉시 학습</span>
+                      <div className="absolute top-2 right-2 px-2.5 py-1 rounded-lg bg-black/80 backdrop-blur-sm border border-slate-600 text-[11px] text-white font-bold flex items-center gap-1.5 pointer-events-none">
+                        <Pipette className={`w-3.5 h-3.5 animate-bounce ${samplingTarget === 'OBSTACLE' ? 'text-cyan-400' : 'text-pink-400'}`} />
+                        <span>
+                          클릭 시 [{samplingTarget === 'OBSTACLE' ? '시안 (로봇 장애물)' : '마젠타 (1P·2P 플레이어)'}] 색상 즉시 적용
+                        </span>
                       </div>
                     </div>
 
-                    {/* 현재 타겟 색상 미리보기 */}
-                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className="text-slate-400">학습된 커스텀 컬러:</span>
-                        {colorSettings.customSample ? (
-                          <>
-                            <div
-                              className="w-5 h-5 rounded-md border border-white/40 shadow"
-                              style={{ backgroundColor: colorSettings.customSample.hex }}
-                            />
-                            <span className="font-mono text-pink-400 font-bold">{colorSettings.customSample.hex}</span>
-                            <span className="text-[10px] text-slate-500 font-mono">
-                              (R:{colorSettings.customSample.r} G:{colorSettings.customSample.g} B:{colorSettings.customSample.b})
-                            </span>
-                          </>
-                        ) : (
-                          <span className="text-slate-500 text-[11px]">기본 고감도 마젠타/형광핑크 모델 적용 중</span>
+                    {/* 현재 학습된 마젠타(플레이어) & 시안(장애물) 색상 미리보기 및 개별 초기화 */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                      <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900 border border-pink-500/30 text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="text-pink-300 font-bold">플레이어(1P·2P):</span>
+                          {colorSettings.customSample ? (
+                            <>
+                              <div
+                                className="w-5 h-5 rounded-md border border-white/40 shadow"
+                                style={{ backgroundColor: colorSettings.customSample.hex }}
+                              />
+                              <span className="font-mono text-pink-400 font-bold">{colorSettings.customSample.hex}</span>
+                              <span className="text-[10px] text-slate-500 font-mono">
+                                (R:{colorSettings.customSample.r} G:{colorSettings.customSample.g} B:{colorSettings.customSample.b})
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-slate-400 text-[11px]">기본 마젠타 (2개 고정)</span>
+                          )}
+                        </div>
+                        {colorSettings.customSample && (
+                          <button
+                            onClick={handleClearSample}
+                            className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
+                          >
+                            초기화
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900 border border-cyan-500/30 text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="text-cyan-300 font-bold">로봇 장애물:</span>
+                          {colorSettings.obstacleCustomSample ? (
+                            <>
+                              <div
+                                className="w-5 h-5 rounded-md border border-white/40 shadow"
+                                style={{ backgroundColor: colorSettings.obstacleCustomSample.hex }}
+                              />
+                              <span className="font-mono text-cyan-400 font-bold">{colorSettings.obstacleCustomSample.hex}</span>
+                              <span className="text-[10px] text-slate-500 font-mono">
+                                (R:{colorSettings.obstacleCustomSample.r} G:{colorSettings.obstacleCustomSample.g} B:{colorSettings.obstacleCustomSample.b})
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-slate-400 text-[11px]">기본 시안 ({colorSettings.obstacleCount ?? 2}개, 보고서X)</span>
+                          )}
+                        </div>
+                        {colorSettings.obstacleCustomSample && (
+                          <button
+                            onClick={handleClearObstacleSample}
+                            className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
+                          >
+                            초기화
+                          </button>
                         )}
                       </div>
                     </div>
