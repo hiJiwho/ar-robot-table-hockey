@@ -9,7 +9,8 @@ import {
   BotTargetTeam,
   BotDifficulty,
 } from '../types/hockey';
-import { Trophy, Clock, Zap, Activity, Maximize, Minimize, CheckCircle2, Flame, Bot, Sparkles } from 'lucide-react';
+import { Trophy, Clock, Zap, Activity, Maximize, Minimize, CheckCircle2, Flame, Bot, Sparkles, QrCode } from 'lucide-react';
+import { generateAIPlayerReport, generateQRCode } from '../utils/aiAnalytics';
 
 export const ScoreboardScreen: React.FC = () => {
   const [score, setScore] = useState<MatchScore>({ blue: 0, red: 0 });
@@ -21,8 +22,12 @@ export const ScoreboardScreen: React.FC = () => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [botTeam, setBotTeam] = useState<BotTargetTeam>('NONE');
   const [botDifficulty, setBotDifficulty] = useState<BotDifficulty>('NORMAL');
+  const [blueQr, setBlueQr] = useState<string>('');
+  const [redQr, setRedQr] = useState<string>('');
   const [puckInfo, setPuckInfo] = useState<{
     superCharged?: boolean;
+    speakerBoostUntil?: number;
+    speakerMultiplier?: number;
     rallyCount?: number;
     vx?: number;
     vy?: number;
@@ -144,6 +149,19 @@ export const ScoreboardScreen: React.FC = () => {
   const isReady = gamePhase === 'READY' || gamePhase === 'CALIBRATION_SCREEN' || gamePhase === 'CALIBRATION_CAMERA';
   const isTimeUp = gamePhase === 'TIME_UP';
 
+  // [REQ] 서브 전광판에서도 경기 종료 시 1P/2P 모바일 AI 분석 QR 코드 즉시 렌더링
+  useEffect(() => {
+    if (isTimeUp) {
+      const report1 = generateAIPlayerReport('blue', score, stats);
+      const report2 = generateAIPlayerReport('red', score, stats);
+      generateQRCode(report1.reportUrl, '#15803d', '#ffffff').then(setBlueQr);
+      generateQRCode(report2.reportUrl, '#a16207', '#ffffff').then(setRedQr);
+    } else {
+      setBlueQr('');
+      setRedQr('');
+    }
+  }, [isTimeUp, score.blue, score.red]);
+
   const modeLabel =
     matchMode === '1MIN'
       ? '1분 매치'
@@ -230,7 +248,7 @@ export const ScoreboardScreen: React.FC = () => {
 
       {/* [REQ] 게임 종료시 서브는 점수판 크게 뜨고 */}
       {isTimeUp && (
-        <div className="w-full max-w-6xl my-1 py-1.5 sm:py-2 px-4 rounded-xl sm:rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-indigo-500 shadow-[0_0_30px_rgba(99,102,241,0.4)] flex flex-col items-center justify-center text-center shrink-0">
+        <div className="w-full max-w-6xl my-1 py-2 sm:py-2.5 px-4 rounded-xl sm:rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-indigo-500 shadow-[0_0_30px_rgba(99,102,241,0.4)] flex flex-col items-center justify-center text-center shrink-0">
           <span className="text-lg sm:text-xl font-black uppercase tracking-wider text-white">
             🏆 경기 종료 (FINAL RESULT)
           </span>
@@ -241,6 +259,45 @@ export const ScoreboardScreen: React.FC = () => {
               ? 'YELLOW 노랑 팀 승리!!'
               : '무승부 (DRAW MATCH)!'}
           </span>
+
+          {/* [REQ] 서브 전광판에서도 즉시 스캔 가능한 양팀 대형 AI 리포트 QR 코드 */}
+          <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-8 mt-2 pt-2 border-t border-slate-700/80 w-full max-w-2xl">
+            {/* 1P QR */}
+            <div className="flex items-center gap-3 px-3 py-1.5 rounded-xl bg-slate-950/80 border border-emerald-500/50 shadow-md">
+              {blueQr ? (
+                <img src={blueQr} alt="1P QR" className="w-14 h-14 sm:w-16 sm:h-16 rounded-lg bg-white p-1 object-contain" />
+              ) : (
+                <div className="w-14 h-14 sm:w-16 sm:h-16 bg-slate-800 rounded-lg flex items-center justify-center text-[10px] text-slate-500">
+                  생성 중...
+                </div>
+              )}
+              <div className="text-left">
+                <div className="text-xs font-bold text-emerald-400">1P Green AI 분석</div>
+                <div className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
+                  <QrCode className="w-3 h-3 text-emerald-400" />
+                  <span>폰 카메라로 스캔</span>
+                </div>
+              </div>
+            </div>
+
+            {/* 2P QR */}
+            <div className="flex items-center gap-3 px-3 py-1.5 rounded-xl bg-slate-950/80 border border-yellow-500/50 shadow-md">
+              {redQr ? (
+                <img src={redQr} alt="2P QR" className="w-14 h-14 sm:w-16 sm:h-16 rounded-lg bg-white p-1 object-contain" />
+              ) : (
+                <div className="w-14 h-14 sm:w-16 sm:h-16 bg-slate-800 rounded-lg flex items-center justify-center text-[10px] text-slate-500">
+                  생성 중...
+                </div>
+              )}
+              <div className="text-left">
+                <div className="text-xs font-bold text-yellow-400">2P Yellow AI 분석</div>
+                <div className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
+                  <QrCode className="w-3 h-3 text-yellow-400" />
+                  <span>폰 카메라로 스캔</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

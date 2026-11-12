@@ -688,7 +688,9 @@ export default function App() {
   const handleResetGame = () => {
     const duration = matchMode === '1MIN' ? 60 : matchMode === 'CUSTOM_TIME' ? customDuration : 600;
     setTimeLeft(duration);
+    timeLeftRef.current = duration;
     setScore({ blue: 0, red: 0 });
+    scoreRef.current = { blue: 0, red: 0 };
     setStats({
       blueHits: 0,
       redHits: 0,
@@ -1540,6 +1542,7 @@ export default function App() {
                 ...prev,
                 [penalizedTeam]: Math.max(0, prev[penalizedTeam] - 2),
               };
+              scoreRef.current = updated;
               try {
                 const penaltySyncPayload = {
                   type: 'SYNC_STATE' as const,

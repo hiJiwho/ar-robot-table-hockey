@@ -814,13 +814,13 @@ export const ConsoleScreen: React.FC = () => {
           </button>
 
           {/* [REQ] 중간중간 튕기는 장애물 모드 (매번 랜덤배치) */}
-          {/* [REQ] 정가운데 물리 스피커 존 및 2~10개 마젠타 로봇 상태 인디케이터 */}
+          {/* [REQ] 정가운데 물리 스피커 존 (-2점 감점 & 1.1~3.0배 가속) */}
           <div
-            className="px-3 py-1.5 rounded-lg border border-sky-500/40 bg-sky-950/40 text-sky-300 text-xs font-bold flex items-center gap-1.5 shadow-sm"
-            title="테이블 정가운데 물리 스피커(반경 44px) 충돌 반사 활성화됨"
+            className="px-3 py-1.5 rounded-lg border border-amber-500/40 bg-amber-950/40 text-amber-300 text-xs font-bold flex items-center gap-1.5 shadow-sm"
+            title="테이블 정가운데 물리 스피커(반경 44px): 충돌 시 -2점 감점 및 1.1~3.0배 10초 시한부 가속"
           >
-            <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
-            <span>중앙 스피커 존: ON</span>
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            <span>중앙 스피커 존 (-2점 / 가속): ON</span>
           </div>
 
           {/* [REQ] 마젠타 플레이어(2개 고정) + 시안 로봇 장애물(기본 2개, 콘솔에서 0~10개 숫자 직접 입력 가능) */}
