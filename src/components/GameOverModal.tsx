@@ -48,7 +48,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md select-none animate-in fade-in duration-200">
-      <div className="bg-slate-900 border border-slate-700/80 rounded-3xl w-full max-w-xl p-6 shadow-2xl text-center space-y-5 max-h-[92vh] overflow-y-auto">
+      <div className="bg-slate-900 border border-slate-700/80 rounded-3xl w-full max-w-2xl p-6 shadow-2xl text-center space-y-5 max-h-[92vh] overflow-y-auto">
         {/* Trophy & Winner Title */}
         <div className="space-y-1.5">
           <div className="w-14 h-14 mx-auto rounded-full bg-slate-800/80 border border-slate-700 flex items-center justify-center shadow-lg">
@@ -70,7 +70,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
           </h2>
 
           <p className="text-xs text-slate-400">
-            정규 경기가 종료되었습니다. 아래 QR을 스마트폰으로 스캔하여 개인 AI 리포트를 확인하세요!
+            정규 경기가 종료되었습니다. 아래 대형 QR을 스마트폰으로 스캔하여 개인 AI 리포트를 확인하세요!
           </p>
         </div>
 
@@ -93,10 +93,10 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
           </div>
         </div>
 
-        {/* [REQ] 1P, 2P 양끝 AI 모바일 분석 QR 코드 공유 섹션 */}
+        {/* [REQ] 1P, 2P 양끝 AI 모바일 분석 대형 QR 코드 공유 섹션 */}
         <div className="grid grid-cols-2 gap-4 text-left">
           {/* 1P Green Card & QR */}
-          <div className="p-3.5 bg-slate-950/90 rounded-2xl border border-emerald-500/40 flex flex-col items-center text-center space-y-2">
+          <div className="p-4 bg-slate-950/90 rounded-2xl border-2 border-emerald-500/50 flex flex-col items-center text-center space-y-2.5 shadow-lg">
             <div className="flex items-center justify-between w-full px-1">
               <span className="text-xs font-extrabold text-emerald-400">1P Green 리포트</span>
               <div className="flex items-center gap-1">
@@ -121,18 +121,18 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
             )}
 
             {blueQr ? (
-              <div className="p-2 bg-white rounded-xl shadow-md border-2 border-emerald-400/80">
-                <img src={blueQr} alt="1P AI Report QR" className="w-28 h-28 object-contain" />
+              <div className="p-3 bg-white rounded-2xl shadow-xl border-4 border-emerald-500">
+                <img src={blueQr} alt="1P AI Report QR" className="w-44 h-44 object-contain" />
               </div>
             ) : (
-              <div className="w-28 h-28 bg-slate-800 rounded-xl flex items-center justify-center text-xs text-slate-500">
+              <div className="w-44 h-44 bg-slate-800 rounded-2xl flex items-center justify-center text-xs text-slate-500">
                 QR 생성 중...
               </div>
             )}
 
-            <div className="text-[11px] text-slate-400 flex items-center gap-1 font-medium">
-              <QrCode className="w-3.5 h-3.5 text-emerald-400" />
-              <span>1P 폰 카메라로 스캔</span>
+            <div className="text-xs text-slate-300 flex items-center gap-1.5 font-bold">
+              <QrCode className="w-4 h-4 text-emerald-400" />
+              <span>1P 폰 카메라로 스캔 (대형 QR)</span>
             </div>
 
             {blueReport?.reportUrl && (
@@ -149,7 +149,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
           </div>
 
           {/* 2P Yellow Card & QR */}
-          <div className="p-3.5 bg-slate-950/90 rounded-2xl border border-yellow-500/40 flex flex-col items-center text-center space-y-2">
+          <div className="p-4 bg-slate-950/90 rounded-2xl border-2 border-yellow-500/50 flex flex-col items-center text-center space-y-2.5 shadow-lg">
             <div className="flex items-center justify-between w-full px-1">
               <span className="text-xs font-extrabold text-yellow-400">2P Yellow 리포트</span>
               <div className="flex items-center gap-1">
@@ -174,18 +174,18 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
             )}
 
             {redQr ? (
-              <div className="p-2 bg-white rounded-xl shadow-md border-2 border-yellow-400/80">
-                <img src={redQr} alt="2P AI Report QR" className="w-28 h-28 object-contain" />
+              <div className="p-3 bg-white rounded-2xl shadow-xl border-4 border-yellow-500">
+                <img src={redQr} alt="2P AI Report QR" className="w-44 h-44 object-contain" />
               </div>
             ) : (
-              <div className="w-28 h-28 bg-slate-800 rounded-xl flex items-center justify-center text-xs text-slate-500">
+              <div className="w-44 h-44 bg-slate-800 rounded-2xl flex items-center justify-center text-xs text-slate-500">
                 QR 생성 중...
               </div>
             )}
 
-            <div className="text-[11px] text-slate-400 flex items-center gap-1 font-medium">
-              <QrCode className="w-3.5 h-3.5 text-yellow-400" />
-              <span>2P 폰 카메라로 스캔</span>
+            <div className="text-xs text-slate-300 flex items-center gap-1.5 font-bold">
+              <QrCode className="w-4 h-4 text-yellow-400" />
+              <span>2P 폰 카메라로 스캔 (대형 QR)</span>
             </div>
 
             {redReport?.reportUrl && (

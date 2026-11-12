@@ -69,26 +69,26 @@ export const GameCanvas: React.FC<GameCanvasProps> = (props) => {
     const report1 = generateAIPlayerReport('blue', score, stats);
     const report2 = generateAIPlayerReport('red', score, stats);
 
-    // 1P 초록 팀 고화질 QR 캔버스
+    // 1P 초록 팀 고화질 대형 QR 캔버스 (384px)
     const c1 = document.createElement('canvas');
-    c1.width = 256;
-    c1.height = 256;
+    c1.width = 384;
+    c1.height = 384;
     QRCode.toCanvas(c1, report1.reportUrl, {
       margin: 1,
-      width: 256,
+      width: 384,
       color: { dark: '#15803d', light: '#ffffff' },
       errorCorrectionLevel: 'M',
     }).then(() => {
       blueQrCanvasRef.current = c1;
     }).catch((err) => console.warn('P1 QR generate error:', err));
 
-    // 2P 노랑 팀 고화질 QR 캔버스
+    // 2P 노랑 팀 고화질 대형 QR 캔버스 (384px)
     const c2 = document.createElement('canvas');
-    c2.width = 256;
-    c2.height = 256;
+    c2.width = 384;
+    c2.height = 384;
     QRCode.toCanvas(c2, report2.reportUrl, {
       margin: 1,
-      width: 256,
+      width: 384,
       color: { dark: '#a16207', light: '#ffffff' },
       errorCorrectionLevel: 'M',
     }).then(() => {
@@ -710,6 +710,20 @@ function renderRealisticPuck(
     ctx.stroke();
   }
 
+  // [REQ] 10초 스피커 랜덤 가속 부스트 인디케이터 배지 (남은 시간 & 배율)
+  if (isSuper && puck.speakerBoostUntil && puck.speakerBoostUntil > Date.now() && !isGameOver) {
+    const remainSec = Math.max(1, Math.ceil((puck.speakerBoostUntil - Date.now()) / 1000));
+    const multStr = puck.speakerMultiplier ? `x${puck.speakerMultiplier.toFixed(1)}` : 'BOOST';
+    ctx.rotate(-(puck.angle || 0)); // 회전 보정
+    ctx.font = '900 13px system-ui, sans-serif';
+    ctx.fillStyle = '#f59e0b';
+    ctx.shadowColor = '#000000';
+    ctx.shadowBlur = 6;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(`⚡ ${multStr} (${remainSec}s)`, 0, -screenRadius - 8);
+  }
+
   ctx.restore();
 }
 
@@ -804,8 +818,8 @@ function renderImpactRipples(
   }
 }
 
-// [REQ] "경기 종료휴 각자 면 (좌 / 우) 에 Win / lose 띄우고, QR는 작게 띄워줘"
-// 경기 종료 시 1P 좌측 골대 앞(+90도 회전)과 2P 우측 골대 앞(-90도 회전)에 WIN/LOSE 네온 텍스트 및 소형 QR 코드 투사
+// [REQ] "QR코드 더 크게 나오게 해줘 (인식 잘 되게)"
+// 경기 종료 시 1P 좌측 골대 앞(+90도 회전)과 2P 우측 골대 앞(-90도 회전)에 WIN/LOSE 네온 텍스트 및 대형 고화질 QR 코드 투사
 function renderDualGoalQRCodes(
   ctx: CanvasRenderingContext2D,
   tf: PerspectiveTransformer,
@@ -814,13 +828,13 @@ function renderDualGoalQRCodes(
   redCanvas: HTMLCanvasElement | HTMLImageElement | null,
   _isLight: boolean
 ) {
-  // [REQ] "QR 조금 더 크게 뜨게 해줘 (QR자체도 고화질로 랜더링 되게)"
-  const qrBox = 112; // 72px -> 112px 대폭 확대 (원거리 스캔 극대화)
+  // [REQ] 112px -> 175px 초대형 확대 (원거리 모바일 카메라 인식률 극대화)
+  const qrBox = 175;
 
   // -----------------------------------------------------------------
   // 1P 진영 (테이블 좌측, +90도 회전 -> 1P 정면 시선 일치)
   // -----------------------------------------------------------------
-  const p1Pos = tf.tableToScreen(TABLE_WIDTH / 2 - 250, TABLE_HEIGHT / 2);
+  const p1Pos = tf.tableToScreen(TABLE_WIDTH / 2 - 270, TABLE_HEIGHT / 2);
   const p1Outcome = score.blue > score.red ? 'WIN' : score.blue < score.red ? 'LOSE' : 'DRAW';
   const p1Color = p1Outcome === 'WIN' ? '#22c55e' : p1Outcome === 'LOSE' ? '#ef4444' : '#f59e0b';
 
@@ -829,52 +843,51 @@ function renderDualGoalQRCodes(
   ctx.rotate(Math.PI / 2);
 
   // 1P WIN / LOSE 대형 네온 텍스트
-  ctx.font = '900 86px "Arial Black", Impact, -apple-system, sans-serif';
+  ctx.font = '900 84px "Arial Black", Impact, -apple-system, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.shadowColor = p1Color;
   ctx.shadowBlur = 32;
   ctx.fillStyle = p1Color;
-  ctx.fillText(p1Outcome, 0, -82);
+  ctx.fillText(p1Outcome, 0, -112);
 
-  // 1P 고화질 선명 QR 코드 박스 (블러 방지 화이트 패널)
+  // 1P 고화질 선명 대형 QR 코드 박스 (블러 방지 화이트 패널)
   ctx.fillStyle = '#ffffff';
   ctx.shadowColor = p1Color;
-  ctx.shadowBlur = 18;
+  ctx.shadowBlur = 22;
   ctx.beginPath();
-  ctx.roundRect(-qrBox / 2, 6, qrBox, qrBox, 10);
+  ctx.roundRect(-qrBox / 2, -18, qrBox, qrBox, 14);
   ctx.fill();
 
   if (blueCanvas) {
     ctx.save();
-    // [REQ] 고화질 선명 렌더링 (도트 블러/흐림 원천 차단)
     ctx.imageSmoothingEnabled = false;
     ctx.shadowBlur = 0;
-    ctx.drawImage(blueCanvas, -qrBox / 2 + 5, 11, qrBox - 10, qrBox - 10);
+    ctx.drawImage(blueCanvas, -qrBox / 2 + 6, -12, qrBox - 12, qrBox - 12);
     ctx.restore();
   } else {
     ctx.save();
     ctx.fillStyle = '#15803d';
-    ctx.font = 'bold 12px system-ui, sans-serif';
+    ctx.font = 'bold 14px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('QR 생성 중...', 0, 6 + qrBox / 2);
+    ctx.fillText('QR 생성 중...', 0, -18 + qrBox / 2);
     ctx.restore();
   }
 
   // 1P 라벨
   ctx.shadowBlur = 0;
-  ctx.font = '800 13px system-ui, sans-serif';
+  ctx.font = '800 15px system-ui, sans-serif';
   ctx.fillStyle = p1Color;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
-  ctx.fillText('📱 1P (초록) AI 리포트', 0, 6 + qrBox + 7);
+  ctx.fillText('📱 1P (초록) AI 리포트 스캔', 0, -18 + qrBox + 10);
   ctx.restore();
 
   // -----------------------------------------------------------------
   // 2P 진영 (테이블 우측, -90도 회전 -> 2P 정면 시선 일치)
   // -----------------------------------------------------------------
-  const p2Pos = tf.tableToScreen(TABLE_WIDTH / 2 + 250, TABLE_HEIGHT / 2);
+  const p2Pos = tf.tableToScreen(TABLE_WIDTH / 2 + 270, TABLE_HEIGHT / 2);
   const p2Outcome = score.red > score.blue ? 'WIN' : score.red < score.blue ? 'LOSE' : 'DRAW';
   const p2Color = p2Outcome === 'WIN' ? '#eab308' : p2Outcome === 'LOSE' ? '#ef4444' : '#f59e0b';
 
@@ -883,44 +896,44 @@ function renderDualGoalQRCodes(
   ctx.rotate(-Math.PI / 2);
 
   // 2P WIN / LOSE 대형 네온 텍스트
-  ctx.font = '900 86px "Arial Black", Impact, -apple-system, sans-serif';
+  ctx.font = '900 84px "Arial Black", Impact, -apple-system, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.shadowColor = p2Color;
   ctx.shadowBlur = 32;
   ctx.fillStyle = p2Color;
-  ctx.fillText(p2Outcome, 0, -82);
+  ctx.fillText(p2Outcome, 0, -112);
 
-  // 2P 고화질 선명 QR 코드 박스
+  // 2P 고화질 선명 대형 QR 코드 박스
   ctx.fillStyle = '#ffffff';
   ctx.shadowColor = p2Color;
-  ctx.shadowBlur = 18;
+  ctx.shadowBlur = 22;
   ctx.beginPath();
-  ctx.roundRect(-qrBox / 2, 6, qrBox, qrBox, 10);
+  ctx.roundRect(-qrBox / 2, -18, qrBox, qrBox, 14);
   ctx.fill();
 
   if (redCanvas) {
     ctx.save();
     ctx.imageSmoothingEnabled = false;
     ctx.shadowBlur = 0;
-    ctx.drawImage(redCanvas, -qrBox / 2 + 5, 11, qrBox - 10, qrBox - 10);
+    ctx.drawImage(redCanvas, -qrBox / 2 + 6, -12, qrBox - 12, qrBox - 12);
     ctx.restore();
   } else {
     ctx.save();
     ctx.fillStyle = '#a16207';
-    ctx.font = 'bold 12px system-ui, sans-serif';
+    ctx.font = 'bold 14px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('QR 생성 중...', 0, 6 + qrBox / 2);
+    ctx.fillText('QR 생성 중...', 0, -18 + qrBox / 2);
     ctx.restore();
   }
 
   // 2P 라벨
   ctx.shadowBlur = 0;
-  ctx.font = '800 13px system-ui, sans-serif';
+  ctx.font = '800 15px system-ui, sans-serif';
   ctx.fillStyle = p2Color;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
-  ctx.fillText('📱 2P (노랑) AI 리포트', 0, 6 + qrBox + 7);
+  ctx.fillText('📱 2P (노랑) AI 리포트 스캔', 0, -18 + qrBox + 10);
   ctx.restore();
 }

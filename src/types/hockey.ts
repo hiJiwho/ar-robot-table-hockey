@@ -46,6 +46,8 @@ export interface PuckState {
   spin?: number;
   angle?: number;
   superCharged?: boolean;
+  speakerBoostUntil?: number; // [REQ] 10초 스피커 랜덤 가속 부스트 만료 타임스탬프 (ms)
+  speakerMultiplier?: number; // [REQ] 1.1 ~ 3.0배 랜덤 가속 배율
   rallyCount?: number;
   trail: Array<{ x: number; y: number; alpha: number }>;
   lastHitTeam: 'blue' | 'red' | 'obstacle' | null;

@@ -645,6 +645,8 @@ export default function App() {
       spin: 0,
       angle: 0,
       superCharged: false,
+      speakerBoostUntil: 0,
+      speakerMultiplier: 1.0,
       rallyCount: 0,
       radius: PUCK_RADIUS,
       trail: [],
@@ -1009,8 +1011,25 @@ export default function App() {
       setGamePhase('GOAL');
       setGoalAnnouncement({ team: scoringTeam, countdown: 1.5, points: pointsAwarded });
 
-      liveStateRef.current.puck = { ...liveStateRef.current.puck, vx: 0, vy: 0, spin: 0 };
-      setPuck((p) => ({ ...p, vx: 0, vy: 0, spin: 0 }));
+      // [REQ] "or 골 되면 해제하게 해줘!": 골 득점 즉시 스피커 부스트 완전 해제
+      liveStateRef.current.puck = {
+        ...liveStateRef.current.puck,
+        vx: 0,
+        vy: 0,
+        spin: 0,
+        superCharged: false,
+        speakerBoostUntil: 0,
+        speakerMultiplier: 1.0,
+      };
+      setPuck((p) => ({
+        ...p,
+        vx: 0,
+        vy: 0,
+        spin: 0,
+        superCharged: false,
+        speakerBoostUntil: 0,
+        speakerMultiplier: 1.0,
+      }));
 
       if (isTargetReached) {
         setTimeout(() => {
@@ -1511,7 +1530,38 @@ export default function App() {
             handleGoalScored(ev.team, ev.speed);
           } else if (ev.type === 'SPEAKER') {
             soundManager.playSpeakerHit(Math.min(1.2, ev.speed / 450));
-            addImpactRipple(ev.x, ev.y, '#38bdf8', 54, 340, 'SPEAKER!');
+            // [REQ] "중앙 스피커 맞으면 점수 2배 빼고": 마지막으로 스피커를 맞힌 팀 점수 2점 감점 (최소 0점)
+            const penalizedTeam: 'blue' | 'red' = ev.team === 'red' ? 'red' : 'blue';
+            const teamLabel = penalizedTeam === 'blue' ? '1P (초록)' : '2P (노랑)';
+            const multStr = ev.multiplier ? ` x${ev.multiplier.toFixed(1)}배 폭풍 가속!` : '';
+
+            setScore((prev) => {
+              const updated = {
+                ...prev,
+                [penalizedTeam]: Math.max(0, prev[penalizedTeam] - 2),
+              };
+              try {
+                const penaltySyncPayload = {
+                  type: 'SYNC_STATE' as const,
+                  score: updated,
+                  timeLeft: timeLeftRef.current,
+                  gamePhase: curGamePhase,
+                  matchMode: matchModeRef.current,
+                };
+                window.electronAPI?.sendSyncState(penaltySyncPayload as any);
+                broadcastRef.current?.postMessage(penaltySyncPayload);
+              } catch {}
+              return updated;
+            });
+
+            addImpactRipple(
+              ev.x,
+              ev.y,
+              '#f43f5e',
+              68,
+              420,
+              `⚠️ ${teamLabel} 감점 -2!${multStr} (10초 부스트)`
+            );
             setStats((s) => ({ ...s, speakerHits: (s.speakerHits || 0) + 1 }));
           } else if (ev.type === 'ROBOT') {
             if (ev.team === 'obstacle') {
